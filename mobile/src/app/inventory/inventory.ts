@@ -7,15 +7,27 @@ import { MessageService, ConfirmationService } from 'primeng/api';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ToastModule } from 'primeng/toast';
 import { DialogModule } from 'primeng/dialog';
+import { SelectModule } from 'primeng/select';
+import { DatePickerModule } from 'primeng/datepicker';
+import { InputMaskModule } from 'primeng/inputmask';
 
 interface Item {
   name: string;
   quantity: number;
+  date_of_order: Date;
+  price: number;
+  category: Category
+}
+
+enum Category {
+  IT,
+  Food,
+  Clothing
 }
 
 @Component({
   selector: 'app-inventory',
-  imports: [TableModule, ButtonModule, InputTextModule, FormsModule, ConfirmDialogModule, ToastModule, DialogModule],
+  imports: [TableModule, ButtonModule, DatePickerModule, InputMaskModule, InputTextModule, FormsModule, ConfirmDialogModule, ToastModule, DialogModule, SelectModule],
   providers: [MessageService, ConfirmationService],
   templateUrl: './inventory.html',
   styleUrl: './inventory.css',
@@ -34,13 +46,22 @@ export class Inventory {
   newItem: Item = {
     name: '',
     quantity: 0,
+    date_of_order: new Date(),
+    category: Category.IT,
+    price: 0
   };
+
+
+  categoryOptions = Object.values(Category).map(cat => ({
+    name: cat,
+    value: cat
+  }));
 
   addItem() {
     if (!this.newItem.name) return;
 
     this.items = [...this.items, { ...this.newItem }];
-    this.newItem = { name: '', quantity: 0 };
+    this.newItem = { name: '', quantity: 0, date_of_order: new Date(), category: Category.IT, price: 0 };
     this.visible = false;
   }
 
