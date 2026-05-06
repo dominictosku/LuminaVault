@@ -74,13 +74,19 @@ import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } fro
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                   @for (f of furniture(); track f.id) {
-                    <button (click)="selectFurniture(f)"
-                            [class.border-violet-400\\/40]="selectedFurniture()?.id === f.id"
-                            [class.bg-violet-500\\/10]="selectedFurniture()?.id === f.id"
-                            class="text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition">
-                      <div class="font-medium text-sm">{{ f.name }}</div>
-                      <div class="text-xs text-slate-400">{{ f.kind }} · {{ f.itemCount }} items · {{ f.containerCount }} containers</div>
-                    </button>
+                    <div (click)="selectFurniture(f)"
+                         [class.border-violet-400\\/40]="selectedFurniture()?.id === f.id"
+                         [class.bg-violet-500\\/10]="selectedFurniture()?.id === f.id"
+                         class="text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition cursor-pointer flex items-center gap-2">
+                      <div class="flex-1 min-w-0">
+                        <div class="font-medium text-sm truncate">{{ f.name }}</div>
+                        <div class="text-xs text-slate-400">{{ f.kind }} · {{ f.itemCount }} items · {{ f.containerCount }} containers</div>
+                      </div>
+                      <button class="btn btn-danger !py-1 !px-2 shrink-0"
+                              (click)="deleteFurniture(f.id, $event)">
+                        <i class="pi pi-trash text-xs"></i>
+                      </button>
+                    </div>
                   }
                   @if (!furniture().length) {
                     <div class="text-sm text-slate-500">No furniture yet.</div>
@@ -100,9 +106,24 @@ import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } fro
 
               @if (selectedFurniture()) {
                 <div class="glass rounded-2xl p-5">
-                  <h3 class="font-medium flex items-center gap-2 mb-4">
-                    <i class="pi pi-folder text-violet-300"></i> Containers in {{ selectedFurniture()!.name }}
-                  </h3>
+                  <div class="flex items-center gap-2 mb-4">
+                    <i class="pi pi-folder text-violet-300 shrink-0"></i>
+                    @if (renamingFurniture()) {
+                      <input class="input flex-1" name="frename" [(ngModel)]="editFurnitureName"
+                             (keydown.enter)="saveRename()" (keydown.escape)="renamingFurniture.set(false)" />
+                      <button class="btn btn-primary !py-1 !px-2" (click)="saveRename()">
+                        <i class="pi pi-check text-xs"></i>
+                      </button>
+                      <button class="btn btn-ghost !py-1 !px-2" (click)="renamingFurniture.set(false)">
+                        <i class="pi pi-times text-xs"></i>
+                      </button>
+                    } @else {
+                      <h3 class="font-medium flex-1">Containers in {{ selectedFurniture()!.name }}</h3>
+                      <button class="btn btn-ghost !py-1 !px-2" (click)="startRename()">
+                        <i class="pi pi-pencil text-xs"></i>
+                      </button>
+                    }
+                  </div>
                   <div class="space-y-2">
                     @for (c of containers(); track c.id) {
                       <div class="flex items-center justify-between px-3 py-2 rounded-lg border border-white/10">
@@ -150,6 +171,8 @@ export class RoomsComponent {
   newRoomColor = '#7c3aed';
   newFurniture = { name: '', kind: 'Cabinet' as FurnitureKind };
   newContainerName = '';
+  renamingFurniture = signal(false);
+  editFurnitureName = '';
 
   constructor() { this.refresh(); }
 
@@ -214,7 +237,39 @@ export class RoomsComponent {
 
   selectFurniture(f: Furniture) {
     this.selectedFurniture.set(f);
+    this.renamingFurniture.set(false);
     this.api.listContainers(f.id).subscribe(c => this.containers.set(c));
+  }
+
+  deleteFurniture(id: number, event: Event) {
+    event.stopPropagation();
+    if (!confirm('Delete this furniture and all its containers?')) return;
+    this.api.deleteFurniture(id).subscribe(() => {
+      if (this.selectedFurniture()?.id === id) {
+        this.selectedFurniture.set(null);
+        this.containers.set([]);
+      }
+      const r = this.selectedRoom();
+      if (r) this.api.listFurniture(r.id).subscribe(f => this.furniture.set(f));
+    });
+  }
+
+  startRename() {
+    this.editFurnitureName = this.selectedFurniture()!.name;
+    this.renamingFurniture.set(true);
+  }
+
+  saveRename() {
+    const f = this.selectedFurniture();
+    if (!f || !this.editFurnitureName.trim()) return;
+    this.api.updateFurniture(f.id, { ...f, name: this.editFurnitureName.trim() }).subscribe(updated => {
+      this.renamingFurniture.set(false);
+      const r = this.selectedRoom();
+      if (r) this.api.listFurniture(r.id).subscribe(list => {
+        this.furniture.set(list);
+        this.selectedFurniture.set(list.find(x => x.id === updated.id) ?? null);
+      });
+    });
   }
 
   addFurniture() {

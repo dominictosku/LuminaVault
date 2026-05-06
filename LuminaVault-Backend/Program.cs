@@ -10,6 +10,8 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 52_428_800); // 50 MB
+
 // --- Config ---
 var jwtOpt = new JwtOptions();
 builder.Configuration.GetSection("Jwt").Bind(jwtOpt);

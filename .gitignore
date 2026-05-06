@@ -1,0 +1,23 @@
+# ── .NET / Backend ────────────────────────────────────────────────────────────
+LuminaVault-Backend/bin/
+LuminaVault-Backend/obj/
+LuminaVault-Backend/*.db
+LuminaVault-Backend/*.db-shm
+LuminaVault-Backend/*.db-wal
+LuminaVault-Backend/uploads/
+LuminaVault-Backend/appsettings.*.json
+!LuminaVault-Backend/appsettings.json
+LuminaVault-Backend/*.user
+LuminaVault-Backend/Properties/launchSettings.json
+
+# ── Angular / Frontend ────────────────────────────────────────────────────────
+mobile/node_modules/
+mobile/dist/
+mobile/.angular/
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
