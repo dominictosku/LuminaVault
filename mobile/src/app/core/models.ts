@@ -67,6 +67,7 @@ export interface ItemInput {
   quantity: number;
   notes?: string | null;
   tags: string[];
+  roomId?: number | null;
   furnitureId?: number | null;
   containerId?: number | null;
 }

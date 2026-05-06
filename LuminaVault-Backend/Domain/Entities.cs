@@ -88,6 +88,8 @@ public class Item
     public string? Notes { get; set; }
     public string TagsCsv { get; set; } = "";
 
+    public int? RoomId { get; set; }
+    public Room? Room { get; set; }
     public int? FurnitureId { get; set; }
     public Furniture? Furniture { get; set; }
     public int? ContainerId { get; set; }

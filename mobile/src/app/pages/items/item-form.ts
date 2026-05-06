@@ -104,7 +104,9 @@ import { Container, Furniture, House, Item, Room } from '../../core/models';
             <div class="space-y-3">
               <div>
                 <label class="label">Room</label>
-                <select class="select" [(ngModel)]="selectedRoomId" name="room" (ngModelChange)="onRoomChange()">
+                <select class="select" name="room"
+                        [ngModel]="selectedRoomId()"
+                        (ngModelChange)="onRoomChange($event)">
                   <option [ngValue]="null">— None —</option>
                   @for (r of rooms(); track r.id) {
                     <option [ngValue]="r.id">{{ r.name }}</option>
@@ -113,7 +115,10 @@ import { Container, Furniture, House, Item, Room } from '../../core/models';
               </div>
               <div>
                 <label class="label">Furniture</label>
-                <select class="select" [(ngModel)]="model.furnitureId" name="furn" (ngModelChange)="onFurnitureChange()" [disabled]="!selectedRoomId">
+                <select class="select" name="furn"
+                        [ngModel]="selectedFurnitureId()"
+                        (ngModelChange)="onFurnitureChange($event)"
+                        [disabled]="selectedRoomId() == null">
                   <option [ngValue]="null">— None —</option>
                   @for (f of furnitureInRoom(); track f.id) {
                     <option [ngValue]="f.id">{{ f.name }}</option>
@@ -122,7 +127,9 @@ import { Container, Furniture, House, Item, Room } from '../../core/models';
               </div>
               <div>
                 <label class="label">Container (drawer/shelf)</label>
-                <select class="select" [(ngModel)]="model.containerId" name="cont" [disabled]="!model.furnitureId">
+                <select class="select" name="cont"
+                        [(ngModel)]="model.containerId"
+                        [disabled]="selectedFurnitureId() == null">
                   <option [ngValue]="null">— None —</option>
                   @for (c of containers(); track c.id) {
                     <option [ngValue]="c.id">{{ c.name }}</option>
@@ -191,10 +198,13 @@ export class ItemFormComponent {
   furniture = signal<Furniture[]>([]);
   containers = signal<Container[]>([]);
 
-  selectedRoomId: number | null = null;
+  selectedRoomId = signal<number | null>(null);
+  selectedFurnitureId = signal<number | null>(null);
 
-  furnitureInRoom = computed(() =>
-    this.selectedRoomId == null ? [] : this.furniture().filter(f => f.roomId === this.selectedRoomId));
+  furnitureInRoom = computed(() => {
+    const id = this.selectedRoomId();
+    return id == null ? [] : this.furniture().filter(f => f.roomId === id);
+  });
 
   model = {
     name: '', description: '' as string | null,
@@ -251,27 +261,33 @@ export class ItemFormComponent {
           this.model.furnitureId = item.furnitureId ?? null;
           this.model.containerId = item.containerId ?? null;
           this.tagsRaw = item.tags.join(', ');
-          this.selectedRoomId = item.roomId ?? null;
+          this.selectedRoomId.set(item.roomId ?? null);
+          this.selectedFurnitureId.set(item.furnitureId ?? null);
           this.refreshContainers();
         });
       }
     });
   }
 
-  onRoomChange() {
+  onRoomChange(roomId: number | null) {
+    this.selectedRoomId.set(roomId);
+    this.selectedFurnitureId.set(null);
     this.model.furnitureId = null;
     this.model.containerId = null;
     this.containers.set([]);
   }
 
-  onFurnitureChange() {
+  onFurnitureChange(furnitureId: number | null) {
+    this.selectedFurnitureId.set(furnitureId);
+    this.model.furnitureId = furnitureId;
     this.model.containerId = null;
     this.refreshContainers();
   }
 
   refreshContainers() {
-    if (!this.model.furnitureId) { this.containers.set([]); return; }
-    this.api.listContainers(this.model.furnitureId).subscribe(c => this.containers.set(c));
+    const fid = this.selectedFurnitureId();
+    if (!fid) { this.containers.set([]); return; }
+    this.api.listContainers(fid).subscribe(c => this.containers.set(c));
   }
 
   save() {
@@ -281,6 +297,7 @@ export class ItemFormComponent {
     const input = {
       ...this.model,
       tags: this.tagPreview(),
+      roomId: this.selectedRoomId(),
       purchaseDate: this.model.purchaseDate ? new Date(this.model.purchaseDate).toISOString() : null,
       warrantyUntil: this.model.warrantyUntil ? new Date(this.model.warrantyUntil).toISOString() : null,
     };

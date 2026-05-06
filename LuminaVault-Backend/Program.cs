@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Endpoints;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -47,6 +49,11 @@ builder.Services.AddCors(o => o.AddPolicy(DevCors, p => p
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
+builder.Services.Configure<JsonOptions>(o =>
+{
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -56,6 +63,21 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Idempotent column adds for evolving schema (dev-friendly migrations).
+    void AddColumnIfMissing(string table, string column, string definition)
+    {
+        var exists = db.Database
+            .SqlQuery<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info({table}) WHERE name = {column}")
+            .AsEnumerable().FirstOrDefault();
+        if (exists == 0)
+        {
+#pragma warning disable EF1002 // table/column/definition are hardcoded literals from the caller, not user input
+            db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
+#pragma warning restore EF1002
+        }
+    }
+    AddColumnIfMissing("Items", "RoomId", "INTEGER NULL REFERENCES Rooms(Id) ON DELETE SET NULL");
 }
 
 if (app.Environment.IsDevelopment())

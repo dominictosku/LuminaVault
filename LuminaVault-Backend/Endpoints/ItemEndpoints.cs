@@ -21,7 +21,7 @@ public record ItemInput(
     string Name, string? Description, string? Brand, string? Model,
     string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
     int Quantity, string? Notes, string[] Tags,
-    int? FurnitureId, int? ContainerId);
+    int? RoomId, int? FurnitureId, int? ContainerId);
 
 public static class ItemEndpoints
 {
@@ -33,6 +33,7 @@ public static class ItemEndpoints
         {
             var query = db.Items
                 .Include(i => i.Photos)
+                .Include(i => i.Room)
                 .Include(i => i.Furniture).ThenInclude(f => f!.Room)
                 .Include(i => i.Container)
                 .AsQueryable();
@@ -49,7 +50,9 @@ public static class ItemEndpoints
             }
             if (furnitureId.HasValue) query = query.Where(i => i.FurnitureId == furnitureId);
             if (containerId.HasValue) query = query.Where(i => i.ContainerId == containerId);
-            if (roomId.HasValue) query = query.Where(i => i.Furniture != null && i.Furniture.RoomId == roomId);
+            if (roomId.HasValue) query = query.Where(i =>
+                i.RoomId == roomId ||
+                (i.Furniture != null && i.Furniture.RoomId == roomId));
 
             var items = await query.OrderByDescending(i => i.UpdatedAt).Take(500).ToListAsync();
             return Results.Ok(items.Select(MapToDto));
@@ -59,6 +62,7 @@ public static class ItemEndpoints
         {
             var i = await db.Items
                 .Include(x => x.Photos)
+                .Include(x => x.Room)
                 .Include(x => x.Furniture).ThenInclude(f => f!.Room)
                 .Include(x => x.Container)
                 .FirstOrDefaultAsync(x => x.Id == id);
@@ -71,6 +75,7 @@ public static class ItemEndpoints
             ApplyInput(item, input);
             db.Items.Add(item);
             await db.SaveChangesAsync();
+            await db.Entry(item).Reference(x => x.Room).LoadAsync();
             await db.Entry(item).Reference(x => x.Furniture).LoadAsync();
             if (item.Furniture != null)
                 await db.Entry(item.Furniture).Reference(f => f.Room).LoadAsync();
@@ -82,6 +87,7 @@ public static class ItemEndpoints
         {
             var item = await db.Items
                 .Include(x => x.Photos)
+                .Include(x => x.Room)
                 .Include(x => x.Furniture).ThenInclude(f => f!.Room)
                 .Include(x => x.Container)
                 .FirstOrDefaultAsync(x => x.Id == id);
@@ -89,6 +95,7 @@ public static class ItemEndpoints
             ApplyInput(item, input);
             item.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            await db.Entry(item).Reference(x => x.Room).LoadAsync();
             return Results.Ok(MapToDto(item));
         });
 
@@ -107,11 +114,21 @@ public static class ItemEndpoints
         {
             var totalItems = await db.Items.SumAsync(i => (int?)i.Quantity) ?? 0;
             var totalValue = await db.Items.SumAsync(i => (decimal?)(i.Value * i.Quantity)) ?? 0m;
-            var byRoom = await db.Items
-                .Where(i => i.Furniture != null)
-                .GroupBy(i => new { i.Furniture!.RoomId, i.Furniture.Room!.Name })
-                .Select(g => new { roomId = g.Key.RoomId, roomName = g.Key.Name, count = g.Sum(x => x.Quantity) })
-                .ToListAsync();
+
+            var rooms = await db.Rooms.ToDictionaryAsync(r => r.Id, r => r.Name);
+            var perRoom = new Dictionary<int, int>();
+            await foreach (var i in db.Items.Include(x => x.Furniture).AsAsyncEnumerable())
+            {
+                var rid = i.RoomId ?? i.Furniture?.RoomId;
+                if (rid is null) continue;
+                perRoom[rid.Value] = perRoom.GetValueOrDefault(rid.Value) + i.Quantity;
+            }
+            var byRoom = perRoom
+                .Where(kv => rooms.ContainsKey(kv.Key))
+                .Select(kv => new { roomId = kv.Key, roomName = rooms[kv.Key], count = kv.Value })
+                .OrderByDescending(x => x.count)
+                .ToList();
+
             var recent = await db.Items.OrderByDescending(i => i.CreatedAt).Take(5)
                 .Select(i => new { i.Id, i.Name, i.CreatedAt }).ToListAsync();
             return Results.Ok(new { totalItems, totalValue, byRoom, recent });
@@ -134,20 +151,26 @@ public static class ItemEndpoints
         item.Notes = input.Notes;
         item.TagsCsv = string.Join(",", (input.Tags ?? Array.Empty<string>())
             .Select(t => t.Trim()).Where(t => t.Length > 0));
+        item.RoomId = input.RoomId;
         item.FurnitureId = input.FurnitureId;
         item.ContainerId = input.ContainerId;
     }
 
-    public static ItemDto MapToDto(Item i) => new(
-        i.Id, i.Name, i.Description, i.Brand, i.Model,
-        i.SerialNumber, i.Value, i.PurchaseDate, i.WarrantyUntil,
-        i.Quantity, i.Notes,
-        string.IsNullOrWhiteSpace(i.TagsCsv) ? Array.Empty<string>() : i.TagsCsv.Split(','),
-        i.FurnitureId, i.Furniture?.Name,
-        i.ContainerId, i.Container?.Name,
-        i.Furniture?.RoomId, i.Furniture?.Room?.Name,
-        i.CreatedAt, i.UpdatedAt,
-        i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray());
+    public static ItemDto MapToDto(Item i)
+    {
+        var roomId = i.RoomId ?? i.Furniture?.RoomId;
+        var roomName = i.Room?.Name ?? i.Furniture?.Room?.Name;
+        return new ItemDto(
+            i.Id, i.Name, i.Description, i.Brand, i.Model,
+            i.SerialNumber, i.Value, i.PurchaseDate, i.WarrantyUntil,
+            i.Quantity, i.Notes,
+            string.IsNullOrWhiteSpace(i.TagsCsv) ? Array.Empty<string>() : i.TagsCsv.Split(','),
+            i.FurnitureId, i.Furniture?.Name,
+            i.ContainerId, i.Container?.Name,
+            roomId, roomName,
+            i.CreatedAt, i.UpdatedAt,
+            i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray());
+    }
 
     static void DeletePhotoFile(IWebHostEnvironment env, string fileName)
     {

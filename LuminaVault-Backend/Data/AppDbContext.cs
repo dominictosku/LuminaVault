@@ -38,6 +38,12 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Item>()
+            .HasOne(i => i.Room)
+            .WithMany()
+            .HasForeignKey(i => i.RoomId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<Item>()
             .HasOne(i => i.Furniture)
             .WithMany(f => f.Items)
             .HasForeignKey(i => i.FurnitureId)
