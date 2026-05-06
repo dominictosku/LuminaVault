@@ -42,6 +42,9 @@ import { PlannerScene, PlannerState } from './scene';
           <div>Drag to orbit · Scroll to zoom</div>
           <div>Click a room → enter it · click furniture → see items inside</div>
           <div><span class="text-violet-300">Shift+drag</span> furniture to move it</div>
+          <div class="mt-1 pt-1 border-t border-white/10 text-slate-400">
+            Drop <span class="text-violet-300">Sofa.glb</span> etc. into <span class="text-violet-300">/public/models/</span> to override
+          </div>
         </div>
       </div>
 
@@ -84,6 +87,34 @@ import { PlannerScene, PlannerState } from './scene';
               </div>
             }
           </div>
+
+          @if (looseItemsInRoom().length) {
+            <div class="mt-6 pt-4 border-t border-white/10">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-2">
+                <i class="pi pi-sparkles text-pink-300"></i>
+                In this room (no furniture)
+              </div>
+              <div class="space-y-2">
+                @for (it of looseItemsInRoom(); track it.id) {
+                  <button class="w-full text-left px-3 py-2.5 rounded-lg border border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 transition flex items-center gap-3" (click)="openItem(it)">
+                    <div class="w-9 h-9 rounded-lg overflow-hidden bg-pink-500/10 grid place-items-center shrink-0">
+                      @if (it.photos[0]) {
+                        <img [src]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
+                      } @else {
+                        <i class="pi pi-box text-pink-300"></i>
+                      }
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="font-medium text-sm truncate">{{ it.name }}</div>
+                      @if (it.quantity > 1) {
+                        <div class="text-xs text-slate-400">×{{ it.quantity }}</div>
+                      }
+                    </div>
+                  </button>
+                }
+              </div>
+            </div>
+          }
         }
 
         @if (state().mode === 'furniture' && state().furniture) {
@@ -194,6 +225,10 @@ export class PlannerComponent implements AfterViewInit, OnDestroy {
 
   countInRoom(roomId: number) { return this.items().filter(i => i.roomId === roomId).length; }
   furnitureInRoom() { return this.furniture().filter(f => f.roomId === this.state().room?.id); }
+  looseItemsInRoom() {
+    const id = this.state().room?.id;
+    return id == null ? [] : this.items().filter(i => i.furnitureId == null && i.roomId === id);
+  }
   itemsInFurniture() { return this.items().filter(i => i.furnitureId === this.state().furniture?.id); }
 
   goOverview() {

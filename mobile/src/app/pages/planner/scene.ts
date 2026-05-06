@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import gsap from 'gsap';
 import { Furniture, Item, Room } from '../../core/models';
+import { applyFurnitureId, BuiltFurniture, buildFurnitureMesh, fitInto, loadModelForKind, OpenTransform } from './furniture-models';
 
 export type PlannerMode = 'overview' | 'room' | 'furniture';
 
@@ -26,15 +27,15 @@ interface RoomMesh {
   walls: THREE.Mesh[];
   glowEdges: THREE.LineSegments;
   label: THREE.Sprite;
+  looseItemMarkers: THREE.Mesh[];
 }
 
 interface FurnitureMesh {
   data: Furniture;
   group: THREE.Group;
-  body: THREE.Mesh;
-  drawer?: THREE.Mesh;
+  modelHolder: THREE.Group;
+  openables: OpenTransform[];
   itemMarkers: THREE.Mesh[];
-  itemAnchorWorld?: THREE.Vector3;
 }
 
 export class PlannerScene {
@@ -52,6 +53,7 @@ export class PlannerScene {
   private rooms: RoomMesh[] = [];
   private furniture: FurnitureMesh[] = [];
   private itemsByFurniture = new Map<number, Item[]>();
+  private looseItemsByRoom = new Map<number, Item[]>();
 
   private cb: SceneCallbacks;
   private state: PlannerState = { mode: 'overview' };
@@ -171,12 +173,17 @@ export class PlannerScene {
     this.rooms = [];
     this.furniture = [];
     this.itemsByFurniture.clear();
+    this.looseItemsByRoom.clear();
 
-    // Group items by furniture
+    // Group items
     for (const it of items) {
-      if (!it.furnitureId) continue;
-      if (!this.itemsByFurniture.has(it.furnitureId)) this.itemsByFurniture.set(it.furnitureId, []);
-      this.itemsByFurniture.get(it.furnitureId)!.push(it);
+      if (it.furnitureId) {
+        if (!this.itemsByFurniture.has(it.furnitureId)) this.itemsByFurniture.set(it.furnitureId, []);
+        this.itemsByFurniture.get(it.furnitureId)!.push(it);
+      } else if (it.roomId) {
+        if (!this.looseItemsByRoom.has(it.roomId)) this.looseItemsByRoom.set(it.roomId, []);
+        this.looseItemsByRoom.get(it.roomId)!.push(it);
+      }
     }
 
     for (const r of rooms) this.rooms.push(this.buildRoom(r));
@@ -241,8 +248,40 @@ export class PlannerScene {
     label.position.set(r.width/2, r.height + 0.6, r.depth/2);
     g.add(label);
 
+    // Loose item markers — items linked directly to the room (no furniture)
+    const looseItems = this.looseItemsByRoom.get(r.id) ?? [];
+    const looseItemMarkers: THREE.Mesh[] = [];
+    looseItems.forEach((it, idx) => {
+      const orb = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.09, 1),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0xff6fb3,
+          emissiveIntensity: 1.4,
+          roughness: 0.2, metalness: 0.8,
+          transparent: true, opacity: 0,
+        })
+      );
+      // Cluster around room center, on a circle of radius ~min(w,d)/4 at height 1.4m
+      const radius = Math.min(r.width, r.depth) * 0.18;
+      const angle = (idx / Math.max(looseItems.length, 1)) * Math.PI * 2;
+      const baseX = r.width / 2 + Math.cos(angle) * radius;
+      const baseZ = r.depth / 2 + Math.sin(angle) * radius;
+      const baseY = 1.35 + (idx % 3) * 0.08;
+      orb.position.set(baseX, baseY, baseZ);
+      orb.userData['kind'] = 'loose-item';
+      orb.userData['itemId'] = it.id;
+      orb.userData['item'] = it;
+      orb.userData['roomId'] = r.id;
+      orb.userData['basePos'] = orb.position.clone();
+      orb.userData['bobOffset'] = Math.random() * Math.PI * 2;
+      orb.visible = false;
+      g.add(orb);
+      looseItemMarkers.push(orb);
+    });
+
     this.scene.add(g);
-    return { data: r, group: g, floor, walls, glowEdges: edges, label };
+    return { data: r, group: g, floor, walls, glowEdges: edges, label, looseItemMarkers };
   }
 
   private buildFurniture(f: Furniture): FurnitureMesh {
@@ -256,32 +295,24 @@ export class PlannerScene {
     g.userData['kind'] = 'furniture';
     g.userData['furnitureId'] = f.id;
 
-    const color = furnitureColor(f.kind);
-    const mat = new THREE.MeshStandardMaterial({
-      color, roughness: 0.5, metalness: 0.4,
-      emissive: new THREE.Color(color).multiplyScalar(0.05),
-    });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(f.width, f.height, f.depth), mat);
-    body.position.y = f.height / 2;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    body.userData['kind'] = 'furniture';
-    body.userData['furnitureId'] = f.id;
-    g.add(body);
+    // Procedural model spans -w/2..+w/2, 0..h, -d/2..+d/2
+    const modelHolder = new THREE.Group();
+    const built: BuiltFurniture = buildFurnitureMesh(f.kind, f.width, f.height, f.depth);
+    modelHolder.add(built.group);
+    applyFurnitureId(modelHolder, f.id);
+    g.add(modelHolder);
 
-    // Drawer face for animation reveal
-    const drawer = new THREE.Mesh(
-      new THREE.BoxGeometry(f.width * 0.85, f.height * 0.4, 0.05),
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color).multiplyScalar(1.3),
-        emissive: new THREE.Color(color).multiplyScalar(0.15),
-        roughness: 0.3, metalness: 0.5,
-      })
-    );
-    drawer.position.set(0, f.height * 0.5, f.depth / 2 + 0.026);
-    drawer.userData['kind'] = 'drawer';
-    drawer.userData['furnitureId'] = f.id;
-    g.add(drawer);
+    // glTF override: if /models/{Kind}.glb exists, swap in. Procedural shows immediately as fallback.
+    const procGroup = built.group;
+    const openables = built.openables;
+    loadModelForKind(f.kind).then(loaded => {
+      if (!loaded) return;
+      modelHolder.remove(procGroup);
+      const root = loaded.clone(true);
+      fitInto(root, f.width, f.height, f.depth);
+      modelHolder.add(root);
+      applyFurnitureId(modelHolder, f.id);
+    }).catch(() => { /* keep procedural */ });
 
     // Item markers (orbs floating above the furniture)
     const items = this.itemsByFurniture.get(f.id) ?? [];
@@ -294,6 +325,7 @@ export class PlannerScene {
           emissive: 0xa78bfa,
           emissiveIntensity: 1.2,
           roughness: 0.2, metalness: 0.8,
+          transparent: true, opacity: 0,
         })
       );
       const angle = (idx / Math.max(items.length, 1)) * Math.PI * 2;
@@ -314,7 +346,7 @@ export class PlannerScene {
     });
 
     this.scene.add(g);
-    return { data: f, group: g, body, drawer, itemMarkers: markers };
+    return { data: f, group: g, modelHolder, openables, itemMarkers: markers };
   }
 
   setMode(state: PlannerState) {
@@ -324,15 +356,51 @@ export class PlannerScene {
 
   private applyMode() {
     const s = this.state;
+    // Helpers shared across modes
+    const closeAllFurniture = () => {
+      for (const f of this.furniture) for (const o of f.openables) {
+        gsap.to(o.obj.position, {
+          x: o.closed.position.x, y: o.closed.position.y, z: o.closed.position.z,
+          duration: 0.6, ease: 'power2.inOut',
+        });
+        gsap.to(o.obj.rotation, {
+          x: o.closed.rotation.x, y: o.closed.rotation.y, z: o.closed.rotation.z,
+          duration: 0.6, ease: 'power2.inOut',
+        });
+      }
+    };
+    const hideAllFurnitureItems = () => {
+      this.furniture.forEach(f => f.itemMarkers.forEach(m => {
+        gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+      }));
+    };
+    const hideAllLooseItems = () => {
+      this.rooms.forEach(r => r.looseItemMarkers.forEach(m => {
+        gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+      }));
+    };
+    const revealMarkers = (markers: THREE.Mesh[]) => {
+      markers.forEach((m, i) => {
+        m.visible = true;
+        const mat = m.material as THREE.MeshStandardMaterial;
+        mat.transparent = true;
+        mat.opacity = 0;
+        const target = (m.userData['basePos'] as THREE.Vector3).clone();
+        m.position.set(target.x, target.y - 0.5, target.z);
+        gsap.to(mat, { opacity: 1, duration: 0.4, delay: i * 0.04 });
+        gsap.to(m.position, { y: target.y, duration: 0.6, delay: i * 0.04, ease: 'back.out(1.6)' });
+      });
+    };
+
     if (s.mode === 'overview') {
       this.flyTo({ camPos: new THREE.Vector3(12, 14, 16), target: new THREE.Vector3(2, 0, 2) });
-      // Walls visible, items hidden
       for (const r of this.rooms) {
         for (const w of r.walls) gsap.to(w.material as any, { opacity: 0.18, duration: 0.6 });
         gsap.to(r.glowEdges.material as any, { opacity: 0.85, duration: 0.6 });
       }
-      this.furniture.forEach(f => f.itemMarkers.forEach(m => gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } })));
-      this.furniture.forEach(f => { if (f.drawer) gsap.to(f.drawer.position, { z: f.data.depth/2 + 0.026, duration: 0.5 }); });
+      hideAllFurnitureItems();
+      hideAllLooseItems();
+      closeAllFurniture();
     }
 
     if (s.mode === 'room' && s.room) {
@@ -345,15 +413,25 @@ export class PlannerScene {
         camPos: new THREE.Vector3(cx + dist*0.6, room.data.height + dist*0.8, cz + dist*0.9),
         target: new THREE.Vector3(cx, room.data.height/2, cz),
       });
-      // Hide selected room walls (drop animation)
+      // Drop walls of the focused room
       for (const r of this.rooms) {
         const focused = r.data.id === s.room.id;
         for (const w of r.walls) gsap.to(w.material as any, { opacity: focused ? 0.05 : 0.02, duration: 0.5 });
         gsap.to(r.glowEdges.material as any, { opacity: focused ? 1 : 0.15, duration: 0.5 });
       }
-      // Hide drawers + items in this mode
-      this.furniture.forEach(f => f.itemMarkers.forEach(m => gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } })));
-      this.furniture.forEach(f => { if (f.drawer) gsap.to(f.drawer.position, { z: f.data.depth/2 + 0.026, duration: 0.5 }); });
+      hideAllFurnitureItems();
+      closeAllFurniture();
+
+      // Reveal loose items in this room only, hide others
+      this.rooms.forEach(r => {
+        if (r.data.id === s.room!.id) {
+          revealMarkers(r.looseItemMarkers);
+        } else {
+          r.looseItemMarkers.forEach(m => {
+            gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+          });
+        }
+      });
     }
 
     if (s.mode === 'furniture' && s.furniture) {
@@ -364,25 +442,35 @@ export class PlannerScene {
       const camPos = wp.clone().add(fwd.multiplyScalar(2.4)).add(new THREE.Vector3(0, fmesh.data.height + 0.6, 0));
       this.flyTo({ camPos, target: wp.clone().add(new THREE.Vector3(0, fmesh.data.height/2, 0)) });
 
-      // Open drawer animation
-      if (fmesh.drawer) {
-        gsap.to(fmesh.drawer.position, { z: fmesh.data.depth/2 + 0.5, duration: 0.9, ease: 'power3.out' });
+      // Close other furniture, open the focused one
+      for (const f of this.furniture) {
+        const opening = f.data.id === fmesh.data.id;
+        for (const o of f.openables) {
+          const target = opening ? o.open : { position: o.closed.position, rotation: o.closed.rotation };
+          if (target.position) {
+            gsap.to(o.obj.position, { x: target.position.x, y: target.position.y, z: target.position.z,
+              duration: 0.9, ease: opening ? 'power3.out' : 'power2.inOut' });
+          } else if (!opening) {
+            gsap.to(o.obj.position, { x: o.closed.position.x, y: o.closed.position.y, z: o.closed.position.z,
+              duration: 0.6, ease: 'power2.inOut' });
+          }
+          if (target.rotation) {
+            gsap.to(o.obj.rotation, { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z,
+              duration: 0.9, ease: opening ? 'power3.out' : 'power2.inOut' });
+          } else if (!opening) {
+            gsap.to(o.obj.rotation, { x: o.closed.rotation.x, y: o.closed.rotation.y, z: o.closed.rotation.z,
+              duration: 0.6, ease: 'power2.inOut' });
+          }
+        }
       }
-      // Reveal items with stagger
-      fmesh.itemMarkers.forEach((m, i) => {
-        m.visible = true;
-        const mat = m.material as THREE.MeshStandardMaterial;
-        mat.transparent = true;
-        mat.opacity = 0;
-        const target = m.userData['basePos'].clone();
-        m.position.set(target.x, target.y - 0.5, target.z);
-        gsap.to(mat, { opacity: 1, duration: 0.4, delay: i * 0.05 });
-        gsap.to(m.position, { y: target.y, duration: 0.6, delay: i * 0.05, ease: 'back.out(1.6)' });
-      });
 
-      // Hide other furniture's items
+      // Reveal items in this furniture, hide others
+      revealMarkers(fmesh.itemMarkers);
       this.furniture.filter(f => f.data.id !== fmesh.data.id)
-        .forEach(f => f.itemMarkers.forEach(m => { m.visible = false; }));
+        .forEach(f => f.itemMarkers.forEach(m => {
+          gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+        }));
+      hideAllLooseItems();
     }
   }
 
@@ -425,17 +513,22 @@ export class PlannerScene {
       return;
     }
 
-    // Hover items in furniture mode
+    // Hover items in furniture mode (orbs above the furniture) or in room mode (loose items)
+    let hoverTargets: THREE.Mesh[] | null = null;
     if (this.state.mode === 'furniture' && this.state.furniture) {
       const fmesh = this.furniture.find(fm => fm.data.id === this.state.furniture!.id);
-      if (fmesh) {
-        this.raycaster.setFromCamera(this.pointer, this.camera);
-        const hits = this.raycaster.intersectObjects(fmesh.itemMarkers, false);
-        const hovered = hits[0]?.object?.userData?.['item'] ?? null;
-        if (hovered !== this.hoveredItem) {
-          this.hoveredItem = hovered;
-          this.cb.onHoverItem(hovered);
-        }
+      if (fmesh) hoverTargets = fmesh.itemMarkers;
+    } else if (this.state.mode === 'room' && this.state.room) {
+      const room = this.rooms.find(rm => rm.data.id === this.state.room!.id);
+      if (room) hoverTargets = room.looseItemMarkers;
+    }
+    if (hoverTargets) {
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const hits = this.raycaster.intersectObjects(hoverTargets, false);
+      const hovered = hits[0]?.object?.userData?.['item'] ?? null;
+      if (hovered !== this.hoveredItem) {
+        this.hoveredItem = hovered;
+        this.cb.onHoverItem(hovered);
       }
     }
   };
@@ -443,13 +536,14 @@ export class PlannerScene {
   private onPointerDown = (e: PointerEvent) => {
     if (this.state.mode !== 'overview') return;
     if (e.button !== 0) return;
+    if (!e.shiftKey) return; // Drag requires shift to avoid hijacking single-click selection
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const fbodies = this.furniture.map(f => f.body);
-    const hits = this.raycaster.intersectObjects(fbodies, false);
+    const groups = this.furniture.map(f => f.group);
+    const hits = this.raycaster.intersectObjects(groups, true);
     if (!hits.length) return;
-    // Drag is overview-mode-only and is initiated only with shift held to avoid hijacking single-click selection
-    if (!e.shiftKey) return;
-    const fmesh = this.furniture.find(fm => fm.body === hits[0].object);
+    const fid = findFurnitureIdInAncestors(hits[0].object);
+    if (fid == null) return;
+    const fmesh = this.furniture.find(fm => fm.data.id === fid);
     if (!fmesh) return;
     e.preventDefault();
     this.controls.enabled = false;
@@ -474,27 +568,43 @@ export class PlannerScene {
     if (this.dragging) return;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    // Item click in furniture mode
+    // Item click in furniture mode (orbs)
     if (this.state.mode === 'furniture' && this.state.furniture) {
       const fmesh = this.furniture.find(fm => fm.data.id === this.state.furniture!.id);
       if (fmesh) {
         const itemHits = this.raycaster.intersectObjects(fmesh.itemMarkers, false);
         if (itemHits.length) {
           const it = itemHits[0].object.userData['item'] as Item;
-          this.spawnItemBurst(itemHits[0].object.position.clone());
+          this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
           this.cb.onSelectItem(it);
           return;
         }
       }
     }
 
-    // Furniture click
-    const fbodies = this.furniture.flatMap(f => [f.body, ...(f.drawer ? [f.drawer] : [])]);
-    const fhits = this.raycaster.intersectObjects(fbodies, false);
+    // Loose-item click in room mode
+    if (this.state.mode === 'room' && this.state.room) {
+      const room = this.rooms.find(rm => rm.data.id === this.state.room!.id);
+      if (room) {
+        const itemHits = this.raycaster.intersectObjects(room.looseItemMarkers, false);
+        if (itemHits.length) {
+          const it = itemHits[0].object.userData['item'] as Item;
+          this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
+          this.cb.onSelectItem(it);
+          return;
+        }
+      }
+    }
+
+    // Furniture click — recursive through procedural/glTF subtrees
+    const groups = this.furniture.map(f => f.group);
+    const fhits = this.raycaster.intersectObjects(groups, true);
     if (fhits.length) {
-      const fid = fhits[0].object.userData['furnitureId'] as number;
-      const fmesh = this.furniture.find(f => f.data.id === fid);
-      if (fmesh) { this.cb.onSelectFurniture(fmesh.data); return; }
+      const fid = findFurnitureIdInAncestors(fhits[0].object);
+      if (fid != null) {
+        const fmesh = this.furniture.find(f => f.data.id === fid);
+        if (fmesh) { this.cb.onSelectFurniture(fmesh.data); return; }
+      }
     }
 
     // Room click (floor or wall)
@@ -554,15 +664,15 @@ export class PlannerScene {
     this.controls.update();
 
     // Bob items
-    for (const f of this.furniture) {
-      for (const m of f.itemMarkers) {
-        if (!m.visible) continue;
-        const base = m.userData['basePos'] as THREE.Vector3;
-        const off = m.userData['bobOffset'] as number;
-        m.position.y = base.y + Math.sin(t * 2 + off) * 0.04;
-        m.rotation.y += dt * 0.6;
-      }
-    }
+    const bob = (m: THREE.Mesh) => {
+      if (!m.visible) return;
+      const base = m.userData['basePos'] as THREE.Vector3;
+      const off = m.userData['bobOffset'] as number;
+      m.position.y = base.y + Math.sin(t * 2 + off) * 0.04;
+      m.rotation.y += dt * 0.6;
+    };
+    for (const f of this.furniture) for (const m of f.itemMarkers) bob(m);
+    for (const r of this.rooms) for (const m of r.looseItemMarkers) bob(m);
 
     // Slow star rotation
     if (this.starField) this.starField.rotation.y += dt * 0.01;
@@ -591,19 +701,14 @@ export class PlannerScene {
   }
 }
 
-function furnitureColor(kind: string): number {
-  switch (kind) {
-    case 'Cabinet':  return 0x4f46e5;
-    case 'Drawer':   return 0x7c3aed;
-    case 'Shelf':    return 0x2563eb;
-    case 'Wardrobe': return 0xa855f7;
-    case 'Desk':     return 0x0891b2;
-    case 'Table':    return 0x059669;
-    case 'Sofa':     return 0xdb2777;
-    case 'Bed':      return 0xea580c;
-    case 'Box':      return 0xca8a04;
-    default:         return 0x64748b;
+function findFurnitureIdInAncestors(o: THREE.Object3D | null): number | null {
+  let cur: THREE.Object3D | null = o;
+  while (cur) {
+    const id = cur.userData?.['furnitureId'];
+    if (typeof id === 'number') return id;
+    cur = cur.parent;
   }
+  return null;
 }
 
 function makeLabelSprite(text: string): THREE.Sprite {
