@@ -1,4 +1,84 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import "tailwindcss";
 @import "primeicons/primeicons.css";
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  background: radial-gradient(1200px 800px at 80% -10%, #1a1530 0%, #0b0a13 60%) #0b0a13;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2a2540; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #3a335a; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.glass {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.95rem; border-radius: 0.7rem;
+  font-weight: 500; font-size: 0.92rem;
+  transition: transform 120ms ease, background 160ms ease, box-shadow 200ms ease;
+  cursor: pointer; user-select: none;
+  border: 1px solid transparent;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  color: white;
+  box-shadow: 0 6px 20px -8px rgba(139, 92, 246, 0.6);
+}
+.btn-primary:hover { box-shadow: 0 8px 24px -8px rgba(139, 92, 246, 0.8); }
+.btn-ghost {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: #e5e7eb;
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.08); }
+.btn-danger {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.4);
+  color: #fca5a5;
+}
+.btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+.input, .select, .textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #e5e7eb;
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.6rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  font-size: 0.95rem;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(167,139,250,0.18);
+}
+.label { display:block; font-size: 0.78rem; color:#a3a0b8; margin-bottom: 0.3rem; letter-spacing: 0.02em; text-transform: uppercase; }
+
+.tag {
+  display:inline-flex; padding: 2px 8px; border-radius: 999px;
+  background: rgba(139,92,246,0.15);
+  color:#c4b5fd; font-size:0.72rem; border:1px solid rgba(139,92,246,0.3);
+}
+
+.fade-in { animation: fadeIn 200ms ease both; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.hero-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(600px 300px at 30% 20%, rgba(139,92,246,0.18), transparent 60%),
+              radial-gradient(500px 300px at 80% 80%, rgba(236,72,153,0.12), transparent 60%);
+}

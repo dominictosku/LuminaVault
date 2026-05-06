@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f WeatherForecast.cs Controllers/WeatherForecastController.cs LuminaVault-Backend.http)",
+      "Bash(rmdir Controllers)",
+      "Bash(rm -rf dashboard inventory settings)",
+      "Bash(rm -f app.config.ts app.css app.html app.routes.ts app.spec.ts app.ts)",
+      "Read(//c/c/Users/domin/MyDocuments/Projects/LuminaVault/mobile/src/**)",
+      "Bash(dotnet build *)",
+      "Bash(npm install *)",
+      "Bash(npx ng *)"
+    ]
+  }
+}

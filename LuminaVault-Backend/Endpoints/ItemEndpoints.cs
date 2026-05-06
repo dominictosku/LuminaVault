@@ -1,0 +1,161 @@
+using LuminaVault.Data;
+using LuminaVault.Domain;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace LuminaVault.Endpoints;
+
+public record ItemPhotoDto(int Id, string Url, string ContentType);
+
+public record ItemDto(
+    int Id, string Name, string? Description, string? Brand, string? Model,
+    string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
+    int Quantity, string? Notes, string[] Tags,
+    int? FurnitureId, string? FurnitureName,
+    int? ContainerId, string? ContainerName,
+    int? RoomId, string? RoomName,
+    DateTime CreatedAt, DateTime UpdatedAt,
+    ItemPhotoDto[] Photos);
+
+public record ItemInput(
+    string Name, string? Description, string? Brand, string? Model,
+    string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
+    int Quantity, string? Notes, string[] Tags,
+    int? FurnitureId, int? ContainerId);
+
+public static class ItemEndpoints
+{
+    public static IEndpointRouteBuilder MapItems(this IEndpointRouteBuilder app)
+    {
+        var g = app.MapGroup("/api/items").RequireAuthorization().WithTags("Items");
+
+        g.MapGet("/", async (AppDbContext db, string? q, int? furnitureId, int? containerId, int? roomId) =>
+        {
+            var query = db.Items
+                .Include(i => i.Photos)
+                .Include(i => i.Furniture).ThenInclude(f => f!.Room)
+                .Include(i => i.Container)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var s = q.Trim().ToLower();
+                query = query.Where(i =>
+                    i.Name.ToLower().Contains(s) ||
+                    (i.Brand ?? "").ToLower().Contains(s) ||
+                    (i.Model ?? "").ToLower().Contains(s) ||
+                    (i.SerialNumber ?? "").ToLower().Contains(s) ||
+                    i.TagsCsv.ToLower().Contains(s));
+            }
+            if (furnitureId.HasValue) query = query.Where(i => i.FurnitureId == furnitureId);
+            if (containerId.HasValue) query = query.Where(i => i.ContainerId == containerId);
+            if (roomId.HasValue) query = query.Where(i => i.Furniture != null && i.Furniture.RoomId == roomId);
+
+            var items = await query.OrderByDescending(i => i.UpdatedAt).Take(500).ToListAsync();
+            return Results.Ok(items.Select(MapToDto));
+        });
+
+        g.MapGet("/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var i = await db.Items
+                .Include(x => x.Photos)
+                .Include(x => x.Furniture).ThenInclude(f => f!.Room)
+                .Include(x => x.Container)
+                .FirstOrDefaultAsync(x => x.Id == id);
+            return i is null ? Results.NotFound() : Results.Ok(MapToDto(i));
+        });
+
+        g.MapPost("/", async ([FromBody] ItemInput input, AppDbContext db) =>
+        {
+            var item = new Item();
+            ApplyInput(item, input);
+            db.Items.Add(item);
+            await db.SaveChangesAsync();
+            await db.Entry(item).Reference(x => x.Furniture).LoadAsync();
+            if (item.Furniture != null)
+                await db.Entry(item.Furniture).Reference(f => f.Room).LoadAsync();
+            await db.Entry(item).Reference(x => x.Container).LoadAsync();
+            return Results.Created($"/api/items/{item.Id}", MapToDto(item));
+        });
+
+        g.MapPut("/{id:int}", async (int id, [FromBody] ItemInput input, AppDbContext db) =>
+        {
+            var item = await db.Items
+                .Include(x => x.Photos)
+                .Include(x => x.Furniture).ThenInclude(f => f!.Room)
+                .Include(x => x.Container)
+                .FirstOrDefaultAsync(x => x.Id == id);
+            if (item is null) return Results.NotFound();
+            ApplyInput(item, input);
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(MapToDto(item));
+        });
+
+        g.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        {
+            var item = await db.Items.Include(x => x.Photos).FirstOrDefaultAsync(x => x.Id == id);
+            if (item is null) return Results.NotFound();
+            foreach (var p in item.Photos) DeletePhotoFile(env, p.FileName);
+            db.Items.Remove(item);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        // Stats
+        g.MapGet("/stats/summary", async (AppDbContext db) =>
+        {
+            var totalItems = await db.Items.SumAsync(i => (int?)i.Quantity) ?? 0;
+            var totalValue = await db.Items.SumAsync(i => (decimal?)(i.Value * i.Quantity)) ?? 0m;
+            var byRoom = await db.Items
+                .Where(i => i.Furniture != null)
+                .GroupBy(i => new { i.Furniture!.RoomId, i.Furniture.Room!.Name })
+                .Select(g => new { roomId = g.Key.RoomId, roomName = g.Key.Name, count = g.Sum(x => x.Quantity) })
+                .ToListAsync();
+            var recent = await db.Items.OrderByDescending(i => i.CreatedAt).Take(5)
+                .Select(i => new { i.Id, i.Name, i.CreatedAt }).ToListAsync();
+            return Results.Ok(new { totalItems, totalValue, byRoom, recent });
+        });
+
+        return app;
+    }
+
+    static void ApplyInput(Item item, ItemInput input)
+    {
+        item.Name = input.Name;
+        item.Description = input.Description;
+        item.Brand = input.Brand;
+        item.Model = input.Model;
+        item.SerialNumber = input.SerialNumber;
+        item.Value = input.Value;
+        item.PurchaseDate = input.PurchaseDate;
+        item.WarrantyUntil = input.WarrantyUntil;
+        item.Quantity = Math.Max(1, input.Quantity);
+        item.Notes = input.Notes;
+        item.TagsCsv = string.Join(",", (input.Tags ?? Array.Empty<string>())
+            .Select(t => t.Trim()).Where(t => t.Length > 0));
+        item.FurnitureId = input.FurnitureId;
+        item.ContainerId = input.ContainerId;
+    }
+
+    public static ItemDto MapToDto(Item i) => new(
+        i.Id, i.Name, i.Description, i.Brand, i.Model,
+        i.SerialNumber, i.Value, i.PurchaseDate, i.WarrantyUntil,
+        i.Quantity, i.Notes,
+        string.IsNullOrWhiteSpace(i.TagsCsv) ? Array.Empty<string>() : i.TagsCsv.Split(','),
+        i.FurnitureId, i.Furniture?.Name,
+        i.ContainerId, i.Container?.Name,
+        i.Furniture?.RoomId, i.Furniture?.Room?.Name,
+        i.CreatedAt, i.UpdatedAt,
+        i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray());
+
+    static void DeletePhotoFile(IWebHostEnvironment env, string fileName)
+    {
+        try
+        {
+            var path = Path.Combine(env.ContentRootPath, "uploads", fileName);
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch { /* best effort */ }
+    }
+}

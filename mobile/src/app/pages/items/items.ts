@@ -1,0 +1,127 @@
+import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { CurrencyPipe, DatePipe } from '@angular/common';
+import { Api } from '../../core/api';
+import { Item } from '../../core/models';
+
+@Component({
+  selector: 'app-items',
+  imports: [FormsModule, RouterLink, CurrencyPipe, DatePipe],
+  template: `
+    <div class="p-8 fade-in">
+      <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <h1 class="text-3xl font-semibold tracking-tight">Items</h1>
+          <p class="text-slate-400 text-sm mt-1">{{ items().length }} item(s)</p>
+        </div>
+        <div class="flex gap-3 items-center">
+          <div class="relative">
+            <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+            <input class="input pl-9 w-72" placeholder="Search name, brand, tag…"
+                   [(ngModel)]="query" (ngModelChange)="onQuery($event)" />
+          </div>
+          <a routerLink="/items/new" class="btn btn-primary">
+            <i class="pi pi-plus"></i> New item
+          </a>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          @for (_ of skel; track $index) {
+            <div class="glass rounded-2xl p-5 h-40 animate-pulse"></div>
+          }
+        </div>
+      } @else if (items().length === 0) {
+        <div class="glass rounded-2xl p-10 text-center">
+          <i class="pi pi-box text-5xl text-violet-300/60"></i>
+          <div class="mt-4 text-lg">No items yet.</div>
+          <p class="text-slate-400 text-sm mt-1">Start by adding your first thing.</p>
+          <a routerLink="/items/new" class="btn btn-primary mt-4">
+            <i class="pi pi-plus"></i> Add item
+          </a>
+        </div>
+      } @else {
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          @for (item of items(); track item.id) {
+            <a [routerLink]="['/items', item.id]"
+               class="glass rounded-2xl p-5 hover:border-violet-400/40 transition group flex flex-col">
+              <div class="flex items-start gap-3">
+                <div class="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-violet-500/20 to-pink-500/20 grid place-items-center shrink-0">
+                  @if (item.photos[0]) {
+                    <img [src]="api.photoUrl(item.photos[0])" class="w-full h-full object-cover" />
+                  } @else {
+                    <i class="pi pi-box text-2xl text-violet-300"></i>
+                  }
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium truncate group-hover:text-violet-300 transition">{{ item.name }}</div>
+                  <div class="text-xs text-slate-400 truncate mt-0.5">
+                    {{ item.brand || '—' }}{{ item.model ? ' · ' + item.model : '' }}
+                  </div>
+                </div>
+                @if (item.quantity > 1) {
+                  <div class="text-xs text-slate-300 bg-white/5 rounded px-2 py-0.5">×{{ item.quantity }}</div>
+                }
+              </div>
+
+              <div class="text-xs text-slate-400 mt-3 flex items-center gap-2 flex-wrap">
+                @if (item.roomName) {
+                  <span class="inline-flex items-center gap-1"><i class="pi pi-home text-[10px]"></i>{{ item.roomName }}</span>
+                }
+                @if (item.furnitureName) {
+                  <span>›</span>
+                  <span>{{ item.furnitureName }}</span>
+                }
+                @if (item.containerName) {
+                  <span>›</span>
+                  <span class="text-violet-300">{{ item.containerName }}</span>
+                }
+              </div>
+
+              @if (item.tags.length) {
+                <div class="mt-3 flex gap-1 flex-wrap">
+                  @for (t of item.tags; track t) {
+                    <span class="tag">{{ t }}</span>
+                  }
+                </div>
+              }
+
+              <div class="mt-auto pt-3 flex items-center justify-between text-xs text-slate-500">
+                <span>{{ item.updatedAt | date:'shortDate' }}</span>
+                @if (item.value != null) {
+                  <span class="text-slate-300">{{ item.value | currency }}</span>
+                }
+              </div>
+            </a>
+          }
+        </div>
+      }
+    </div>
+  `,
+})
+export class ItemsComponent {
+  protected api = inject(Api);
+  items = signal<Item[]>([]);
+  loading = signal(true);
+  query = '';
+  skel = Array(6);
+
+  private debounce: any = null;
+
+  constructor() { this.fetch(); }
+
+  fetch() {
+    this.loading.set(true);
+    this.api.listItems({ q: this.query.trim() || undefined }).subscribe({
+      next: r => { this.items.set(r); this.loading.set(false); },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  onQuery(_: string) {
+    clearTimeout(this.debounce);
+    this.debounce = setTimeout(() => this.fetch(), 250);
+  }
+}
