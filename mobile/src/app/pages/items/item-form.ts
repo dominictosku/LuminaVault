@@ -140,6 +140,43 @@ import { Container, Furniture, House, Item, Room } from '../../core/models';
           </div>
 
           <div class="glass rounded-2xl p-5">
+            <h3 class="font-medium flex items-center gap-2 mb-4">
+              <i class="pi pi-box text-violet-300"></i> 3D model
+            </h3>
+            @if (id()) {
+              <input #modelFile type="file" class="hidden" accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
+                     (change)="onUploadModel(modelFile)" />
+              @if (current()?.modelUrl) {
+                <div class="px-3 py-2 rounded-lg border border-violet-400/30 bg-violet-500/10 flex items-center gap-2">
+                  <i class="pi pi-check-circle text-violet-300"></i>
+                  <span class="text-sm flex-1">Model uploaded</span>
+                  <button type="button" class="btn btn-ghost !py-1 !px-2 text-xs" (click)="modelFile.click()" [disabled]="uploadingModel()">
+                    <i class="pi pi-refresh"></i>
+                  </button>
+                  <button type="button" class="btn btn-danger !py-1 !px-2 text-xs" (click)="removeModel()">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              } @else {
+                <button type="button" class="btn btn-ghost w-full justify-center" (click)="modelFile.click()" [disabled]="uploadingModel()">
+                  @if (uploadingModel()) { <i class="pi pi-spin pi-spinner"></i> Uploading… }
+                  @else { <i class="pi pi-upload"></i> Upload .glb or .gltf }
+                </button>
+              }
+              @if (modelError()) {
+                <div class="text-red-300 text-xs bg-red-500/10 border border-red-500/30 rounded px-2 py-1.5 mt-2">
+                  {{ modelError() }}
+                </div>
+              }
+              <p class="text-xs text-slate-400 mt-2">
+                The 3D planner will render this model floating where the item lives.
+              </p>
+            } @else {
+              <p class="text-xs text-slate-400">Save the item first to upload a model.</p>
+            }
+          </div>
+
+          <div class="glass rounded-2xl p-5">
             <h3 class="font-medium flex items-center gap-2 mb-4"><i class="pi pi-image text-violet-300"></i> Photos</h3>
             @if (id()) {
               <input #file type="file" class="hidden" accept="image/*" (change)="onUpload(file)" />
@@ -192,7 +229,9 @@ export class ItemFormComponent {
   current = signal<Item | null>(null);
   saving = signal(false);
   uploading = signal(false);
+  uploadingModel = signal(false);
   error = signal<string | null>(null);
+  modelError = signal<string | null>(null);
 
   rooms = signal<Room[]>([]);
   furniture = signal<Furniture[]>([]);
@@ -334,6 +373,32 @@ export class ItemFormComponent {
 
   removePhoto(id: number) {
     this.api.deletePhoto(id).subscribe(() => {
+      this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
+    });
+  }
+
+  onUploadModel(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file || !this.id()) return;
+    this.modelError.set(null);
+    this.uploadingModel.set(true);
+    this.api.uploadItemModel(this.id()!, file).subscribe({
+      next: () => {
+        this.uploadingModel.set(false);
+        input.value = '';
+        this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
+      },
+      error: e => {
+        this.uploadingModel.set(false);
+        input.value = '';
+        this.modelError.set(e?.error?.error ?? 'Upload failed.');
+      },
+    });
+  }
+
+  removeModel() {
+    if (!this.id()) return;
+    this.api.deleteItemModel(this.id()!).subscribe(() => {
       this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }

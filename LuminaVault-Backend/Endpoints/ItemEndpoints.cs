@@ -15,7 +15,8 @@ public record ItemDto(
     int? ContainerId, string? ContainerName,
     int? RoomId, string? RoomName,
     DateTime CreatedAt, DateTime UpdatedAt,
-    ItemPhotoDto[] Photos);
+    ItemPhotoDto[] Photos,
+    string? ModelUrl);
 
 public record ItemInput(
     string Name, string? Description, string? Brand, string? Model,
@@ -103,11 +104,64 @@ public static class ItemEndpoints
         {
             var item = await db.Items.Include(x => x.Photos).FirstOrDefaultAsync(x => x.Id == id);
             if (item is null) return Results.NotFound();
-            foreach (var p in item.Photos) DeletePhotoFile(env, p.FileName);
+            foreach (var p in item.Photos) DeleteUploadFile(env, p.FileName);
+            if (item.ModelFileName != null) DeleteUploadFile(env, item.ModelFileName);
             db.Items.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+
+        // Model upload (single .glb/.gltf per item)
+        g.MapPost("/{id:int}/model", async (int id, IFormFile file,
+            AppDbContext db, IWebHostEnvironment env) =>
+        {
+            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "No file." });
+            if (file.Length > 50 * 1024 * 1024) return Results.BadRequest(new { error = "Max 50MB." });
+            var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant();
+            if (ext != ".glb" && ext != ".gltf")
+                return Results.BadRequest(new { error = "Only .glb or .gltf files are allowed." });
+
+            var item = await db.Items.FindAsync(id);
+            if (item is null) return Results.NotFound();
+
+            var dir = Path.Combine(env.ContentRootPath, "uploads");
+            Directory.CreateDirectory(dir);
+            var name = $"{Guid.NewGuid():N}{ext}";
+            var path = Path.Combine(dir, name);
+            await using (var fs = File.Create(path)) await file.CopyToAsync(fs);
+
+            // Replace previous model file if any
+            if (item.ModelFileName != null) DeleteUploadFile(env, item.ModelFileName);
+
+            item.ModelFileName = name;
+            item.ModelContentType = ext == ".glb" ? "model/gltf-binary" : "model/gltf+json";
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { modelUrl = $"/api/items/{item.Id}/model" });
+        }).DisableAntiforgery();
+
+        g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        {
+            var item = await db.Items.FindAsync(id);
+            if (item is null || item.ModelFileName is null) return Results.NotFound();
+            DeleteUploadFile(env, item.ModelFileName);
+            item.ModelFileName = null;
+            item.ModelContentType = null;
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        // Public model download (no auth required so <model-viewer>/loaders work without headers)
+        app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        {
+            var item = await db.Items.FindAsync(id);
+            if (item?.ModelFileName is null) return Results.NotFound();
+            var path = Path.Combine(env.ContentRootPath, "uploads", item.ModelFileName);
+            if (!File.Exists(path)) return Results.NotFound();
+            var bytes = await File.ReadAllBytesAsync(path);
+            return Results.File(bytes, item.ModelContentType ?? "application/octet-stream");
+        }).WithTags("Items");
 
         // Stats
         g.MapGet("/stats/summary", async (AppDbContext db) =>
@@ -169,10 +223,11 @@ public static class ItemEndpoints
             i.ContainerId, i.Container?.Name,
             roomId, roomName,
             i.CreatedAt, i.UpdatedAt,
-            i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray());
+            i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray(),
+            i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
     }
 
-    static void DeletePhotoFile(IWebHostEnvironment env, string fileName)
+    static void DeleteUploadFile(IWebHostEnvironment env, string fileName)
     {
         try
         {

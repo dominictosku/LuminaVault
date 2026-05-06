@@ -53,6 +53,7 @@ export interface Item {
   createdAt: string;
   updatedAt: string;
   photos: ItemPhoto[];
+  modelUrl?: string | null;
 }
 
 export interface ItemInput {

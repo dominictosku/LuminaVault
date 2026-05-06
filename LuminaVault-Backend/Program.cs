@@ -78,6 +78,8 @@ using (var scope = app.Services.CreateScope())
         }
     }
     AddColumnIfMissing("Items", "RoomId", "INTEGER NULL REFERENCES Rooms(Id) ON DELETE SET NULL");
+    AddColumnIfMissing("Items", "ModelFileName", "TEXT NULL");
+    AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
 }
 
 if (app.Environment.IsDevelopment())

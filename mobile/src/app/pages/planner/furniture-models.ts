@@ -469,6 +469,34 @@ export function loadModelForKind(kind: FurnitureKind): Promise<THREE.Object3D | 
   return p;
 }
 
+/** Load a glTF/glb from an arbitrary URL (no caching — caller decides). */
+export function loadModelFromUrl(url: string): Promise<THREE.Object3D | null> {
+  return new Promise(resolve => {
+    gltfLoader.load(url,
+      gltf => resolve(gltf.scene),
+      undefined,
+      () => resolve(null));
+  });
+}
+
+/** Scale a model so its largest dimension equals `maxDim`, then center it at the origin. */
+export function fitCentered(root: THREE.Object3D, maxDim: number) {
+  const bbox = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3(); bbox.getSize(size);
+  const m = Math.max(size.x, size.y, size.z);
+  if (m === 0) return;
+  root.scale.setScalar(maxDim / m);
+  const bbox2 = new THREE.Box3().setFromObject(root);
+  const center = new THREE.Vector3(); bbox2.getCenter(center);
+  root.position.sub(center);
+  root.traverse(o => {
+    if ((o as THREE.Mesh).isMesh) {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+}
+
 /** Scale and center a loaded glTF root so it occupies a w×h×d box with feet on y=0, centered on (0,0). */
 export function fitInto(root: THREE.Object3D, w: number, h: number, d: number) {
   const bbox = new THREE.Box3().setFromObject(root);

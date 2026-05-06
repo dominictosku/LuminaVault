@@ -106,6 +106,17 @@ export class Api {
   deletePhoto(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/photos/${id}`);
   }
+  uploadItemModel(itemId: number, file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<{ modelUrl: string }>(`${API_BASE}/api/items/${itemId}/model`, fd);
+  }
+  deleteItemModel(itemId: number) {
+    return this.http.delete<void>(`${API_BASE}/api/items/${itemId}/model`);
+  }
+  modelUrl(item: { modelUrl?: string | null }) {
+    return item.modelUrl ? `${API_BASE}${item.modelUrl}` : null;
+  }
 
   // --- Stats ---
   stats() {

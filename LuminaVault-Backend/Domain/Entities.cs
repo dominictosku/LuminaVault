@@ -98,6 +98,9 @@ public class Item
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    public string? ModelFileName { get; set; }
+    public string? ModelContentType { get; set; }
+
     public List<ItemPhoto> Photos { get; set; } = new();
 }
 

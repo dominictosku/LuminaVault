@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import gsap from 'gsap';
 import { Furniture, Item, Room } from '../../core/models';
-import { applyFurnitureId, BuiltFurniture, buildFurnitureMesh, fitInto, loadModelForKind, OpenTransform } from './furniture-models';
+import { applyFurnitureId, BuiltFurniture, buildFurnitureMesh, fitCentered, fitInto, loadModelForKind, loadModelFromUrl, OpenTransform } from './furniture-models';
+
+const API_BASE = 'http://localhost:5256';
 
 export type PlannerMode = 'overview' | 'room' | 'furniture';
 
@@ -252,36 +254,65 @@ export class PlannerScene {
     const looseItems = this.looseItemsByRoom.get(r.id) ?? [];
     const looseItemMarkers: THREE.Mesh[] = [];
     looseItems.forEach((it, idx) => {
-      const orb = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.09, 1),
-        new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xff6fb3,
-          emissiveIntensity: 1.4,
-          roughness: 0.2, metalness: 0.8,
-          transparent: true, opacity: 0,
-        })
-      );
-      // Cluster around room center, on a circle of radius ~min(w,d)/4 at height 1.4m
       const radius = Math.min(r.width, r.depth) * 0.18;
       const angle = (idx / Math.max(looseItems.length, 1)) * Math.PI * 2;
       const baseX = r.width / 2 + Math.cos(angle) * radius;
       const baseZ = r.depth / 2 + Math.sin(angle) * radius;
       const baseY = 1.35 + (idx % 3) * 0.08;
-      orb.position.set(baseX, baseY, baseZ);
-      orb.userData['kind'] = 'loose-item';
-      orb.userData['itemId'] = it.id;
-      orb.userData['item'] = it;
-      orb.userData['roomId'] = r.id;
-      orb.userData['basePos'] = orb.position.clone();
-      orb.userData['bobOffset'] = Math.random() * Math.PI * 2;
-      orb.visible = false;
+      const orb = this.createItemMarker(it, new THREE.Vector3(baseX, baseY, baseZ), {
+        loose: true, modelMaxDim: 0.5,
+      });
       g.add(orb);
       looseItemMarkers.push(orb);
     });
 
     this.scene.add(g);
     return { data: r, group: g, floor, walls, glowEdges: edges, label, looseItemMarkers };
+  }
+
+  /**
+   * Build a marker for an item. Always a placeholder orb so it bobs and animates the same way.
+   * If the item has an uploaded model, the model is loaded async and added as a child of the orb;
+   * the orb itself is then made visually invisible and excluded from raycasting (the model becomes
+   * the click target via parent-walk).
+   */
+  private createItemMarker(item: Item, basePos: THREE.Vector3,
+                            opts: { loose: boolean; modelMaxDim: number }): THREE.Mesh {
+    const orb = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(opts.loose ? 0.09 : 0.07, 1),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: opts.loose ? 0xff6fb3 : 0xa78bfa,
+        emissiveIntensity: opts.loose ? 1.4 : 1.2,
+        roughness: 0.2, metalness: 0.8,
+        transparent: true, opacity: 0,
+      })
+    );
+    orb.position.copy(basePos);
+    orb.userData['kind'] = opts.loose ? 'loose-item' : 'item';
+    orb.userData['itemId'] = item.id;
+    orb.userData['item'] = item;
+    orb.userData['basePos'] = basePos.clone();
+    orb.userData['bobOffset'] = Math.random() * Math.PI * 2;
+    orb.visible = false;
+
+    if (item.modelUrl) {
+      const cacheBust = encodeURIComponent(item.updatedAt ?? '');
+      const url = `${API_BASE}${item.modelUrl}?t=${cacheBust}`;
+      loadModelFromUrl(url).then(loaded => {
+        if (!loaded) return;
+        const root = loaded;
+        fitCentered(root, opts.modelMaxDim);
+        // Tag descendants with item id so click/hover walks back to the marker
+        root.traverse(o => { o.userData['itemId'] = item.id; o.userData['item'] = item; });
+        orb.add(root);
+        // Hide the placeholder orb visually + remove its raycast hit
+        (orb.material as THREE.Material).visible = false;
+        orb.raycast = () => {};
+      }).catch(() => { /* keep orb */ });
+    }
+
+    return orb;
   }
 
   private buildFurniture(f: Furniture): FurnitureMesh {
@@ -318,31 +349,16 @@ export class PlannerScene {
     const items = this.itemsByFurniture.get(f.id) ?? [];
     const markers: THREE.Mesh[] = [];
     items.forEach((it, idx) => {
-      const orb = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.07, 1),
-        new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xa78bfa,
-          emissiveIntensity: 1.2,
-          roughness: 0.2, metalness: 0.8,
-          transparent: true, opacity: 0,
-        })
-      );
       const angle = (idx / Math.max(items.length, 1)) * Math.PI * 2;
       const radius = Math.min(f.width, f.depth) * 0.35;
-      orb.position.set(
+      const basePos = new THREE.Vector3(
         Math.cos(angle) * radius,
-        f.height + 0.25 + (idx % 3) * 0.05,
+        f.height + 0.3 + (idx % 3) * 0.05,
         Math.sin(angle) * radius
       );
-      orb.userData['kind'] = 'item';
-      orb.userData['itemId'] = it.id;
-      orb.userData['item'] = it;
-      orb.userData['basePos'] = orb.position.clone();
-      orb.userData['bobOffset'] = Math.random() * Math.PI * 2;
-      orb.visible = false;
-      g.add(orb);
-      markers.push(orb);
+      const marker = this.createItemMarker(it, basePos, { loose: false, modelMaxDim: 0.28 });
+      g.add(marker);
+      markers.push(marker);
     });
 
     this.scene.add(g);
@@ -369,25 +385,34 @@ export class PlannerScene {
         });
       }
     };
+    const fadeMarker = (m: THREE.Mesh, target: number, duration: number, delay = 0) => {
+      const mats: THREE.Material[] = [];
+      m.traverse(o => {
+        const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        if (!mat) return;
+        const arr = Array.isArray(mat) ? mat : [mat];
+        for (const a of arr) { a.transparent = true; mats.push(a); }
+      });
+      for (const mat of mats) gsap.to(mat as any, { opacity: target, duration, delay });
+    };
     const hideAllFurnitureItems = () => {
       this.furniture.forEach(f => f.itemMarkers.forEach(m => {
-        gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+        fadeMarker(m, 0, 0.3);
+        gsap.delayedCall(0.3, () => { m.visible = false; });
       }));
     };
     const hideAllLooseItems = () => {
       this.rooms.forEach(r => r.looseItemMarkers.forEach(m => {
-        gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+        fadeMarker(m, 0, 0.3);
+        gsap.delayedCall(0.3, () => { m.visible = false; });
       }));
     };
     const revealMarkers = (markers: THREE.Mesh[]) => {
       markers.forEach((m, i) => {
         m.visible = true;
-        const mat = m.material as THREE.MeshStandardMaterial;
-        mat.transparent = true;
-        mat.opacity = 0;
         const target = (m.userData['basePos'] as THREE.Vector3).clone();
         m.position.set(target.x, target.y - 0.5, target.z);
-        gsap.to(mat, { opacity: 1, duration: 0.4, delay: i * 0.04 });
+        fadeMarker(m, 1, 0.4, i * 0.04);
         gsap.to(m.position, { y: target.y, duration: 0.6, delay: i * 0.04, ease: 'back.out(1.6)' });
       });
     };
@@ -468,7 +493,8 @@ export class PlannerScene {
       revealMarkers(fmesh.itemMarkers);
       this.furniture.filter(f => f.data.id !== fmesh.data.id)
         .forEach(f => f.itemMarkers.forEach(m => {
-          gsap.to(m.material as any, { opacity: 0, duration: 0.3, onComplete: () => { m.visible = false; } });
+          fadeMarker(m, 0, 0.3);
+          gsap.delayedCall(0.3, () => { m.visible = false; });
         }));
       hideAllLooseItems();
     }
@@ -524,8 +550,8 @@ export class PlannerScene {
     }
     if (hoverTargets) {
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const hits = this.raycaster.intersectObjects(hoverTargets, false);
-      const hovered = hits[0]?.object?.userData?.['item'] ?? null;
+      const hits = this.raycaster.intersectObjects(hoverTargets, true);
+      const hovered = hits.length ? findItemInAncestors(hits[0].object) : null;
       if (hovered !== this.hoveredItem) {
         this.hoveredItem = hovered;
         this.cb.onHoverItem(hovered);
@@ -568,16 +594,18 @@ export class PlannerScene {
     if (this.dragging) return;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    // Item click in furniture mode (orbs)
+    // Item click in furniture mode (orbs or models)
     if (this.state.mode === 'furniture' && this.state.furniture) {
       const fmesh = this.furniture.find(fm => fm.data.id === this.state.furniture!.id);
       if (fmesh) {
-        const itemHits = this.raycaster.intersectObjects(fmesh.itemMarkers, false);
+        const itemHits = this.raycaster.intersectObjects(fmesh.itemMarkers, true);
         if (itemHits.length) {
-          const it = itemHits[0].object.userData['item'] as Item;
-          this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
-          this.cb.onSelectItem(it);
-          return;
+          const it = findItemInAncestors(itemHits[0].object);
+          if (it) {
+            this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
+            this.cb.onSelectItem(it);
+            return;
+          }
         }
       }
     }
@@ -586,12 +614,14 @@ export class PlannerScene {
     if (this.state.mode === 'room' && this.state.room) {
       const room = this.rooms.find(rm => rm.data.id === this.state.room!.id);
       if (room) {
-        const itemHits = this.raycaster.intersectObjects(room.looseItemMarkers, false);
+        const itemHits = this.raycaster.intersectObjects(room.looseItemMarkers, true);
         if (itemHits.length) {
-          const it = itemHits[0].object.userData['item'] as Item;
-          this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
-          this.cb.onSelectItem(it);
-          return;
+          const it = findItemInAncestors(itemHits[0].object);
+          if (it) {
+            this.spawnItemBurst(itemHits[0].object.getWorldPosition(new THREE.Vector3()));
+            this.cb.onSelectItem(it);
+            return;
+          }
         }
       }
     }
@@ -706,6 +736,16 @@ function findFurnitureIdInAncestors(o: THREE.Object3D | null): number | null {
   while (cur) {
     const id = cur.userData?.['furnitureId'];
     if (typeof id === 'number') return id;
+    cur = cur.parent;
+  }
+  return null;
+}
+
+function findItemInAncestors(o: THREE.Object3D | null): Item | null {
+  let cur: THREE.Object3D | null = o;
+  while (cur) {
+    const it = cur.userData?.['item'] as Item | undefined;
+    if (it) return it;
     cur = cur.parent;
   }
   return null;
