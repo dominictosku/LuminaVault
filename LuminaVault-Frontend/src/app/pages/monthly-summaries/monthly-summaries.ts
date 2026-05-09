@@ -26,10 +26,14 @@ import {
 
       <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
         <section class="space-y-3">
-          <div class="surface p-3 grid grid-cols-1 md:grid-cols-[220px_1fr] gap-3">
+          <div class="surface p-3 grid grid-cols-1 md:grid-cols-[220px_160px_1fr] gap-3">
             <select class="select" [(ngModel)]="accountFilter" (ngModelChange)="fetchSummaries()">
               <option [ngValue]="null">All accounts</option>
               @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+            </select>
+            <select class="select" [ngModel]="yearFilter()" (ngModelChange)="yearFilter.set($event)">
+              <option [ngValue]="null">All years</option>
+              @for (year of availableYears(); track year) { <option [ngValue]="year">{{ year }}</option> }
             </select>
             <div class="text-sm text-slate-400 flex items-center">
               Summary months replace detailed transactions for the same account/month in balances and stats.
@@ -48,13 +52,21 @@ import {
                 <i class="pi pi-plus"></i> Add summary
               </button>
             </div>
+          } @else if (filteredSummaries().length === 0) {
+            <div class="surface p-8 text-center">
+              <i class="pi pi-filter text-4xl text-violet-300/70"></i>
+              <div class="mt-3 text-lg">No monthly summaries match this year.</div>
+              <button class="btn btn-ghost mt-4" (click)="yearFilter.set(null)">
+                <i class="pi pi-filter-slash"></i> Clear year
+              </button>
+            </div>
           } @else {
             <div class="surface overflow-hidden">
               <div class="hidden md:grid grid-cols-[130px_1fr_130px_130px_130px] gap-3 px-4 py-2 text-xs uppercase tracking-wide text-slate-500 border-b border-white/5">
                 <div>Month</div><div>Account</div><div class="text-right">Income</div><div class="text-right">Expenses</div><div class="text-right">Net</div>
               </div>
               <div class="divide-y divide-white/5">
-                @for (s of summaries(); track s.id) {
+                @for (s of filteredSummaries(); track s.id) {
                   <button type="button" class="w-full text-left grid grid-cols-1 md:grid-cols-[130px_1fr_130px_130px_130px] gap-3 px-4 py-3 hover:bg-white/5 transition"
                           (click)="editSummary(s)">
                     <div class="text-sm text-slate-400">{{ s.month | date:'MMM y' }}</div>
@@ -161,10 +173,21 @@ export class MonthlySummariesComponent {
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
   accountFilter: number | null = null;
+  yearFilter = signal<number | null>(null);
   monthPickerValue = new Date().toISOString().substring(0, 10);
   model: MonthlyAccountSummaryInput = this.defaultModel();
 
   netPreview = computed(() => (Number(this.model.income) || 0) - (Number(this.model.expenses) || 0));
+  availableYears = computed(() => {
+    return Array.from(new Set(
+      this.summaries().map(s => new Date(s.month).getFullYear()).filter(year => !Number.isNaN(year))
+    )).sort((a, b) => b - a);
+  });
+  filteredSummaries = computed(() => {
+    const year = this.yearFilter();
+    if (!year) return this.summaries();
+    return this.summaries().filter(s => new Date(s.month).getFullYear() === year);
+  });
 
   constructor() {
     forkJoin({

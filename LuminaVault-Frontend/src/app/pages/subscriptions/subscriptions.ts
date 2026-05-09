@@ -28,7 +28,37 @@ import {
       </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
-        <section>
+        <section class="space-y-3">
+          <div class="surface p-3 grid grid-cols-1 md:grid-cols-[1fr_150px_180px] xl:grid-cols-[1fr_135px_150px_160px_170px] gap-3">
+            <div class="relative">
+              <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+              <input class="input pl-9" placeholder="Search name, provider, notes"
+                     [ngModel]="query()" (ngModelChange)="query.set($event || '')" />
+            </div>
+            <select class="select" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+              <option [ngValue]="null">All statuses</option>
+              @for (status of statuses; track status) { <option [ngValue]="status">{{ status }}</option> }
+            </select>
+            <select class="select" [ngModel]="categoryFilter()" (ngModelChange)="categoryFilter.set($event)">
+              <option [ngValue]="null">All categories</option>
+              @for (category of categories(); track category) { <option [ngValue]="category">{{ category }}</option> }
+            </select>
+            <select class="select" [ngModel]="accountFilter()" (ngModelChange)="accountFilter.set($event)">
+              <option [ngValue]="null">All accounts</option>
+              <option [ngValue]="0">No account</option>
+              @for (account of accounts(); track account.id) { <option [ngValue]="account.id">{{ account.name }}</option> }
+            </select>
+            <select class="select" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)">
+              <option value="dueAsc">Due soon</option>
+              <option value="dueDesc">Due latest</option>
+              <option value="monthlyDesc">Monthly high</option>
+              <option value="monthlyAsc">Monthly low</option>
+              <option value="nameAsc">Name A-Z</option>
+              <option value="categoryAsc">Category A-Z</option>
+              <option value="statusAsc">Status</option>
+            </select>
+          </div>
+
           @if (loading()) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               @for (_ of [1,2,3,4,5,6]; track _) { <div class="surface h-36 animate-pulse"></div> }
@@ -41,9 +71,20 @@ import {
                 <i class="pi pi-plus"></i> Add subscription
               </button>
             </div>
+          } @else if (filteredSubscriptions().length === 0) {
+            <div class="surface p-8 text-center">
+              <i class="pi pi-filter text-4xl text-violet-300/70"></i>
+              <div class="mt-3 text-lg">No matching subscriptions.</div>
+              <button class="btn btn-ghost mt-4" (click)="clearFilters()">
+                <i class="pi pi-times"></i> Clear filters
+              </button>
+            </div>
           } @else {
+            <div class="text-xs text-slate-500 px-1">
+              Showing {{ filteredSubscriptions().length }} of {{ subscriptions().length }}
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              @for (s of subscriptions(); track s.id) {
+              @for (s of filteredSubscriptions(); track s.id) {
                 <button type="button" class="surface p-4 text-left hover:border-amber-300/40 transition"
                         (click)="editSubscription(s)">
                   <div class="flex items-start justify-between gap-3">
@@ -188,6 +229,11 @@ export class SubscriptionsComponent {
   editingId = signal<number | null>(null);
 
   statuses = SUBSCRIPTION_STATUSES;
+  query = signal('');
+  statusFilter = signal<SubscriptionStatus | null>(null);
+  categoryFilter = signal<string | null>(null);
+  accountFilter = signal<number | null>(null);
+  sortBy = signal<SubscriptionSort>('dueAsc');
   startedOn = new Date().toISOString().substring(0, 10);
   nextDueOn = new Date().toISOString().substring(0, 10);
   model: SubscriptionInput = this.defaultModel();
@@ -202,6 +248,47 @@ export class SubscriptionsComponent {
       ...this.subscriptions().map(s => s.category).filter(Boolean),
       this.model.category,
     ].filter(Boolean) as string[])).sort();
+  });
+
+  filteredSubscriptions = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const statusFilter = this.statusFilter();
+    const categoryFilter = this.categoryFilter();
+    const accountFilter = this.accountFilter();
+    const sortBy = this.sortBy();
+    const filtered = this.subscriptions().filter(s => {
+      const matchesQuery = !q ||
+        s.name.toLowerCase().includes(q) ||
+        (s.provider ?? '').toLowerCase().includes(q) ||
+        s.category.toLowerCase().includes(q) ||
+        (s.accountName ?? '').toLowerCase().includes(q) ||
+        (s.notes ?? '').toLowerCase().includes(q);
+      const matchesStatus = !statusFilter || s.status === statusFilter;
+      const matchesCategory = !categoryFilter || s.category === categoryFilter;
+      const matchesAccount = accountFilter == null ||
+        (accountFilter === 0 ? s.accountId == null : s.accountId === accountFilter);
+      return matchesQuery && matchesStatus && matchesCategory && matchesAccount;
+    });
+
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'dueDesc':
+          return dateMs(b.nextDueOn) - dateMs(a.nextDueOn);
+        case 'monthlyDesc':
+          return b.monthlyAmount - a.monthlyAmount;
+        case 'monthlyAsc':
+          return a.monthlyAmount - b.monthlyAmount;
+        case 'nameAsc':
+          return a.name.localeCompare(b.name);
+        case 'categoryAsc':
+          return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
+        case 'statusAsc':
+          return statusRank(a.status) - statusRank(b.status) || dateMs(a.nextDueOn) - dateMs(b.nextDueOn);
+        case 'dueAsc':
+        default:
+          return dateMs(a.nextDueOn) - dateMs(b.nextDueOn);
+      }
+    });
   });
 
   constructor() {
@@ -287,6 +374,14 @@ export class SubscriptionsComponent {
     });
   }
 
+  clearFilters() {
+    this.query.set('');
+    this.statusFilter.set(null);
+    this.categoryFilter.set(null);
+    this.accountFilter.set(null);
+    this.sortBy.set('dueAsc');
+  }
+
   reset() {
     this.editingId.set(null);
     this.error.set(null);
@@ -317,4 +412,21 @@ export class SubscriptionsComponent {
       notes: '',
     };
   }
+}
+
+type SubscriptionSort =
+  | 'dueAsc'
+  | 'dueDesc'
+  | 'monthlyDesc'
+  | 'monthlyAsc'
+  | 'nameAsc'
+  | 'categoryAsc'
+  | 'statusAsc';
+
+function dateMs(value: string) {
+  return new Date(value).getTime();
+}
+
+function statusRank(status: SubscriptionStatus) {
+  return status === 'Active' ? 0 : status === 'Paused' ? 1 : 2;
 }

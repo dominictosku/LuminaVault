@@ -22,7 +22,7 @@ import {
       <div class="flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 class="text-2xl font-semibold tracking-tight">Transactions</h1>
-          <p class="text-slate-400 text-sm mt-1">{{ transactions().length }} entries</p>
+          <p class="text-slate-400 text-sm mt-1">{{ filteredTransactions().length }} entries</p>
         </div>
         <button class="btn btn-primary" (click)="newTransaction()">
           <i class="pi pi-plus"></i> Transaction
@@ -31,7 +31,7 @@ import {
 
       <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
         <section class="space-y-3">
-          <div class="surface p-3 grid grid-cols-1 md:grid-cols-[1fr_180px_150px] gap-3">
+          <div class="surface p-3 grid grid-cols-1 md:grid-cols-[1fr_180px_150px_150px] gap-3">
             <div class="relative">
               <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
               <input class="input pl-9" placeholder="Search payee, category, notes"
@@ -45,6 +45,15 @@ import {
               <option [ngValue]="null">All types</option>
               @for (k of kinds; track k) { <option [ngValue]="k">{{ k }}</option> }
             </select>
+            <div class="flex gap-2">
+              <input class="input" type="month" aria-label="Filter by month"
+                     [ngModel]="monthFilter()" (ngModelChange)="setMonthFilter($event || '')" />
+              @if (monthFilter()) {
+                <button type="button" class="btn btn-ghost px-3" title="Clear month filter" (click)="monthFilter.set('')">
+                  <i class="pi pi-times"></i>
+                </button>
+              }
+            </div>
           </div>
 
           @if (loading()) {
@@ -59,13 +68,21 @@ import {
                 <i class="pi pi-plus"></i> Add transaction
               </button>
             </div>
+          } @else if (filteredTransactions().length === 0) {
+            <div class="surface p-8 text-center">
+              <i class="pi pi-filter text-4xl text-sky-300/70"></i>
+              <div class="mt-3 text-lg">No transactions match these filters.</div>
+              <button class="btn btn-ghost mt-4" (click)="clearFilters()">
+                <i class="pi pi-filter-slash"></i> Clear filters
+              </button>
+            </div>
           } @else {
             <div class="surface overflow-hidden">
               <div class="hidden md:grid grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-2 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
                 <div>Date</div><div>Details</div><div>Account</div><div class="text-right">Amount</div>
               </div>
               <div class="divide-y divide-slate-800">
-                @for (t of transactions(); track t.id) {
+                @for (t of filteredTransactions(); track t.id) {
                   <button type="button" class="w-full text-left grid grid-cols-1 md:grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-3 hover:bg-slate-900/70 transition"
                           (click)="editTransaction(t)">
                     <div class="text-sm text-slate-400">{{ t.occurredOn | date:'MMM d, y' }}</div>
@@ -198,6 +215,7 @@ export class TransactionsComponent {
   query = '';
   accountFilter: number | null = null;
   kindFilter: FinanceTransactionKind | null = null;
+  monthFilter = signal('');
   dateValue = new Date().toISOString().substring(0, 10);
   tagsRaw = '';
   private debounce: any = null;
@@ -210,6 +228,11 @@ export class TransactionsComponent {
       ...this.transactions().map(t => t.category).filter(Boolean),
       this.model.category,
     ].filter(Boolean) as string[])).sort();
+  });
+  filteredTransactions = computed(() => {
+    const month = this.monthFilter();
+    if (!month) return this.transactions();
+    return this.transactions().filter(t => t.occurredOn.substring(0, 7) === month);
   });
 
   model: FinanceTransactionInput = this.defaultModel();
@@ -238,6 +261,7 @@ export class TransactionsComponent {
       q: this.query.trim() || undefined,
       accountId: this.accountFilter || undefined,
       kind: this.kindFilter || undefined,
+      ...this.monthRange(),
     }).subscribe({
       next: tx => { this.transactions.set(tx); this.loading.set(false); },
       error: () => this.loading.set(false),
@@ -247,6 +271,19 @@ export class TransactionsComponent {
   debouncedFetch() {
     clearTimeout(this.debounce);
     this.debounce = setTimeout(() => this.fetch(), 250);
+  }
+
+  setMonthFilter(value: string) {
+    this.monthFilter.set(value);
+    this.fetch();
+  }
+
+  clearFilters() {
+    this.query = '';
+    this.accountFilter = null;
+    this.kindFilter = null;
+    this.monthFilter.set('');
+    this.fetch();
   }
 
   newTransaction() {
@@ -337,6 +374,17 @@ export class TransactionsComponent {
       description: '',
       notes: '',
       tags: [],
+    };
+  }
+
+  private monthRange() {
+    const value = this.monthFilter();
+    if (!value) return {};
+    const [year, month] = value.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    return {
+      from: `${value}-01`,
+      to: `${value}-${String(lastDay).padStart(2, '0')}`,
     };
   }
 }
