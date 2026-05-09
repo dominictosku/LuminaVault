@@ -14,8 +14,10 @@ public class AppDbContext : DbContext
     public DbSet<Container> Containers => Set<Container>();
     public DbSet<Item> Items => Set<Item>();
     public DbSet<ItemPhoto> ItemPhotos => Set<ItemPhoto>();
+    public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
+    public DbSet<MonthlyAccountSummary> MonthlyAccountSummaries => Set<MonthlyAccountSummary>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -65,6 +67,7 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Item>().Property(i => i.Value).HasColumnType("decimal(18,2)");
+        b.Entity<AssetCategory>().HasIndex(c => c.Name).IsUnique();
 
         b.Entity<FinanceAccount>().Property(a => a.StartingBalance).HasColumnType("decimal(18,2)");
         b.Entity<FinanceAccount>().Property(a => a.Balance).HasColumnType("decimal(18,2)");
@@ -84,6 +87,18 @@ public class AppDbContext : DbContext
         b.Entity<FinanceTransaction>().Property(t => t.Amount).HasColumnType("decimal(18,2)");
         b.Entity<FinanceTransaction>().HasIndex(t => t.OccurredOn);
         b.Entity<FinanceTransaction>().HasIndex(t => t.Category);
+
+        b.Entity<MonthlyAccountSummary>()
+            .HasOne(s => s.Account)
+            .WithMany()
+            .HasForeignKey(s => s.AccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<MonthlyAccountSummary>().Property(s => s.Income).HasColumnType("decimal(18,2)");
+        b.Entity<MonthlyAccountSummary>().Property(s => s.Expenses).HasColumnType("decimal(18,2)");
+        b.Entity<MonthlyAccountSummary>().Property(s => s.OpeningBalance).HasColumnType("decimal(18,2)");
+        b.Entity<MonthlyAccountSummary>().Property(s => s.ClosingBalance).HasColumnType("decimal(18,2)");
+        b.Entity<MonthlyAccountSummary>().HasIndex(s => new { s.AccountId, s.Month }).IsUnique();
 
         b.Entity<Subscription>()
             .HasOne(s => s.Account)

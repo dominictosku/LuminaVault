@@ -8,7 +8,7 @@ namespace LuminaVault.Endpoints;
 public record ItemPhotoDto(int Id, string Url, string ContentType);
 
 public record ItemDto(
-    int Id, string Name, string? Description, string? Brand, string? Model,
+    int Id, string Name, string? Category, string? Description, string? Brand, string? Model,
     string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
     int Quantity, string? Notes, string[] Tags,
     int? FurnitureId, string? FurnitureName,
@@ -19,7 +19,7 @@ public record ItemDto(
     string? ModelUrl);
 
 public record ItemInput(
-    string Name, string? Description, string? Brand, string? Model,
+    string Name, string? Category, string? Description, string? Brand, string? Model,
     string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
     int Quantity, string? Notes, string[] Tags,
     int? RoomId, int? FurnitureId, int? ContainerId);
@@ -44,6 +44,7 @@ public static class ItemEndpoints
                 var s = q.Trim().ToLower();
                 query = query.Where(i =>
                     i.Name.ToLower().Contains(s) ||
+                    (i.Category ?? "").ToLower().Contains(s) ||
                     (i.Brand ?? "").ToLower().Contains(s) ||
                     (i.Model ?? "").ToLower().Contains(s) ||
                     (i.SerialNumber ?? "").ToLower().Contains(s) ||
@@ -194,6 +195,7 @@ public static class ItemEndpoints
     static void ApplyInput(Item item, ItemInput input)
     {
         item.Name = input.Name;
+        item.Category = string.IsNullOrWhiteSpace(input.Category) ? null : input.Category.Trim();
         item.Description = input.Description;
         item.Brand = input.Brand;
         item.Model = input.Model;
@@ -215,7 +217,7 @@ public static class ItemEndpoints
         var roomId = i.RoomId ?? i.Furniture?.RoomId;
         var roomName = i.Room?.Name ?? i.Furniture?.Room?.Name;
         return new ItemDto(
-            i.Id, i.Name, i.Description, i.Brand, i.Model,
+            i.Id, i.Name, i.Category, i.Description, i.Brand, i.Model,
             i.SerialNumber, i.Value, i.PurchaseDate, i.WarrantyUntil,
             i.Quantity, i.Notes,
             string.IsNullOrWhiteSpace(i.TagsCsv) ? Array.Empty<string>() : i.TagsCsv.Split(','),

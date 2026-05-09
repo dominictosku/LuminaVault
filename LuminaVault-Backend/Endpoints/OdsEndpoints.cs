@@ -12,7 +12,9 @@ namespace LuminaVault.Endpoints;
 public record OdsImportResult(
     int Accounts,
     int Transactions,
+    int MonthlySummaries,
     int Subscriptions,
+    int AssetCategories,
     int Assets,
     string[] Warnings);
 
@@ -36,9 +38,18 @@ public static class OdsEndpoints
                 .OrderByDescending(t => t.OccurredOn)
                 .ThenByDescending(t => t.Id)
                 .ToListAsync();
+            var monthlySummaries = await db.MonthlyAccountSummaries
+                .Include(s => s.Account)
+                .OrderByDescending(s => s.Month)
+                .ThenBy(s => s.Account!.Name)
+                .ToListAsync();
             var subscriptions = await db.Subscriptions
                 .Include(s => s.Account)
                 .OrderBy(s => s.NextDueOn)
+                .ToListAsync();
+            var assetCategories = await db.AssetCategories
+                .OrderBy(c => c.SortOrder)
+                .ThenBy(c => c.Name)
                 .ToListAsync();
             var assets = await db.Items.OrderBy(i => i.Name).ToListAsync();
 
@@ -50,13 +61,20 @@ public static class OdsEndpoints
                     .Concat(transactions.Select(t => Row(DateOnly.FromDateTime(t.OccurredOn), t.Kind, t.Account?.Name, t.TransferAccount?.Name,
                         t.Payee, t.Category, t.Amount, t.Status, t.Description, t.Notes, t.TagsCsv))
                     )),
+                Sheet("Monthly summaries", new[] { Row("Month", "Account", "Income", "Expenses", "Opening balance", "Closing balance", "Notes") }
+                    .Concat(monthlySummaries.Select(s => Row(DateOnly.FromDateTime(s.Month), s.Account?.Name, s.Income, s.Expenses,
+                        s.OpeningBalance, s.ClosingBalance, s.Notes))
+                    )),
                 Sheet("Subscriptions", new[] { Row("Name", "Category", "Provider", "Account", "Amount", "Currency", "Interval days", "Started on", "Next due", "Auto renew", "Status", "Notes") }
                     .Concat(subscriptions.Select(s => Row(s.Name, s.Category, s.Provider, s.Account?.Name, s.Amount, s.Currency,
                         s.BillingIntervalDays, DateOnly.FromDateTime(s.StartedOn), DateOnly.FromDateTime(s.NextDueOn),
                         s.AutoRenew, s.Status, s.Notes))
                     )),
+                Sheet("Asset categories", new[] { Row("Name", "Color", "Sort order") }
+                    .Concat(assetCategories.Select(c => Row(c.Name, c.Color, c.SortOrder)))
+                    ),
                 Sheet("Assets", new[] { Row("Name", "Category", "Description", "Brand", "Model", "Serial number", "Value", "Purchase date", "Warranty until", "Quantity", "Notes", "Tags") }
-                    .Concat(assets.Select(i => Row(i.Name, FirstTag(i.TagsCsv), i.Description, i.Brand, i.Model, i.SerialNumber, i.Value,
+                    .Concat(assets.Select(i => Row(i.Name, i.Category, i.Description, i.Brand, i.Model, i.SerialNumber, i.Value,
                         i.PurchaseDate.HasValue ? DateOnly.FromDateTime(i.PurchaseDate.Value) : null,
                         i.WarrantyUntil.HasValue ? DateOnly.FromDateTime(i.WarrantyUntil.Value) : null,
                         i.Quantity, i.Notes, i.TagsCsv))
@@ -80,12 +98,14 @@ public static class OdsEndpoints
             var accounts = await ImportAccounts(tables, db, warnings);
             await db.SaveChangesAsync();
             var subscriptions = await ImportSubscriptions(tables, db, warnings);
+            var assetCategories = await ImportAssetCategories(tables, db, warnings);
             var assets = await ImportAssets(tables, db, warnings);
+            var monthlySummaries = await ImportMonthlySummaries(tables, db, warnings);
             var transactions = await ImportTransactions(tables, db, warnings);
             await db.SaveChangesAsync();
             await RecalculateFinanceBalances(db);
 
-            return Results.Ok(new OdsImportResult(accounts, transactions, subscriptions, assets, warnings.ToArray()));
+            return Results.Ok(new OdsImportResult(accounts, transactions, monthlySummaries, subscriptions, assetCategories, assets, warnings.ToArray()));
         }).DisableAntiforgery();
 
         return app;
@@ -164,6 +184,52 @@ public static class OdsEndpoints
         return count;
     }
 
+    static async Task<int> ImportMonthlySummaries(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
+    {
+        if (!TryGetTable(tables, "Monthly summaries", out var rows) &&
+            !TryGetTable(tables, "MonthlySummaries", out rows) &&
+            !TryGetTable(tables, "Monatssummen", out rows))
+        {
+            return 0;
+        }
+
+        var (headers, data) = SplitHeader(rows);
+        var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var existing = await db.MonthlyAccountSummaries
+            .Select(s => new { s.AccountId, s.Month })
+            .ToListAsync();
+        var existingKeys = existing.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+        var count = 0;
+
+        foreach (var row in data)
+        {
+            var accountName = Get(row, headers, "Account", "Konto");
+            if (string.IsNullOrWhiteSpace(accountName) || !accounts.TryGetValue(accountName.ToLowerInvariant(), out var account))
+            {
+                warnings.Add($"Skipped monthly summary without a matching account: {accountName}");
+                continue;
+            }
+
+            var month = MonthStart(ParseDate(Get(row, headers, "Month", "Monat")) ?? DateTime.UtcNow.Date);
+            var key = SummaryKey(account.Id, month);
+            if (existingKeys.Contains(key)) continue;
+
+            db.MonthlyAccountSummaries.Add(new MonthlyAccountSummary
+            {
+                AccountId = account.Id,
+                Month = month,
+                Income = Math.Abs(ParseDecimal(Get(row, headers, "Income", "Einnahmen", "Gutschrift"))),
+                Expenses = Math.Abs(ParseDecimal(Get(row, headers, "Expenses", "Ausgaben", "Belastung"))),
+                OpeningBalance = ParseNullableDecimal(Get(row, headers, "Opening balance", "Start balance")),
+                ClosingBalance = ParseNullableDecimal(Get(row, headers, "Closing balance", "End balance", "Vermögen")),
+                Notes = EmptyToNull(Get(row, headers, "Notes", "Notizen")),
+            });
+            existingKeys.Add(key);
+            count++;
+        }
+        return count;
+    }
+
     static async Task<int> ImportSubscriptions(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
     {
         var isBudgetSheet = false;
@@ -213,6 +279,35 @@ public static class OdsEndpoints
         return count;
     }
 
+    static async Task<int> ImportAssetCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
+    {
+        if (!TryGetTable(tables, "Asset categories", out var rows) &&
+            !TryGetTable(tables, "AssetCategories", out rows) &&
+            !TryGetTable(tables, "Kategorien", out rows))
+        {
+            return 0;
+        }
+
+        var (headers, data) = SplitHeader(rows);
+        var existing = await db.AssetCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
+        var count = 0;
+        foreach (var row in data)
+        {
+            var name = Get(row, headers, "Name", "Category", "Kategorie");
+            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
+            var category = new AssetCategory
+            {
+                Name = name.Trim(),
+                Color = EmptyToNull(Get(row, headers, "Color", "Farbe")) ?? "#7c3aed",
+                SortOrder = (int)Math.Round(ParseDecimal(Get(row, headers, "Sort order", "Sortierung"))),
+            };
+            db.AssetCategories.Add(category);
+            existing[category.Name.ToLowerInvariant()] = category;
+            count++;
+        }
+        return count;
+    }
+
     static async Task<int> ImportAssets(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
     {
         var isBudgetSheet = false;
@@ -224,6 +319,7 @@ public static class OdsEndpoints
 
         var (headers, data) = SplitHeader(rows);
         var existing = await db.Items.ToDictionaryAsync(i => i.Name.ToLowerInvariant());
+        var categories = await db.AssetCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
         var count = 0;
         foreach (var row in data)
         {
@@ -231,10 +327,22 @@ public static class OdsEndpoints
             if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
 
             var category = Get(row, headers, "Category", "Kategorie");
+            if (!string.IsNullOrWhiteSpace(category) && !categories.ContainsKey(category.ToLowerInvariant()))
+            {
+                var assetCategory = new AssetCategory
+                {
+                    Name = category.Trim(),
+                    Color = "#7c3aed",
+                    SortOrder = categories.Count,
+                };
+                db.AssetCategories.Add(assetCategory);
+                categories[assetCategory.Name.ToLowerInvariant()] = assetCategory;
+            }
             var tags = EmptyToNull(Get(row, headers, "Tags")) ?? category ?? "";
             var item = new Item
             {
                 Name = name,
+                Category = EmptyToNull(category),
                 Description = EmptyToNull(Get(row, headers, "Description")),
                 Brand = EmptyToNull(Get(row, headers, "Brand")),
                 Model = EmptyToNull(Get(row, headers, "Model")),
@@ -343,20 +451,32 @@ public static class OdsEndpoints
     {
         var accounts = await db.FinanceAccounts.ToListAsync();
         var balances = accounts.ToDictionary(a => a.Id, a => a.StartingBalance);
+        var summaries = await db.MonthlyAccountSummaries.ToListAsync();
+        var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
         var tx = await db.FinanceTransactions.ToListAsync();
         foreach (var t in tx)
         {
-            if (!balances.ContainsKey(t.AccountId)) continue;
-            balances[t.AccountId] += t.Kind switch
+            if (balances.ContainsKey(t.AccountId) && !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
             {
-                FinanceTransactionKind.Income => t.Amount,
-                FinanceTransactionKind.Expense => -t.Amount,
-                FinanceTransactionKind.Transfer => -t.Amount,
-                _ => 0m
-            };
-            if (t.Kind == FinanceTransactionKind.Transfer && t.TransferAccountId.HasValue && balances.ContainsKey(t.TransferAccountId.Value))
+                balances[t.AccountId] += t.Kind switch
+                {
+                    FinanceTransactionKind.Income => t.Amount,
+                    FinanceTransactionKind.Expense => -t.Amount,
+                    FinanceTransactionKind.Transfer => -t.Amount,
+                    _ => 0m
+                };
+            }
+            if (t.Kind == FinanceTransactionKind.Transfer &&
+                t.TransferAccountId.HasValue &&
+                balances.ContainsKey(t.TransferAccountId.Value) &&
+                !HasSummaryFor(t.TransferAccountId.Value, t.OccurredOn, summaryKeys))
+            {
                 balances[t.TransferAccountId.Value] += t.Amount;
+            }
         }
+        foreach (var s in summaries)
+            if (balances.ContainsKey(s.AccountId))
+                balances[s.AccountId] += s.Income - s.Expenses;
         foreach (var account in accounts) account.Balance = balances[account.Id];
         await db.SaveChangesAsync();
     }
@@ -389,6 +509,10 @@ public static class OdsEndpoints
     static string Normalize(string? value) => new((value ?? "").ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
     static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     static string? FirstTag(string tagsCsv) => tagsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+    static DateTime MonthStart(DateTime value) => new(value.Year, value.Month, 1);
+    static string SummaryKey(int accountId, DateTime month) => $"{accountId}:{MonthStart(month):yyyy-MM-dd}";
+    static bool HasSummaryFor(int accountId, DateTime date, HashSet<string> summaryKeys) =>
+        summaryKeys.Contains(SummaryKey(accountId, date));
 
     static T ParseEnum<T>(string? value, T fallback) where T : struct =>
         Enum.TryParse<T>(value, true, out var parsed) ? parsed : fallback;

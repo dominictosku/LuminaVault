@@ -34,6 +34,7 @@ export interface ItemPhoto { id: number; url: string; contentType: string; }
 export interface Item {
   id: number;
   name: string;
+  category?: string | null;
   description?: string;
   brand?: string;
   model?: string;
@@ -58,6 +59,7 @@ export interface Item {
 
 export interface ItemInput {
   name: string;
+  category?: string | null;
   description?: string | null;
   brand?: string | null;
   model?: string | null;
@@ -71,6 +73,20 @@ export interface ItemInput {
   roomId?: number | null;
   furnitureId?: number | null;
   containerId?: number | null;
+}
+
+export interface AssetCategory {
+  id: number;
+  name: string;
+  color: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface AssetCategoryInput {
+  name: string;
+  color: string;
+  sortOrder: number;
 }
 
 export interface StatsSummary {
@@ -155,6 +171,32 @@ export interface FinanceTransactionInput {
   tags: string[];
 }
 
+export interface MonthlyAccountSummary {
+  id: number;
+  accountId: number;
+  accountName?: string | null;
+  currency: string;
+  month: string;
+  income: number;
+  expenses: number;
+  net: number;
+  openingBalance?: number | null;
+  closingBalance?: number | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonthlyAccountSummaryInput {
+  accountId: number;
+  month: string;
+  income: number;
+  expenses: number;
+  openingBalance?: number | null;
+  closingBalance?: number | null;
+  notes?: string | null;
+}
+
 export interface Subscription {
   id: number;
   name: string;
@@ -221,7 +263,9 @@ export interface FinanceSummary {
 export interface OdsImportResult {
   accounts: number;
   transactions: number;
+  monthlySummaries: number;
   subscriptions: number;
+  assetCategories: number;
   assets: number;
   warnings: string[];
 }

@@ -25,6 +25,15 @@ public record FinanceTransactionInput(
     DateTime OccurredOn, string Payee, string Category, decimal Amount,
     string? Description, string? Notes, string[] Tags);
 
+public record MonthlyAccountSummaryDto(
+    int Id, int AccountId, string? AccountName, string Currency, DateTime Month,
+    decimal Income, decimal Expenses, decimal Net, decimal? OpeningBalance,
+    decimal? ClosingBalance, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record MonthlyAccountSummaryInput(
+    int AccountId, DateTime Month, decimal Income, decimal Expenses,
+    decimal? OpeningBalance, decimal? ClosingBalance, string? Notes);
+
 public record SubscriptionDto(
     int Id, string Name, string Category, string? Provider, int? AccountId, string? AccountName,
     decimal Amount, string Currency, int BillingIntervalDays, DateTime StartedOn,
@@ -42,6 +51,7 @@ public static class FinanceEndpoints
     {
         var accounts = app.MapGroup("/api/finance/accounts").RequireAuthorization().WithTags("Finance");
         var transactions = app.MapGroup("/api/finance/transactions").RequireAuthorization().WithTags("Finance");
+        var monthlySummaries = app.MapGroup("/api/finance/monthly-summaries").RequireAuthorization().WithTags("Finance");
         var subscriptions = app.MapGroup("/api/finance/subscriptions").RequireAuthorization().WithTags("Finance");
         var summary = app.MapGroup("/api/finance").RequireAuthorization().WithTags("Finance");
 
@@ -177,6 +187,73 @@ public static class FinanceEndpoints
             return Results.NoContent();
         });
 
+        monthlySummaries.MapGet("/", async (AppDbContext db, int? accountId, DateTime? from, DateTime? to) =>
+        {
+            var query = db.MonthlyAccountSummaries.Include(s => s.Account).AsQueryable();
+            if (accountId.HasValue) query = query.Where(s => s.AccountId == accountId.Value);
+            if (from.HasValue) query = query.Where(s => s.Month >= MonthStart(from.Value));
+            if (to.HasValue) query = query.Where(s => s.Month <= MonthStart(to.Value));
+
+            var result = await query
+                .OrderByDescending(s => s.Month)
+                .ThenBy(s => s.Account!.Name)
+                .Take(500)
+                .ToListAsync();
+            return Results.Ok(result.Select(MapMonthlySummary));
+        });
+
+        monthlySummaries.MapPost("/", async ([FromBody] MonthlyAccountSummaryInput input, AppDbContext db) =>
+        {
+            var validation = await ValidateMonthlySummary(input, db);
+            if (validation is not null) return validation;
+
+            var month = MonthStart(input.Month);
+            if (await db.MonthlyAccountSummaries.AnyAsync(s => s.AccountId == input.AccountId && s.Month == month))
+                return Results.Conflict(new { error = "This account already has a summary for that month." });
+
+            var monthlySummary = new MonthlyAccountSummary();
+            ApplyMonthlySummary(monthlySummary, input);
+            db.MonthlyAccountSummaries.Add(monthlySummary);
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
+            return Results.Created($"/api/finance/monthly-summaries/{monthlySummary.Id}", MapMonthlySummary(monthlySummary));
+        });
+
+        monthlySummaries.MapPut("/{id:int}", async (int id, [FromBody] MonthlyAccountSummaryInput input, AppDbContext db) =>
+        {
+            var monthlySummary = await db.MonthlyAccountSummaries
+                .Include(s => s.Account)
+                .FirstOrDefaultAsync(s => s.Id == id);
+            if (monthlySummary is null) return Results.NotFound();
+            var validation = await ValidateMonthlySummary(input, db);
+            if (validation is not null) return validation;
+
+            var month = MonthStart(input.Month);
+            if (await db.MonthlyAccountSummaries.AnyAsync(s =>
+                s.Id != id && s.AccountId == input.AccountId && s.Month == month))
+            {
+                return Results.Conflict(new { error = "This account already has a summary for that month." });
+            }
+
+            ApplyMonthlySummary(monthlySummary, input);
+            monthlySummary.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
+            return Results.Ok(MapMonthlySummary(monthlySummary));
+        });
+
+        monthlySummaries.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var monthlySummary = await db.MonthlyAccountSummaries.FindAsync(id);
+            if (monthlySummary is null) return Results.NotFound();
+            db.MonthlyAccountSummaries.Remove(monthlySummary);
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            return Results.NoContent();
+        });
+
         subscriptions.MapGet("/", async (AppDbContext db, bool includeInactive = false) =>
         {
             var query = db.Subscriptions.Include(s => s.Account).AsQueryable();
@@ -230,10 +307,18 @@ public static class FinanceEndpoints
             var monthStart = new DateTime(now.Year, now.Month, 1);
             var nextMonth = monthStart.AddMonths(1);
             var activeAccounts = await db.FinanceAccounts.Where(a => !a.IsArchived).ToListAsync();
-            var monthlyTransactions = await db.FinanceTransactions
+            var rawMonthlyTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Where(t => t.OccurredOn >= monthStart && t.OccurredOn < nextMonth)
                 .ToListAsync();
+            var monthlySummaryRows = await db.MonthlyAccountSummaries
+                .Include(s => s.Account)
+                .Where(s => s.Month == monthStart)
+                .ToListAsync();
+            var currentSummaryKeys = monthlySummaryRows.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+            var monthlyTransactions = rawMonthlyTransactions
+                .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, currentSummaryKeys))
+                .ToList();
             var allRecentTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
@@ -251,10 +336,10 @@ public static class FinanceEndpoints
 
             var income = monthlyTransactions
                 .Where(t => t.Kind == FinanceTransactionKind.Income)
-                .Sum(t => t.Amount);
+                .Sum(t => t.Amount) + monthlySummaryRows.Sum(s => s.Income);
             var expenses = monthlyTransactions
                 .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .Sum(t => t.Amount);
+                .Sum(t => t.Amount) + monthlySummaryRows.Sum(s => s.Expenses);
             var cashFlow = income - expenses;
             var recurringMonthly = activeSubscriptions.Sum(s => ToMonthlyAmount(s.Amount, s.BillingIntervalDays));
             var accountNetWorth = activeAccounts.Sum(a => a.Balance);
@@ -268,8 +353,17 @@ public static class FinanceEndpoints
                 var tx = await db.FinanceTransactions
                     .Where(t => t.OccurredOn >= start && t.OccurredOn < end)
                     .ToListAsync();
-                var inMonth = tx.Where(t => t.Kind == FinanceTransactionKind.Income).Sum(t => t.Amount);
-                var outMonth = tx.Where(t => t.Kind == FinanceTransactionKind.Expense).Sum(t => t.Amount);
+                var summaryRows = await db.MonthlyAccountSummaries
+                    .Where(s => s.Month == start)
+                    .ToListAsync();
+                var summaryKeys = summaryRows.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+                var unsummarizedTx = tx
+                    .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+                    .ToList();
+                var inMonth = unsummarizedTx.Where(t => t.Kind == FinanceTransactionKind.Income).Sum(t => t.Amount)
+                    + summaryRows.Sum(s => s.Income);
+                var outMonth = unsummarizedTx.Where(t => t.Kind == FinanceTransactionKind.Expense).Sum(t => t.Amount)
+                    + summaryRows.Sum(s => s.Expenses);
                 series.Add(new
                 {
                     month = start.ToString("MMM yyyy"),
@@ -283,6 +377,12 @@ public static class FinanceEndpoints
                 .Where(t => t.Kind == FinanceTransactionKind.Expense)
                 .GroupBy(t => t.Category)
                 .Select(g => new { category = g.Key, amount = g.Sum(t => t.Amount) })
+                .Concat(monthlySummaryRows
+                    .Where(s => s.Expenses > 0)
+                    .GroupBy(_ => "Bank summaries")
+                    .Select(g => new { category = g.Key, amount = g.Sum(s => s.Expenses) }))
+                .GroupBy(x => x.category)
+                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount) })
                 .OrderByDescending(x => x.amount)
                 .Take(8)
                 .ToList();
@@ -366,6 +466,17 @@ public static class FinanceEndpoints
             .Select(t => t.Trim()).Where(t => t.Length > 0));
     }
 
+    static void ApplyMonthlySummary(MonthlyAccountSummary monthlySummary, MonthlyAccountSummaryInput input)
+    {
+        monthlySummary.AccountId = input.AccountId;
+        monthlySummary.Month = MonthStart(input.Month);
+        monthlySummary.Income = Math.Abs(input.Income);
+        monthlySummary.Expenses = Math.Abs(input.Expenses);
+        monthlySummary.OpeningBalance = input.OpeningBalance;
+        monthlySummary.ClosingBalance = input.ClosingBalance;
+        monthlySummary.Notes = Clean(input.Notes);
+    }
+
     static void ApplySubscription(Subscription subscription, SubscriptionInput input)
     {
         subscription.Name = input.Name.Trim();
@@ -400,6 +511,15 @@ public static class FinanceEndpoints
         return null;
     }
 
+    static async Task<IResult?> ValidateMonthlySummary(MonthlyAccountSummaryInput input, AppDbContext db)
+    {
+        if (input.AccountId <= 0 || !await db.FinanceAccounts.AnyAsync(a => a.Id == input.AccountId))
+            return Results.BadRequest(new { error = "Choose a valid account." });
+        if (input.Income < 0 || input.Expenses < 0)
+            return Results.BadRequest(new { error = "Income and expenses cannot be negative." });
+        return null;
+    }
+
     static async Task<IResult?> ValidateSubscription(SubscriptionInput input, AppDbContext db)
     {
         if (string.IsNullOrWhiteSpace(input.Name))
@@ -423,18 +543,26 @@ public static class FinanceEndpoints
         if (accounts.Count == 0) return;
 
         var balances = accounts.ToDictionary(a => a.Id, a => a.StartingBalance);
+        var summaries = await db.MonthlyAccountSummaries.ToListAsync();
+        var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
         var tx = await db.FinanceTransactions.ToListAsync();
         foreach (var t in tx)
         {
-            if (!balances.ContainsKey(t.AccountId)) continue;
-            balances[t.AccountId] += SignedAmountForPrimaryAccount(t);
+            if (balances.ContainsKey(t.AccountId) && !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+                balances[t.AccountId] += SignedAmountForPrimaryAccount(t);
 
             if (t.Kind == FinanceTransactionKind.Transfer &&
                 t.TransferAccountId.HasValue &&
-                balances.ContainsKey(t.TransferAccountId.Value))
+                balances.ContainsKey(t.TransferAccountId.Value) &&
+                !HasSummaryFor(t.TransferAccountId.Value, t.OccurredOn, summaryKeys))
             {
                 balances[t.TransferAccountId.Value] += t.Amount;
             }
+        }
+        foreach (var s in summaries)
+        {
+            if (balances.ContainsKey(s.AccountId))
+                balances[s.AccountId] += s.Income - s.Expenses;
         }
 
         foreach (var account in accounts)
@@ -469,6 +597,13 @@ public static class FinanceEndpoints
             string.IsNullOrWhiteSpace(transaction.TagsCsv) ? Array.Empty<string>() : transaction.TagsCsv.Split(','),
             transaction.CreatedAt, transaction.UpdatedAt);
 
+    static MonthlyAccountSummaryDto MapMonthlySummary(MonthlyAccountSummary monthlySummary) =>
+        new(monthlySummary.Id, monthlySummary.AccountId, monthlySummary.Account?.Name,
+            monthlySummary.Account?.Currency ?? "CHF", monthlySummary.Month,
+            monthlySummary.Income, monthlySummary.Expenses, monthlySummary.Income - monthlySummary.Expenses,
+            monthlySummary.OpeningBalance, monthlySummary.ClosingBalance, monthlySummary.Notes,
+            monthlySummary.CreatedAt, monthlySummary.UpdatedAt);
+
     static SubscriptionDto MapSubscription(Subscription subscription) =>
         new(subscription.Id, subscription.Name, subscription.Category, subscription.Provider,
             subscription.AccountId, subscription.Account?.Name, subscription.Amount, subscription.Currency,
@@ -479,4 +614,11 @@ public static class FinanceEndpoints
 
     static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    static DateTime MonthStart(DateTime value) => new(value.Year, value.Month, 1);
+
+    static string SummaryKey(int accountId, DateTime month) => $"{accountId}:{MonthStart(month):yyyy-MM-dd}";
+
+    static bool HasSummaryFor(int accountId, DateTime date, HashSet<string> summaryKeys) =>
+        summaryKeys.Contains(SummaryKey(accountId, date));
 }

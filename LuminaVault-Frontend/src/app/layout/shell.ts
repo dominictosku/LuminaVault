@@ -24,6 +24,10 @@ import { AuthService } from '../core/auth.service';
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-arrow-right-arrow-left text-violet-300"></i> Transactions
           </a>
+          <a routerLink="/monthly-summaries" routerLinkActive="bg-white/8 text-white"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
+            <i class="pi pi-calendar-plus text-violet-300"></i> Monthly sums
+          </a>
           <a routerLink="/accounts" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-wallet text-violet-300"></i> Accounts
@@ -35,6 +39,10 @@ import { AuthService } from '../core/auth.service';
           <a routerLink="/data" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-file-import text-violet-300"></i> Data
+          </a>
+          <a routerLink="/settings" routerLinkActive="bg-white/8 text-white"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
+            <i class="pi pi-cog text-violet-300"></i> Settings
           </a>
           <a routerLink="/items" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">

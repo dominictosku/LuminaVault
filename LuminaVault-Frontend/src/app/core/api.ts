@@ -5,7 +5,8 @@ import {
   AuthResponse, AuthStatus, House, Room, Furniture, Container,
   Item, ItemInput, ItemPhoto, StatsSummary, FinanceAccount, FinanceAccountInput,
   FinanceSummary, FinanceTransaction, FinanceTransactionInput, FinanceTransactionKind,
-  Subscription, SubscriptionInput, OdsImportResult
+  MonthlyAccountSummary, MonthlyAccountSummaryInput, Subscription, SubscriptionInput, OdsImportResult,
+  AssetCategory, AssetCategoryInput
 } from './models';
 
 export const API_BASE = 'http://localhost:5256';
@@ -174,6 +175,23 @@ export class Api {
     return this.http.delete<void>(`${API_BASE}/api/finance/transactions/${id}`);
   }
 
+  listMonthlySummaries(opts: { accountId?: number; from?: string; to?: string } = {}) {
+    let params = new HttpParams();
+    if (opts.accountId) params = params.set('accountId', opts.accountId);
+    if (opts.from) params = params.set('from', opts.from);
+    if (opts.to) params = params.set('to', opts.to);
+    return this.http.get<MonthlyAccountSummary[]>(`${API_BASE}/api/finance/monthly-summaries`, { params });
+  }
+  createMonthlySummary(input: MonthlyAccountSummaryInput) {
+    return this.http.post<MonthlyAccountSummary>(`${API_BASE}/api/finance/monthly-summaries`, input);
+  }
+  updateMonthlySummary(id: number, input: MonthlyAccountSummaryInput) {
+    return this.http.put<MonthlyAccountSummary>(`${API_BASE}/api/finance/monthly-summaries/${id}`, input);
+  }
+  deleteMonthlySummary(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/finance/monthly-summaries/${id}`);
+  }
+
   listSubscriptions(includeInactive = false) {
     return this.http.get<Subscription[]>(`${API_BASE}/api/finance/subscriptions`, {
       params: includeInactive ? new HttpParams().set('includeInactive', true) : undefined,
@@ -201,5 +219,19 @@ export class Api {
     const fd = new FormData();
     fd.append('file', file);
     return this.http.post<OdsImportResult>(`${API_BASE}/api/data/import/ods`, fd);
+  }
+
+  // --- Settings ---
+  listAssetCategories() {
+    return this.http.get<AssetCategory[]>(`${API_BASE}/api/settings/asset-categories`);
+  }
+  createAssetCategory(input: AssetCategoryInput) {
+    return this.http.post<AssetCategory>(`${API_BASE}/api/settings/asset-categories`, input);
+  }
+  updateAssetCategory(id: number, input: AssetCategoryInput) {
+    return this.http.put<AssetCategory>(`${API_BASE}/api/settings/asset-categories/${id}`, input);
+  }
+  deleteAssetCategory(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/settings/asset-categories/${id}`);
   }
 }

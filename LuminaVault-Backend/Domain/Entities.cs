@@ -77,6 +77,7 @@ public class Item
 {
     public int Id { get; set; }
     [Required, MaxLength(160)] public string Name { get; set; } = "";
+    [MaxLength(80)] public string? Category { get; set; }
     public string? Description { get; set; }
     public string? Brand { get; set; }
     public string? Model { get; set; }
@@ -112,6 +113,15 @@ public class ItemPhoto
     [Required] public string FileName { get; set; } = "";
     [Required] public string ContentType { get; set; } = "";
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class AssetCategory
+{
+    public int Id { get; set; }
+    [Required, MaxLength(80)] public string Name { get; set; } = "";
+    [MaxLength(24)] public string Color { get; set; } = "#7c3aed";
+    public int SortOrder { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public enum FinanceAccountType
@@ -169,6 +179,21 @@ public class FinanceTransaction
     public string? Description { get; set; }
     public string? Notes { get; set; }
     public string TagsCsv { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class MonthlyAccountSummary
+{
+    public int Id { get; set; }
+    public int AccountId { get; set; }
+    public FinanceAccount? Account { get; set; }
+    public DateTime Month { get; set; } = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+    public decimal Income { get; set; }
+    public decimal Expenses { get; set; }
+    public decimal? OpeningBalance { get; set; }
+    public decimal? ClosingBalance { get; set; }
+    public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

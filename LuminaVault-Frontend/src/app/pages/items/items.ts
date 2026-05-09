@@ -58,7 +58,7 @@ import { Item } from '../../core/models';
                 <div class="min-w-0 flex-1">
                   <div class="font-medium truncate group-hover:text-violet-300 transition">{{ item.name }}</div>
                   <div class="text-xs text-slate-400 truncate mt-0.5">
-                    {{ item.brand || '—' }}{{ item.model ? ' · ' + item.model : '' }}
+                    {{ item.category || item.brand || '—' }}{{ item.model ? ' · ' + item.model : '' }}
                   </div>
                 </div>
                 @if (item.quantity > 1) {

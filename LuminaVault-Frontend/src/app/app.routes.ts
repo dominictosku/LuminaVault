@@ -25,6 +25,10 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/transactions/transactions').then(m => m.TransactionsComponent),
       },
       {
+        path: 'monthly-summaries',
+        loadComponent: () => import('./pages/monthly-summaries/monthly-summaries').then(m => m.MonthlySummariesComponent),
+      },
+      {
         path: 'accounts',
         loadComponent: () => import('./pages/accounts/accounts').then(m => m.AccountsComponent),
       },
@@ -35,6 +39,10 @@ export const routes: Routes = [
       {
         path: 'data',
         loadComponent: () => import('./pages/data/data').then(m => m.DataComponent),
+      },
+      {
+        path: 'settings',
+        loadComponent: () => import('./pages/settings/settings').then(m => m.SettingsComponent),
       },
       {
         path: 'items/new',

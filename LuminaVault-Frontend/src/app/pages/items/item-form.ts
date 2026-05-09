@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { Api } from '../../core/api';
-import { Container, Furniture, House, Item, Room } from '../../core/models';
+import { AssetCategory, Container, Furniture, House, Item, Room } from '../../core/models';
 
 @Component({
   selector: 'app-item-form',
@@ -31,6 +31,20 @@ import { Container, Furniture, House, Item, Room } from '../../core/models';
             <div>
               <label class="label">Name *</label>
               <input class="input" name="name" [(ngModel)]="model.name" required />
+            </div>
+            <div>
+              <label class="label">Category</label>
+              <select class="select" name="category" [(ngModel)]="model.category">
+                <option [ngValue]="null">— None —</option>
+                @for (category of assetCategories(); track category.id) {
+                  <option [ngValue]="category.name">{{ category.name }}</option>
+                }
+              </select>
+              @if (assetCategories().length === 0) {
+                <div class="text-xs text-slate-500 mt-1">
+                  Add categories in Settings to use this dropdown.
+                </div>
+              }
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -236,6 +250,7 @@ export class ItemFormComponent {
   rooms = signal<Room[]>([]);
   furniture = signal<Furniture[]>([]);
   containers = signal<Container[]>([]);
+  assetCategories = signal<AssetCategory[]>([]);
 
   selectedRoomId = signal<number | null>(null);
   selectedFurnitureId = signal<number | null>(null);
@@ -247,6 +262,7 @@ export class ItemFormComponent {
 
   model = {
     name: '', description: '' as string | null,
+    category: null as string | null,
     brand: '' as string | null, model: '' as string | null,
     serialNumber: '' as string | null,
     value: null as number | null,
@@ -262,6 +278,8 @@ export class ItemFormComponent {
     this.tagsRaw.split(',').map(t => t.trim()).filter(t => t.length > 0));
 
   constructor() {
+    this.api.listAssetCategories().subscribe(categories => this.assetCategories.set(categories));
+
     this.api.listHouses().pipe(
       switchMap(houses => {
         if (!houses.length) return of({ rooms: [] as Room[], furniture: [] as Furniture[] });
@@ -288,6 +306,7 @@ export class ItemFormComponent {
         this.api.getItem(id).subscribe(item => {
           this.current.set(item);
           this.model.name = item.name;
+          this.model.category = item.category ?? null;
           this.model.description = item.description ?? null;
           this.model.brand = item.brand ?? null;
           this.model.model = item.model ?? null;

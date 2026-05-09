@@ -80,8 +80,20 @@ using (var scope = app.Services.CreateScope())
         }
     }
     AddColumnIfMissing("Items", "RoomId", "INTEGER NULL REFERENCES Rooms(Id) ON DELETE SET NULL");
+    AddColumnIfMissing("Items", "Category", "TEXT NULL");
     AddColumnIfMissing("Items", "ModelFileName", "TEXT NULL");
     AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS AssetCategories (
+            Id INTEGER NOT NULL CONSTRAINT PK_AssetCategories PRIMARY KEY AUTOINCREMENT,
+            Name TEXT NOT NULL,
+            Color TEXT NOT NULL,
+            SortOrder INTEGER NOT NULL,
+            CreatedAt TEXT NOT NULL
+        );
+        """);
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AssetCategories_Name ON AssetCategories (Name)");
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS FinanceAccounts (
@@ -141,12 +153,37 @@ using (var scope = app.Services.CreateScope())
         );
         """);
 
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS MonthlyAccountSummaries (
+            Id INTEGER NOT NULL CONSTRAINT PK_MonthlyAccountSummaries PRIMARY KEY AUTOINCREMENT,
+            AccountId INTEGER NOT NULL,
+            Month TEXT NOT NULL,
+            Income TEXT NOT NULL,
+            Expenses TEXT NOT NULL,
+            OpeningBalance TEXT NULL,
+            ClosingBalance TEXT NULL,
+            Notes TEXT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL,
+            CONSTRAINT FK_MonthlyAccountSummaries_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
+        );
+        """);
+
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_OccurredOn ON FinanceTransactions (OccurredOn)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Category ON FinanceTransactions (Category)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_AccountId ON FinanceTransactions (AccountId)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_TransferAccountId ON FinanceTransactions (TransferAccountId)");
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_MonthlyAccountSummaries_AccountId_Month ON MonthlyAccountSummaries (AccountId, Month)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_NextDueOn ON Subscriptions (NextDueOn)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_AccountId ON Subscriptions (AccountId)");
+
+    if (!db.AssetCategories.Any())
+    {
+        var defaults = new[] { "IT", "Hobby", "Möbel", "Werkzeug", "Fahrzeug", "Bürobedarf", "Kleidung", "Schule", "Reinigung", "Homelab", "Sonstiges" };
+        for (var i = 0; i < defaults.Length; i++)
+            db.AssetCategories.Add(new LuminaVault.Domain.AssetCategory { Name = defaults[i], SortOrder = i, Color = "#7c3aed" });
+        db.SaveChanges();
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -167,5 +204,6 @@ app.MapItems();
 app.MapPhotos();
 app.MapFinance();
 app.MapOdsData();
+app.MapSettings();
 
 app.Run();

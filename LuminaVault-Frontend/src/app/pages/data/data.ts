@@ -20,7 +20,7 @@ import { OdsImportResult } from '../../core/models';
             <div>
               <h2 class="font-medium">Export ODS</h2>
               <p class="text-sm text-slate-400 mt-1">
-                Creates a spreadsheet with Accounts, Transactions, Subscriptions, and Assets sheets.
+                Creates a spreadsheet with Accounts, Transactions, Monthly summaries, Subscriptions, Asset categories, and Assets sheets.
               </p>
             </div>
           </div>
@@ -62,7 +62,7 @@ import { OdsImportResult } from '../../core/models';
           <h2 class="font-medium flex items-center gap-2">
             <i class="pi pi-check-circle text-violet-300"></i> Import complete
           </h2>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mt-4">
             <div class="surface-muted p-3">
               <div class="text-xs text-slate-400 uppercase tracking-wide">Accounts</div>
               <div class="text-2xl font-semibold mt-1">{{ result()!.accounts }}</div>
@@ -72,8 +72,16 @@ import { OdsImportResult } from '../../core/models';
               <div class="text-2xl font-semibold mt-1">{{ result()!.transactions }}</div>
             </div>
             <div class="surface-muted p-3">
+              <div class="text-xs text-slate-400 uppercase tracking-wide">Monthly sums</div>
+              <div class="text-2xl font-semibold mt-1">{{ result()!.monthlySummaries }}</div>
+            </div>
+            <div class="surface-muted p-3">
               <div class="text-xs text-slate-400 uppercase tracking-wide">Subscriptions</div>
               <div class="text-2xl font-semibold mt-1">{{ result()!.subscriptions }}</div>
+            </div>
+            <div class="surface-muted p-3">
+              <div class="text-xs text-slate-400 uppercase tracking-wide">Categories</div>
+              <div class="text-2xl font-semibold mt-1">{{ result()!.assetCategories }}</div>
             </div>
             <div class="surface-muted p-3">
               <div class="text-xs text-slate-400 uppercase tracking-wide">Assets</div>
