@@ -1,0 +1,160 @@
+<div class="relative h-screen w-full">
+  <div #host class="absolute inset-0"></div>
+
+  <!-- Top bar -->
+  <div class="absolute top-0 left-0 right-0 p-5 flex items-start justify-between pointer-events-none">
+    <div class="glass rounded-2xl px-4 py-3 pointer-events-auto fade-in">
+      <div class="flex items-center gap-2 text-sm">
+        <button class="hover:text-violet-300 transition" (click)="goOverview()" [class.text-violet-300]="state().mode==='overview'">
+          <i class="pi pi-globe"></i> Overview
+        </button>
+        @if (state().room) {
+          <span class="text-slate-500">›</span>
+          <button class="hover:text-violet-300 transition" (click)="goRoom(state().room!)" [class.text-violet-300]="state().mode==='room'">
+            {{ state().room!.name }}
+          </button>
+        }
+        @if (state().furniture) {
+          <span class="text-slate-500">›</span>
+          <span class="text-violet-300">{{ state().furniture!.name }}</span>
+        }
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl px-4 py-3 pointer-events-auto text-xs text-slate-300 max-w-xs fade-in">
+      <div class="flex items-center gap-2 font-medium text-slate-200 mb-1">
+        <i class="pi pi-info-circle text-violet-300"></i> Controls
+      </div>
+      <div>Drag to orbit · Scroll to zoom</div>
+      <div>Click a room → enter it · click furniture → see items inside</div>
+      <div><span class="text-violet-300">Shift+drag</span> furniture to move it</div>
+      <div class="mt-1 pt-1 border-t border-white/10 text-slate-400">
+        Drop <span class="text-violet-300">Sofa.glb</span> etc. into <span class="text-violet-300">/public/models/</span> to override
+      </div>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div class="absolute top-24 left-5 bottom-5 w-80 glass rounded-2xl p-5 overflow-y-auto pointer-events-auto fade-in">
+    @if (state().mode === 'overview') {
+      <h2 class="font-semibold mb-4">Your home</h2>
+      <p class="text-sm text-slate-400 mb-4">Click a room to enter, or pick one here.</p>
+      <div class="space-y-2">
+        @for (r of rooms(); track r.id) {
+          <button class="w-full text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-2" (click)="goRoom(r)">
+            <div class="w-3 h-3 rounded-full" [style.background]="r.color"></div>
+            <span class="flex-1">{{ r.name }}</span>
+            <span class="text-xs text-slate-500">{{ countInRoom(r.id) }} items</span>
+          </button>
+        }
+        @if (!rooms().length) {
+          <div class="text-sm text-slate-500">
+            No rooms yet. Add some on the
+            <a routerLink="/rooms" class="text-violet-300 hover:underline">Rooms</a> page.
+          </div>
+        }
+      </div>
+    }
+
+    @if (state().mode === 'room' && state().room) {
+      <h2 class="font-semibold mb-1">{{ state().room!.name }}</h2>
+      <p class="text-xs text-slate-400 mb-4">Click furniture in the scene to inspect it.</p>
+      <div class="space-y-2">
+        @for (f of furnitureInRoom(); track f.id) {
+          <button class="w-full text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition" (click)="goFurniture(f)">
+            <div class="font-medium text-sm">{{ f.name }}</div>
+            <div class="text-xs text-slate-400">{{ f.kind }} · {{ f.itemCount }} items</div>
+          </button>
+        }
+        @if (!furnitureInRoom().length) {
+          <div class="text-sm text-slate-500">
+            No furniture in here. Add some on the
+            <a routerLink="/rooms" class="text-violet-300 hover:underline">Rooms</a> page.
+          </div>
+        }
+      </div>
+
+      @if (looseItemsInRoom().length) {
+        <div class="mt-6 pt-4 border-t border-white/10">
+          <div class="text-xs uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-2">
+            <i class="pi pi-sparkles text-pink-300"></i>
+            In this room (no furniture)
+          </div>
+          <div class="space-y-2">
+            @for (it of looseItemsInRoom(); track it.id) {
+              <button class="w-full text-left px-3 py-2.5 rounded-lg border border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 transition flex items-center gap-3" (click)="openItem(it)">
+                <div class="w-9 h-9 rounded-lg overflow-hidden bg-pink-500/10 grid place-items-center shrink-0">
+                  @if (it.photos[0]) {
+                    <img [src]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
+                  } @else {
+                    <i class="pi pi-box text-pink-300"></i>
+                  }
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium text-sm truncate">{{ it.name }}</div>
+                  @if (it.quantity > 1) {
+                    <div class="text-xs text-slate-400">×{{ it.quantity }}</div>
+                  }
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    @if (state().mode === 'furniture' && state().furniture) {
+      <h2 class="font-semibold mb-1">{{ state().furniture!.name }}</h2>
+      <p class="text-xs text-slate-400 mb-4">Items stored here. Hover an orb in the scene to preview.</p>
+      <div class="space-y-2">
+        @for (it of itemsInFurniture(); track it.id) {
+          <button class="w-full text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-3" (click)="openItem(it)">
+            <div class="w-10 h-10 rounded-lg overflow-hidden bg-violet-500/10 grid place-items-center shrink-0">
+              @if (it.photos[0]) {
+                <img [src]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
+              } @else {
+                <i class="pi pi-box text-violet-300"></i>
+              }
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-sm truncate">{{ it.name }}</div>
+              <div class="text-xs text-slate-400 truncate">
+                {{ it.containerName || 'Loose' }}
+                @if (it.quantity > 1) { · ×{{ it.quantity }} }
+              </div>
+            </div>
+          </button>
+        }
+        @if (!itemsInFurniture().length) {
+          <div class="text-sm text-slate-500">No items linked here yet.</div>
+        }
+      </div>
+      <a [routerLink]="['/items/new']" [queryParams]="{ furniture: state().furniture!.id }"
+         class="btn btn-primary w-full justify-center mt-4">
+        <i class="pi pi-plus"></i> Add item here
+      </a>
+    }
+  </div>
+
+  <!-- Hover preview -->
+  @if (hovered()) {
+    <div class="absolute bottom-5 right-5 glass rounded-2xl p-4 w-72 pointer-events-none fade-in">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-lg overflow-hidden bg-violet-500/10 grid place-items-center shrink-0">
+          @if (hovered()!.photos[0]) {
+            <img [src]="api.photoUrl(hovered()!.photos[0])" class="w-full h-full object-cover" />
+          } @else {
+            <i class="pi pi-box text-violet-300"></i>
+          }
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium truncate">{{ hovered()!.name }}</div>
+          <div class="text-xs text-slate-400 truncate">
+            {{ hovered()!.brand || '' }}
+            @if (hovered()!.containerName) { · {{ hovered()!.containerName }} }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

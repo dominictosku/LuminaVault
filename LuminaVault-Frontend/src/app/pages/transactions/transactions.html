@@ -1,0 +1,182 @@
+<div class="p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Transactions</h1>
+      <p class="text-slate-400 text-sm mt-1">{{ filteredTransactions().length }} entries</p>
+    </div>
+    <button class="btn btn-primary" (click)="newTransaction()">
+      <i class="pi pi-plus"></i> Transaction
+    </button>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
+    <section class="space-y-3">
+      <div class="surface p-3 grid grid-cols-1 md:grid-cols-[1fr_180px_150px_150px] gap-3">
+        <div class="relative">
+          <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+          <input class="input pl-9" placeholder="Search payee, category, notes"
+                 [(ngModel)]="query" (ngModelChange)="debouncedFetch()" />
+        </div>
+        <select class="select" [(ngModel)]="accountFilter" (ngModelChange)="fetch()">
+          <option [ngValue]="null">All accounts</option>
+          @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+        </select>
+        <select class="select" [(ngModel)]="kindFilter" (ngModelChange)="fetch()">
+          <option [ngValue]="null">All types</option>
+          @for (k of kinds; track k) { <option [ngValue]="k">{{ k }}</option> }
+        </select>
+        <div class="flex gap-2">
+          <input class="input" type="month" aria-label="Filter by month"
+                 [ngModel]="monthFilter()" (ngModelChange)="setMonthFilter($event || '')" />
+          @if (monthFilter()) {
+            <button type="button" class="btn btn-ghost px-3" title="Clear month filter" (click)="monthFilter.set('')">
+              <i class="pi pi-times"></i>
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3,4,5,6]; track _) { <div class="surface h-16 animate-pulse"></div> }
+        </div>
+      } @else if (transactions().length === 0) {
+        <div class="surface p-8 text-center">
+          <i class="pi pi-receipt text-4xl text-sky-300/70"></i>
+          <div class="mt-3 text-lg">No transactions yet.</div>
+          <button class="btn btn-primary mt-4" (click)="newTransaction()">
+            <i class="pi pi-plus"></i> Add transaction
+          </button>
+        </div>
+      } @else if (filteredTransactions().length === 0) {
+        <div class="surface p-8 text-center">
+          <i class="pi pi-filter text-4xl text-sky-300/70"></i>
+          <div class="mt-3 text-lg">No transactions match these filters.</div>
+          <button class="btn btn-ghost mt-4" (click)="clearFilters()">
+            <i class="pi pi-filter-slash"></i> Clear filters
+          </button>
+        </div>
+      } @else {
+        <div class="surface overflow-hidden">
+          <div class="hidden md:grid grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-2 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+            <div>Date</div><div>Details</div><div>Account</div><div class="text-right">Amount</div>
+          </div>
+          <div class="divide-y divide-slate-800">
+            @for (t of filteredTransactions(); track t.id) {
+              <button type="button" class="w-full text-left grid grid-cols-1 md:grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-3 hover:bg-slate-900/70 transition"
+                      (click)="editTransaction(t)">
+                <div class="text-sm text-slate-400">{{ t.occurredOn | date:'MMM d, y' }}</div>
+                <div class="min-w-0">
+                  <div class="font-medium truncate">{{ t.payee }}</div>
+                  <div class="text-xs text-slate-500 truncate">
+                    {{ t.category }}
+                    @if (t.kind === 'Transfer') { · {{ t.transferAccountName || 'Transfer' }} }
+                  </div>
+                </div>
+                <div class="text-sm text-slate-400 truncate">{{ t.accountName || 'Account' }}</div>
+                <div class="text-right font-medium"
+                     [class.text-emerald-300]="t.kind === 'Income'"
+                     [class.text-red-300]="t.kind === 'Expense'">
+                  {{ sign(t.kind) }}{{ t.amount | currency:'CHF':'symbol-narrow' }}
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </section>
+
+    <aside class="surface p-5 h-fit">
+      <h2 class="font-medium flex items-center gap-2 mb-4">
+        <i class="pi pi-pen-to-square text-sky-300"></i>
+        {{ editingId() ? 'Edit transaction' : 'New transaction' }}
+      </h2>
+
+      @if (accounts().length === 0) {
+        <div class="text-sm text-slate-400 mb-4">
+          Add an account or wallet before recording transactions.
+        </div>
+      }
+
+      <form (ngSubmit)="save()" class="space-y-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Type</label>
+            <select class="select" name="kind" [(ngModel)]="model.kind">
+              @for (k of kinds; track k) { <option [ngValue]="k">{{ k }}</option> }
+            </select>
+          </div>
+          <div>
+            <label class="label">Status</label>
+            <select class="select" name="status" [(ngModel)]="model.status">
+              @for (s of statuses; track s) { <option [ngValue]="s">{{ s }}</option> }
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="label">Account</label>
+          <select class="select" name="account" [(ngModel)]="model.accountId" required>
+            <option [ngValue]="0">Choose account</option>
+            @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+          </select>
+        </div>
+        @if (model.kind === 'Transfer') {
+          <div>
+            <label class="label">Destination</label>
+            <select class="select" name="transfer" [(ngModel)]="model.transferAccountId">
+              <option [ngValue]="null">Choose destination</option>
+              @for (a of accounts(); track a.id) {
+                @if (a.id !== model.accountId) { <option [ngValue]="a.id">{{ a.name }}</option> }
+              }
+            </select>
+          </div>
+        }
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Date</label>
+            <input class="input" type="date" name="date" [(ngModel)]="dateValue" required />
+          </div>
+          <div>
+            <label class="label">Amount</label>
+            <input class="input" type="number" step="0.01" min="0" name="amount" [(ngModel)]="model.amount" required />
+          </div>
+        </div>
+        <div>
+          <label class="label">Payee</label>
+          <input class="input" name="payee" [(ngModel)]="model.payee" required />
+        </div>
+        <div>
+          <label class="label">Category</label>
+          <select class="select" name="category" [(ngModel)]="model.category">
+            @for (c of categories(); track c) { <option [ngValue]="c">{{ c }}</option> }
+          </select>
+        </div>
+        <div>
+          <label class="label">Tags</label>
+          <input class="input" name="tags" [(ngModel)]="tagsRaw" placeholder="comma separated" />
+        </div>
+        <div>
+          <label class="label">Notes</label>
+          <textarea class="textarea" rows="3" name="notes" [(ngModel)]="model.notes"></textarea>
+        </div>
+        @if (error()) {
+          <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+            {{ error() }}
+          </div>
+        }
+        <div class="flex gap-2">
+          @if (editingId()) {
+            <button type="button" class="btn btn-danger" (click)="remove()" [disabled]="saving()">
+              <i class="pi pi-trash"></i>
+            </button>
+          }
+          <button type="button" class="btn btn-ghost flex-1 justify-center" (click)="reset()">Cancel</button>
+          <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving() || accounts().length === 0">
+            @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+            Save
+          </button>
+        </div>
+      </form>
+    </aside>
+  </div>
+</div>

@@ -1,0 +1,178 @@
+<div class="p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
+      <p class="text-slate-400 text-sm mt-1">{{ today | date:'fullDate' }}</p>
+    </div>
+    <div class="flex gap-2">
+      <a routerLink="/transactions" class="btn btn-ghost">
+        <i class="pi pi-list"></i> Transactions
+      </a>
+      <a routerLink="/accounts" class="btn btn-primary">
+        <i class="pi pi-plus"></i> Account
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+    <section class="surface p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wide">Net worth</div>
+      <div class="text-2xl font-semibold mt-2">{{ money(summary()?.netWorth) }}</div>
+      <div class="text-xs text-slate-500 mt-1">Accounts + inventory assets</div>
+    </section>
+    <section class="surface p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wide">Month cash flow</div>
+      <div class="text-2xl font-semibold mt-2" [class.text-emerald-300]="(summary()?.monthlyCashFlow ?? 0) >= 0"
+           [class.text-red-300]="(summary()?.monthlyCashFlow ?? 0) < 0">
+        {{ money(summary()?.monthlyCashFlow) }}
+      </div>
+      <div class="text-xs text-slate-500 mt-1">{{ summary()?.savingsRate ?? 0 | number:'1.0-1' }}% savings rate</div>
+    </section>
+    <section class="surface p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wide">Recurring monthly</div>
+      <div class="text-2xl font-semibold mt-2">{{ money(summary()?.recurringMonthly) }}</div>
+      <div class="text-xs text-slate-500 mt-1">{{ summary()?.activeSubscriptionCount ?? 0 }} active subscriptions</div>
+    </section>
+    <section class="surface p-4">
+      <div class="text-xs text-slate-400 uppercase tracking-wide">Investments</div>
+      <div class="text-2xl font-semibold mt-2">{{ money(summary()?.investmentValue) }}</div>
+      <div class="text-xs text-slate-500 mt-1">{{ summary()?.walletCount ?? 0 }} cash/crypto wallets</div>
+    </section>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1.35fr_0.85fr] gap-4">
+    <section class="surface p-5">
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-chart-bar text-teal-300"></i> Cash flow
+        </h2>
+        <div class="text-xs text-slate-500">Last 6 months</div>
+      </div>
+      @if (!summary()) {
+        <div class="h-56 surface-muted animate-pulse"></div>
+      } @else if (summary()!.monthlySeries.length === 0) {
+        <div class="text-sm text-slate-500">No transaction data yet.</div>
+      } @else {
+        <div class="h-64 grid grid-cols-6 gap-3 items-end">
+          @for (m of summary()!.monthlySeries; track m.month) {
+            <div class="min-w-0 h-full flex flex-col justify-end gap-2">
+              <div class="flex-1 flex items-end gap-1">
+                <div class="w-full bg-emerald-400/70 rounded-t"
+                     [style.height.%]="barHeight(m.income)"></div>
+                <div class="w-full bg-red-400/70 rounded-t"
+                     [style.height.%]="barHeight(m.expenses)"></div>
+              </div>
+              <div class="text-[11px] text-slate-500 truncate text-center">{{ m.month }}</div>
+            </div>
+          }
+        </div>
+        <div class="flex gap-4 text-xs text-slate-400 mt-3">
+          <span class="inline-flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-emerald-400"></span>Income</span>
+          <span class="inline-flex items-center gap-2"><span class="w-2 h-2 rounded-sm bg-red-400"></span>Expenses</span>
+        </div>
+      }
+    </section>
+
+    <section class="surface p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-tags text-amber-300"></i> Month categories
+        </h2>
+        <a routerLink="/transactions" class="text-xs text-teal-300 hover:underline">Open</a>
+      </div>
+      @if (!summary()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3,4]; track _) { <div class="h-9 surface-muted animate-pulse"></div> }
+        </div>
+      } @else if (summary()!.categoryBreakdown.length === 0) {
+        <div class="text-sm text-slate-500">No expenses this month.</div>
+      } @else {
+        <div class="space-y-3">
+          @for (c of summary()!.categoryBreakdown; track c.category) {
+            <div>
+              <div class="flex justify-between text-sm mb-1">
+                <span>{{ c.category }}</span>
+                <span class="text-slate-400">{{ c.amount | currency:'CHF':'symbol-narrow' }}</span>
+              </div>
+              <div class="h-2 rounded bg-slate-800 overflow-hidden">
+                <div class="h-full bg-amber-300" [style.width.%]="categoryWidth(c.amount)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="surface p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-clock text-sky-300"></i> Recent transactions
+        </h2>
+        <a routerLink="/transactions" class="text-xs text-teal-300 hover:underline">All</a>
+      </div>
+      @if (!summary()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3,4,5]; track _) { <div class="h-12 surface-muted animate-pulse"></div> }
+        </div>
+      } @else if (summary()!.recentTransactions.length === 0) {
+        <div class="text-sm text-slate-500">No transactions yet.</div>
+      } @else {
+        <div class="divide-y divide-slate-800">
+          @for (t of summary()!.recentTransactions; track t.id) {
+            <div class="py-3 flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg grid place-items-center"
+                   [class.bg-emerald-400/15]="t.kind === 'Income'"
+                   [class.bg-red-400/15]="t.kind === 'Expense'"
+                   [class.bg-sky-400/15]="t.kind === 'Transfer'">
+                <i class="pi" [class.pi-arrow-down-left]="t.kind === 'Income'"
+                   [class.pi-arrow-up-right]="t.kind === 'Expense'"
+                   [class.pi-arrow-right-arrow-left]="t.kind === 'Transfer'"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="font-medium truncate">{{ t.payee }}</div>
+                <div class="text-xs text-slate-500 truncate">{{ t.accountName || 'Account' }} · {{ t.category }}</div>
+              </div>
+              <div class="text-right">
+                <div [class.text-emerald-300]="t.kind === 'Income'" [class.text-red-300]="t.kind === 'Expense'">
+                  {{ transactionSign(t.kind) }}{{ t.amount | currency:'CHF':'symbol-narrow' }}
+                </div>
+                <div class="text-xs text-slate-500">{{ t.occurredOn | date:'MMM d' }}</div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="surface p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-calendar text-amber-300"></i> Due soon
+        </h2>
+        <a routerLink="/subscriptions" class="text-xs text-teal-300 hover:underline">Manage</a>
+      </div>
+      @if (!summary()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3]; track _) { <div class="h-12 surface-muted animate-pulse"></div> }
+        </div>
+      } @else if (summary()!.upcomingSubscriptions.length === 0) {
+        <div class="text-sm text-slate-500">Nothing due in the next 30 days.</div>
+      } @else {
+        <div class="space-y-2">
+          @for (s of summary()!.upcomingSubscriptions; track s.id) {
+            <div class="surface-muted p-3 flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-medium truncate">{{ s.name }}</div>
+                <div class="text-xs text-slate-500">{{ s.nextDueOn | date:'MMM d' }} · {{ s.category }}</div>
+              </div>
+              <div class="text-right text-sm">
+                <div>{{ s.amount | currency:s.currency:'symbol-narrow' }}</div>
+                <div class="text-xs text-slate-500">{{ s.monthlyAmount | currency:s.currency:'symbol-narrow' }}/mo</div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>
+  </div>
+</div>
