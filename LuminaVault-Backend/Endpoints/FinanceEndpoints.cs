@@ -45,6 +45,20 @@ public record SubscriptionInput(
     int BillingIntervalDays, DateTime StartedOn, DateTime NextDueOn, bool AutoRenew,
     SubscriptionStatus Status, string? Notes);
 
+public record FinanceBudgetDto(
+    int Id, string Category, DateTime Month, decimal LimitAmount, decimal Spent,
+    decimal Remaining, decimal UsedPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record FinanceBudgetInput(string Category, DateTime Month, decimal LimitAmount, string? Notes);
+
+public record AccountBalanceSnapshotDto(
+    int Id, int AccountId, string? AccountName, string Currency, DateTime SnapshotDate,
+    decimal ActualBalance, decimal ExpectedBalance, decimal Difference, bool IsReconciled,
+    string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record AccountBalanceSnapshotInput(
+    int AccountId, DateTime SnapshotDate, decimal ActualBalance, bool IsReconciled, string? Notes);
+
 public static class FinanceEndpoints
 {
     public static IEndpointRouteBuilder MapFinance(this IEndpointRouteBuilder app)
@@ -53,6 +67,8 @@ public static class FinanceEndpoints
         var transactions = app.MapGroup("/api/finance/transactions").RequireAuthorization().WithTags("Finance");
         var monthlySummaries = app.MapGroup("/api/finance/monthly-summaries").RequireAuthorization().WithTags("Finance");
         var subscriptions = app.MapGroup("/api/finance/subscriptions").RequireAuthorization().WithTags("Finance");
+        var budgets = app.MapGroup("/api/finance/budgets").RequireAuthorization().WithTags("Finance");
+        var balanceSnapshots = app.MapGroup("/api/finance/balance-snapshots").RequireAuthorization().WithTags("Finance");
         var summary = app.MapGroup("/api/finance").RequireAuthorization().WithTags("Finance");
 
         accounts.MapGet("/", async (AppDbContext db, bool includeArchived = false) =>
@@ -296,6 +312,117 @@ public static class FinanceEndpoints
             if (subscription is null) return Results.NotFound();
             db.Subscriptions.Remove(subscription);
             await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        budgets.MapGet("/", async (AppDbContext db, DateTime? month) =>
+        {
+            var targetMonth = MonthStart(month ?? DateTime.UtcNow);
+            var spent = await CategorySpending(db, targetMonth);
+            var result = await db.FinanceBudgets
+                .Where(b => b.Month == targetMonth)
+                .OrderBy(b => b.Category)
+                .ToListAsync();
+            return Results.Ok(result.Select(b => MapBudget(b, spent.GetValueOrDefault(b.Category, 0m))));
+        });
+
+        budgets.MapGet("/overview", async (AppDbContext db, DateTime? month) =>
+        {
+            var targetMonth = MonthStart(month ?? DateTime.UtcNow);
+            var spent = await CategorySpending(db, targetMonth);
+            var budgetsForMonth = await db.FinanceBudgets
+                .Where(b => b.Month == targetMonth)
+                .OrderBy(b => b.Category)
+                .ToListAsync();
+            var rows = budgetsForMonth.Select(b => MapBudget(b, spent.GetValueOrDefault(b.Category, 0m))).ToList();
+            return Results.Ok(new
+            {
+                month = targetMonth,
+                totalBudget = rows.Sum(r => r.LimitAmount),
+                totalSpent = rows.Sum(r => r.Spent),
+                remaining = rows.Sum(r => r.Remaining),
+                rows
+            });
+        });
+
+        budgets.MapPost("/", async ([FromBody] FinanceBudgetInput input, AppDbContext db) =>
+        {
+            var validation = ValidateBudget(input);
+            if (validation is not null) return validation;
+            var month = MonthStart(input.Month);
+            if (await db.FinanceBudgets.AnyAsync(b => b.Category == input.Category.Trim() && b.Month == month))
+                return Results.Conflict(new { error = "This category already has a budget for that month." });
+            var budget = new FinanceBudget();
+            ApplyBudget(budget, input);
+            db.FinanceBudgets.Add(budget);
+            await db.SaveChangesAsync();
+            var spent = await CategorySpending(db, budget.Month);
+            return Results.Created($"/api/finance/budgets/{budget.Id}", MapBudget(budget, spent.GetValueOrDefault(budget.Category, 0m)));
+        });
+
+        budgets.MapPut("/{id:int}", async (int id, [FromBody] FinanceBudgetInput input, AppDbContext db) =>
+        {
+            var budget = await db.FinanceBudgets.FindAsync(id);
+            if (budget is null) return Results.NotFound();
+            var validation = ValidateBudget(input);
+            if (validation is not null) return validation;
+            var category = input.Category.Trim();
+            var month = MonthStart(input.Month);
+            if (await db.FinanceBudgets.AnyAsync(b => b.Id != id && b.Category == category && b.Month == month))
+                return Results.Conflict(new { error = "This category already has a budget for that month." });
+            ApplyBudget(budget, input);
+            budget.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            var spent = await CategorySpending(db, budget.Month);
+            return Results.Ok(MapBudget(budget, spent.GetValueOrDefault(budget.Category, 0m)));
+        });
+
+        budgets.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var budget = await db.FinanceBudgets.FindAsync(id);
+            if (budget is null) return Results.NotFound();
+            db.FinanceBudgets.Remove(budget);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        balanceSnapshots.MapGet("/", async (AppDbContext db, int? accountId) =>
+        {
+            await RecalculateBalances(db);
+            var query = db.AccountBalanceSnapshots.Include(s => s.Account).AsQueryable();
+            if (accountId.HasValue) query = query.Where(s => s.AccountId == accountId.Value);
+            var result = await query
+                .OrderByDescending(s => s.SnapshotDate)
+                .ThenBy(s => s.Account!.Name)
+                .Take(200)
+                .ToListAsync();
+            return Results.Ok(result.Select(MapBalanceSnapshot));
+        });
+
+        balanceSnapshots.MapPost("/", async ([FromBody] AccountBalanceSnapshotInput input, AppDbContext db) =>
+        {
+            var validation = await ValidateBalanceSnapshot(input, db);
+            if (validation is not null) return validation;
+            var date = input.SnapshotDate.Date;
+            if (await db.AccountBalanceSnapshots.AnyAsync(s => s.AccountId == input.AccountId && s.SnapshotDate == date))
+                return Results.Conflict(new { error = "This account already has a snapshot for that date." });
+            var expected = await ExpectedBalanceAt(db, input.AccountId, date);
+            var snapshot = new AccountBalanceSnapshot();
+            ApplyBalanceSnapshot(snapshot, input, expected);
+            db.AccountBalanceSnapshots.Add(snapshot);
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            await db.Entry(snapshot).Reference(s => s.Account).LoadAsync();
+            return Results.Created($"/api/finance/balance-snapshots/{snapshot.Id}", MapBalanceSnapshot(snapshot));
+        });
+
+        balanceSnapshots.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var snapshot = await db.AccountBalanceSnapshots.FindAsync(id);
+            if (snapshot is null) return Results.NotFound();
+            db.AccountBalanceSnapshots.Remove(snapshot);
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
             return Results.NoContent();
         });
 
@@ -715,6 +842,28 @@ public static class FinanceEndpoints
         subscription.Notes = Clean(input.Notes);
     }
 
+    static void ApplyBudget(FinanceBudget budget, FinanceBudgetInput input)
+    {
+        budget.Category = input.Category.Trim();
+        budget.Month = MonthStart(input.Month);
+        budget.LimitAmount = Math.Abs(input.LimitAmount);
+        budget.Notes = Clean(input.Notes);
+    }
+
+    static void ApplyBalanceSnapshot(
+        AccountBalanceSnapshot snapshot,
+        AccountBalanceSnapshotInput input,
+        decimal expected)
+    {
+        snapshot.AccountId = input.AccountId;
+        snapshot.SnapshotDate = input.SnapshotDate.Date;
+        snapshot.ActualBalance = input.ActualBalance;
+        snapshot.ExpectedBalance = expected;
+        snapshot.Difference = input.ActualBalance - expected;
+        snapshot.IsReconciled = input.IsReconciled;
+        snapshot.Notes = Clean(input.Notes);
+    }
+
     static async Task<IResult?> ValidateTransaction(FinanceTransactionInput input, AppDbContext db)
     {
         if (input.AccountId <= 0 || !await db.FinanceAccounts.AnyAsync(a => a.Id == input.AccountId))
@@ -753,6 +902,22 @@ public static class FinanceEndpoints
         return null;
     }
 
+    static IResult? ValidateBudget(FinanceBudgetInput input)
+    {
+        if (string.IsNullOrWhiteSpace(input.Category))
+            return Results.BadRequest(new { error = "Choose a category." });
+        if (input.LimitAmount <= 0)
+            return Results.BadRequest(new { error = "Budget amount must be greater than zero." });
+        return null;
+    }
+
+    static async Task<IResult?> ValidateBalanceSnapshot(AccountBalanceSnapshotInput input, AppDbContext db)
+    {
+        if (input.AccountId <= 0 || !await db.FinanceAccounts.AnyAsync(a => a.Id == input.AccountId))
+            return Results.BadRequest(new { error = "Choose a valid account." });
+        return null;
+    }
+
     static async Task LoadTransactionRefs(AppDbContext db, FinanceTransaction transaction)
     {
         await db.Entry(transaction).Reference(t => t.Account).LoadAsync();
@@ -764,18 +929,34 @@ public static class FinanceEndpoints
         var accounts = await db.FinanceAccounts.ToListAsync();
         if (accounts.Count == 0) return;
 
-        var balances = accounts.ToDictionary(a => a.Id, a => a.StartingBalance);
+        var snapshots = await db.AccountBalanceSnapshots
+            .Where(s => s.IsReconciled)
+            .ToListAsync();
+        var latestSnapshots = snapshots
+            .GroupBy(s => s.AccountId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.SnapshotDate).First());
+
+        var balances = accounts.ToDictionary(
+            a => a.Id,
+            a => latestSnapshots.TryGetValue(a.Id, out var snapshot)
+                ? snapshot.ActualBalance
+                : a.StartingBalance);
         var summaries = await db.MonthlyAccountSummaries.ToListAsync();
         var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
         var tx = await db.FinanceTransactions.ToListAsync();
         foreach (var t in tx)
         {
-            if (balances.ContainsKey(t.AccountId) && !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+            if (balances.ContainsKey(t.AccountId) &&
+                IsAfterLatestSnapshot(t.AccountId, t.OccurredOn, latestSnapshots) &&
+                !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+            {
                 balances[t.AccountId] += SignedAmountForPrimaryAccount(t);
+            }
 
             if (t.Kind == FinanceTransactionKind.Transfer &&
                 t.TransferAccountId.HasValue &&
                 balances.ContainsKey(t.TransferAccountId.Value) &&
+                IsAfterLatestSnapshot(t.TransferAccountId.Value, t.OccurredOn, latestSnapshots) &&
                 !HasSummaryFor(t.TransferAccountId.Value, t.OccurredOn, summaryKeys))
             {
                 balances[t.TransferAccountId.Value] += t.Amount;
@@ -783,8 +964,11 @@ public static class FinanceEndpoints
         }
         foreach (var s in summaries)
         {
-            if (balances.ContainsKey(s.AccountId))
+            if (balances.ContainsKey(s.AccountId) &&
+                IsAfterLatestSnapshot(s.AccountId, s.Month, latestSnapshots))
+            {
                 balances[s.AccountId] += s.Income - s.Expenses;
+            }
         }
 
         foreach (var account in accounts)
@@ -801,6 +985,67 @@ public static class FinanceEndpoints
             FinanceTransactionKind.Transfer => -transaction.Amount,
             _ => 0m
         };
+
+    static bool IsAfterLatestSnapshot(
+        int accountId,
+        DateTime date,
+        Dictionary<int, AccountBalanceSnapshot> latestSnapshots) =>
+        !latestSnapshots.TryGetValue(accountId, out var snapshot) || date.Date > snapshot.SnapshotDate.Date;
+
+    static async Task<decimal> ExpectedBalanceAt(AppDbContext db, int accountId, DateTime date)
+    {
+        var account = await db.FinanceAccounts.FindAsync(accountId);
+        if (account is null) return 0;
+
+        var previousSnapshot = await db.AccountBalanceSnapshots
+            .Where(s => s.AccountId == accountId && s.IsReconciled && s.SnapshotDate < date.Date)
+            .OrderByDescending(s => s.SnapshotDate)
+            .FirstOrDefaultAsync();
+        var balance = previousSnapshot?.ActualBalance ?? account.StartingBalance;
+        var fromDate = previousSnapshot?.SnapshotDate.Date;
+        var summaries = await db.MonthlyAccountSummaries
+            .Where(s => s.AccountId == accountId && s.Month <= date.Date)
+            .ToListAsync();
+        if (fromDate.HasValue)
+            summaries = summaries.Where(s => s.Month > fromDate.Value).ToList();
+        var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+
+        var tx = await db.FinanceTransactions
+            .Where(t => (t.AccountId == accountId || t.TransferAccountId == accountId) && t.OccurredOn <= date.Date)
+            .ToListAsync();
+        if (fromDate.HasValue)
+            tx = tx.Where(t => t.OccurredOn > fromDate.Value).ToList();
+
+        foreach (var t in tx)
+        {
+            if (t.AccountId == accountId && !HasSummaryFor(accountId, t.OccurredOn, summaryKeys))
+                balance += SignedAmountForPrimaryAccount(t);
+            if (t.Kind == FinanceTransactionKind.Transfer &&
+                t.TransferAccountId == accountId &&
+                !HasSummaryFor(accountId, t.OccurredOn, summaryKeys))
+                balance += t.Amount;
+        }
+        foreach (var s in summaries) balance += s.Income - s.Expenses;
+        return balance;
+    }
+
+    static async Task<Dictionary<string, decimal>> CategorySpending(AppDbContext db, DateTime month)
+    {
+        var start = MonthStart(month);
+        var end = start.AddMonths(1);
+        var summaries = await db.MonthlyAccountSummaries.Where(s => s.Month == start).ToListAsync();
+        var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+        var tx = await db.FinanceTransactions
+            .Where(t => t.Kind == FinanceTransactionKind.Expense && t.OccurredOn >= start && t.OccurredOn < end)
+            .ToListAsync();
+        var result = tx
+            .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+            .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
+        var summaryAmount = summaries.Sum(s => s.Expenses);
+        if (summaryAmount > 0) result["Bank summaries"] = result.GetValueOrDefault("Bank summaries") + summaryAmount;
+        return result;
+    }
 
     static decimal ToMonthlyAmount(decimal amount, int billingIntervalDays) =>
         billingIntervalDays <= 0 ? amount : Math.Round(amount * 30.4375m / billingIntervalDays, 2);
@@ -833,6 +1078,19 @@ public static class FinanceEndpoints
             subscription.AutoRenew, subscription.Status, subscription.Notes,
             ToMonthlyAmount(subscription.Amount, subscription.BillingIntervalDays),
             subscription.CreatedAt, subscription.UpdatedAt);
+
+    static FinanceBudgetDto MapBudget(FinanceBudget budget, decimal spent)
+    {
+        var remaining = budget.LimitAmount - spent;
+        var used = budget.LimitAmount <= 0 ? 0 : Math.Round(spent / budget.LimitAmount * 100, 1);
+        return new FinanceBudgetDto(budget.Id, budget.Category, budget.Month, budget.LimitAmount,
+            spent, remaining, used, budget.Notes, budget.CreatedAt, budget.UpdatedAt);
+    }
+
+    static AccountBalanceSnapshotDto MapBalanceSnapshot(AccountBalanceSnapshot snapshot) =>
+        new(snapshot.Id, snapshot.AccountId, snapshot.Account?.Name, snapshot.Account?.Currency ?? "CHF",
+            snapshot.SnapshotDate, snapshot.ActualBalance, snapshot.ExpectedBalance, snapshot.Difference,
+            snapshot.IsReconciled, snapshot.Notes, snapshot.CreatedAt, snapshot.UpdatedAt);
 
     static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

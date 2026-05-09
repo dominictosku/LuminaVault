@@ -3,6 +3,8 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import {
+  AccountBalanceSnapshot,
+  AccountBalanceSnapshotInput,
   FINANCE_ACCOUNT_TYPES,
   FinanceAccount,
   FinanceAccountInput,
@@ -20,6 +22,7 @@ export class AccountsComponent {
   private api = inject(FinanceApi);
   private confirmDialog = inject(ConfirmDialogService);
   accounts = signal<FinanceAccount[]>([]);
+  snapshots = signal<AccountBalanceSnapshot[]>([]);
   loading = signal(true);
   saving = signal(false);
   error = signal<string | null>(null);
@@ -29,6 +32,9 @@ export class AccountsComponent {
   colors = ['#14b8a6', '#38bdf8', '#34d399', '#f59e0b', '#818cf8', '#fb7185'];
 
   model: FinanceAccountInput = this.defaultModel();
+  snapshotDate = new Date().toISOString().substring(0, 10);
+  snapshotActualBalance = 0;
+  snapshotNotes = '';
 
   constructor() {
     this.fetch();
@@ -37,9 +43,17 @@ export class AccountsComponent {
   fetch() {
     this.loading.set(true);
     this.api.listFinanceAccounts().subscribe({
-      next: accounts => { this.accounts.set(accounts); this.loading.set(false); },
+      next: accounts => {
+        this.accounts.set(accounts);
+        this.loading.set(false);
+        this.fetchSnapshots();
+      },
       error: () => this.loading.set(false),
     });
+  }
+
+  fetchSnapshots() {
+    this.api.listBalanceSnapshots(this.editingId() ?? undefined).subscribe(s => this.snapshots.set(s));
   }
 
   newAccount() {
@@ -60,6 +74,8 @@ export class AccountsComponent {
       notes: account.notes ?? '',
       isArchived: account.isArchived,
     };
+    this.snapshotActualBalance = account.balance;
+    this.fetchSnapshots();
   }
 
   save() {
@@ -103,6 +119,37 @@ export class AccountsComponent {
     this.editingId.set(null);
     this.error.set(null);
     this.model = this.defaultModel();
+    this.snapshots.set([]);
+    this.snapshotActualBalance = 0;
+    this.snapshotNotes = '';
+  }
+
+  saveSnapshot() {
+    if (!this.editingId()) return;
+    const input: AccountBalanceSnapshotInput = {
+      accountId: this.editingId()!,
+      snapshotDate: new Date(this.snapshotDate).toISOString(),
+      actualBalance: Number(this.snapshotActualBalance) || 0,
+      isReconciled: true,
+      notes: this.snapshotNotes,
+    };
+    this.api.createBalanceSnapshot(input).subscribe({
+      next: () => {
+        this.snapshotNotes = '';
+        this.fetch();
+      },
+      error: e => this.error.set(e?.error?.error ?? 'Could not save balance snapshot.'),
+    });
+  }
+
+  async deleteSnapshot(snapshot: AccountBalanceSnapshot) {
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete balance snapshot?',
+      message: `Remove the reconciliation snapshot from ${new Date(snapshot.snapshotDate).toLocaleDateString()}?`,
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
+    this.api.deleteBalanceSnapshot(snapshot.id).subscribe(() => this.fetch());
   }
 
   private defaultModel(): FinanceAccountInput {

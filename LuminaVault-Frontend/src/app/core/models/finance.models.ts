@@ -28,6 +28,57 @@ export interface FinanceAccount {
   createdAt: string;
 }
 
+export interface FinanceBudget {
+  id: number;
+  category: string;
+  month: string;
+  limitAmount: number;
+  spent: number;
+  remaining: number;
+  usedPercent: number;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceBudgetInput {
+  category: string;
+  month: string;
+  limitAmount: number;
+  notes?: string | null;
+}
+
+export interface FinanceBudgetOverview {
+  month: string;
+  totalBudget: number;
+  totalSpent: number;
+  remaining: number;
+  rows: FinanceBudget[];
+}
+
+export interface AccountBalanceSnapshot {
+  id: number;
+  accountId: number;
+  accountName?: string | null;
+  currency: string;
+  snapshotDate: string;
+  actualBalance: number;
+  expectedBalance: number;
+  difference: number;
+  isReconciled: boolean;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccountBalanceSnapshotInput {
+  accountId: number;
+  snapshotDate: string;
+  actualBalance: number;
+  isReconciled: boolean;
+  notes?: string | null;
+}
+
 export interface FinanceAccountInput {
   name: string;
   institution?: string | null;

@@ -37,12 +37,98 @@
       </div>
       <input #fileInput type="file" class="hidden" accept=".ods,application/vnd.oasis.opendocument.spreadsheet"
              (change)="import(fileInput)" />
+      <input #mappedFileInput type="file" class="hidden" accept=".ods,application/vnd.oasis.opendocument.spreadsheet"
+             (change)="previewImport(mappedFileInput)" />
       <button class="btn btn-ghost mt-5" (click)="fileInput.click()" [disabled]="importing()">
         @if (importing()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-file-import"></i> }
-        Choose .ods
+        Quick import
+      </button>
+      <button class="btn btn-primary mt-5 ml-2" (click)="mappedFileInput.click()" [disabled]="previewing() || importing()">
+        @if (previewing()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-table"></i> }
+        Preview & map
       </button>
     </section>
   </div>
+
+  @if (preview()) {
+    <section class="surface p-5 mt-4">
+      <div class="flex items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 class="font-medium flex items-center gap-2">
+            <i class="pi pi-table text-violet-300"></i> Import mapping
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">Choose a sheet, select what it contains, then map source columns to LuminaVault fields.</p>
+        </div>
+        <button class="btn btn-primary" (click)="importMapped()" [disabled]="importing()">
+          @if (importing()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+          Import mapped sheet
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-4">
+        <div class="space-y-2">
+          @for (sheet of preview()!.sheets; track sheet.name) {
+            <button type="button" class="surface-muted w-full p-3 text-left hover:border-violet-300/40"
+                    [class.border-violet-300]="selectedSheetName === sheet.name"
+                    (click)="selectSheet(sheet)">
+              <div class="font-medium">{{ sheet.name }}</div>
+              <div class="text-xs text-slate-500">{{ sheet.headers.length }} columns · {{ sheet.suggestedTarget || 'unknown' }}</div>
+            </button>
+          }
+        </div>
+
+        @if (selectedSheet(); as sheet) {
+          <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-3">
+              <select class="select" [(ngModel)]="target" (ngModelChange)="autoMap()">
+                @for (item of targets; track item) { <option [ngValue]="item">{{ item }}</option> }
+              </select>
+              <div class="text-sm text-slate-400 flex items-center">
+                Mapping {{ sheet.name }} as {{ target }}.
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              @for (field of fields(); track field) {
+                <label class="surface-muted p-3">
+                  <span class="label">{{ field }}</span>
+                  <select class="select" [(ngModel)]="columns[field]">
+                    <option value="">Do not import</option>
+                    @for (header of sheet.headers; track header) {
+                      <option [ngValue]="header">{{ header }}</option>
+                    }
+                  </select>
+                </label>
+              }
+            </div>
+
+            @if (sheet.sampleRows.length) {
+              <div class="overflow-auto surface-muted">
+                <table class="w-full text-sm">
+                  <thead class="text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      @for (header of sheet.headers; track header) {
+                        <th class="text-left px-3 py-2">{{ header }}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/5">
+                    @for (row of sheet.sampleRows; track $index) {
+                      <tr>
+                        @for (cell of row; track $index) {
+                          <td class="px-3 py-2 text-slate-300 whitespace-nowrap">{{ cell }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  }
 
   @if (error()) {
     <div class="mt-4 text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">

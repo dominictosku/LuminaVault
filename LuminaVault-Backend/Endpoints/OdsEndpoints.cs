@@ -19,6 +19,10 @@ public record OdsImportResult(
     int Assets,
     string[] Warnings);
 
+public record OdsPreviewSheet(string Name, string[] Headers, string[][] SampleRows, string SuggestedTarget);
+public record OdsPreviewResult(OdsPreviewSheet[] Sheets);
+public record OdsMappedImportRequest(string SheetName, string Target, Dictionary<string, string> Columns);
+
 public static class OdsEndpoints
 {
     static readonly XNamespace TableNs = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
@@ -42,6 +46,15 @@ public static class OdsEndpoints
             var monthlySummaries = await db.MonthlyAccountSummaries
                 .Include(s => s.Account)
                 .OrderByDescending(s => s.Month)
+                .ThenBy(s => s.Account!.Name)
+                .ToListAsync();
+            var budgets = await db.FinanceBudgets
+                .OrderByDescending(b => b.Month)
+                .ThenBy(b => b.Category)
+                .ToListAsync();
+            var balanceSnapshots = await db.AccountBalanceSnapshots
+                .Include(s => s.Account)
+                .OrderByDescending(s => s.SnapshotDate)
                 .ThenBy(s => s.Account!.Name)
                 .ToListAsync();
             var subscriptions = await db.Subscriptions
@@ -70,6 +83,13 @@ public static class OdsEndpoints
                     .Concat(monthlySummaries.Select(s => Row(DateOnly.FromDateTime(s.Month), s.Account?.Name, s.Income, s.Expenses,
                         s.OpeningBalance, s.ClosingBalance, s.Notes))
                     )),
+                Sheet("Budgets", new[] { Row("Month", "Category", "Limit amount", "Notes") }
+                    .Concat(budgets.Select(b => Row(DateOnly.FromDateTime(b.Month), b.Category, b.LimitAmount, b.Notes)))
+                    ),
+                Sheet("Balance snapshots", new[] { Row("Date", "Account", "Actual balance", "Expected balance", "Difference", "Reconciled", "Notes") }
+                    .Concat(balanceSnapshots.Select(s => Row(DateOnly.FromDateTime(s.SnapshotDate), s.Account?.Name, s.ActualBalance,
+                        s.ExpectedBalance, s.Difference, s.IsReconciled, s.Notes)))
+                    ),
                 Sheet("Subscriptions", new[] { Row("Name", "Category", "Provider", "Account", "Amount", "Currency", "Interval days", "Started on", "Next due", "Auto renew", "Status", "Notes") }
                     .Concat(subscriptions.Select(s => Row(s.Name, s.Category, s.Provider, s.Account?.Name, s.Amount, s.Currency,
                         s.BillingIntervalDays, DateOnly.FromDateTime(s.StartedOn), DateOnly.FromDateTime(s.NextDueOn),
@@ -115,6 +135,86 @@ public static class OdsEndpoints
             await RecalculateFinanceBalances(db);
 
             return Results.Ok(new OdsImportResult(accounts, transactions, monthlySummaries, subscriptions, financeCategories, assetCategories, assets, warnings.ToArray()));
+        }).DisableAntiforgery();
+
+        g.MapPost("/import/ods/preview", ([FromForm] IFormFile file) =>
+        {
+            if (file.Length == 0) return Results.BadRequest(new { error = "Choose an ODS file." });
+            if (!Path.GetExtension(file.FileName).Equals(".ods", StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "Only .ods files are supported." });
+            using var stream = file.OpenReadStream();
+            var tables = ReadOdsTables(stream);
+            var sheets = tables.Select(kv =>
+            {
+                var (headers, data) = SplitHeader(kv.Value);
+                var orderedHeaders = headers.OrderBy(h => h.Value).Select(h => kv.Value.First(r => r.Count(c => !string.IsNullOrWhiteSpace(c)) >= 2)[h.Value]).ToArray();
+                return new OdsPreviewSheet(
+                    kv.Key,
+                    orderedHeaders,
+                    data.Take(5).Select(r => orderedHeaders.Select((_, i) => i < r.Count ? r[i] : "").ToArray()).ToArray(),
+                    SuggestedTarget(kv.Key, orderedHeaders));
+            }).ToArray();
+            return Results.Ok(new OdsPreviewResult(sheets));
+        }).DisableAntiforgery();
+
+        g.MapPost("/import/ods/mapped", async ([FromForm] IFormFile file, [FromForm] string mappingJson, AppDbContext db) =>
+        {
+            if (file.Length == 0) return Results.BadRequest(new { error = "Choose an ODS file." });
+            var mapping = System.Text.Json.JsonSerializer.Deserialize<OdsMappedImportRequest>(mappingJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (mapping is null || string.IsNullOrWhiteSpace(mapping.SheetName) || string.IsNullOrWhiteSpace(mapping.Target))
+                return Results.BadRequest(new { error = "Choose a sheet and target." });
+
+            using var stream = file.OpenReadStream();
+            var tables = ReadOdsTables(stream);
+            if (!tables.TryGetValue(mapping.SheetName, out var sourceRows))
+                return Results.BadRequest(new { error = "Selected sheet was not found." });
+
+            var mappedTable = BuildMappedTable(sourceRows, mapping.Columns);
+            var targetTables = new Dictionary<string, List<List<string>>>(StringComparer.OrdinalIgnoreCase)
+            {
+                [CanonicalSheetName(mapping.Target)] = mappedTable
+            };
+            var warnings = new List<string>();
+            var accounts = 0;
+            var transactions = 0;
+            var monthlySummaries = 0;
+            var subscriptions = 0;
+            var financeCategories = 0;
+            var assetCategories = 0;
+            var assets = 0;
+
+            switch (Normalize(mapping.Target))
+            {
+                case "accounts":
+                    accounts = await ImportAccounts(targetTables, db, warnings);
+                    break;
+                case "transactions":
+                    transactions = await ImportTransactions(targetTables, db, warnings);
+                    break;
+                case "monthlysummaries":
+                    monthlySummaries = await ImportMonthlySummaries(targetTables, db, warnings);
+                    break;
+                case "subscriptions":
+                    subscriptions = await ImportSubscriptions(targetTables, db, warnings);
+                    break;
+                case "financecategories":
+                    financeCategories = await ImportFinanceCategories(targetTables, db, warnings);
+                    break;
+                case "assetcategories":
+                    assetCategories = await ImportAssetCategories(targetTables, db, warnings);
+                    break;
+                case "assets":
+                    assets = await ImportAssets(targetTables, db, warnings);
+                    break;
+                default:
+                    return Results.BadRequest(new { error = "Unsupported import target." });
+            }
+
+            await db.SaveChangesAsync();
+            await RecalculateFinanceBalances(db);
+            return Results.Ok(new OdsImportResult(accounts, transactions, monthlySummaries, subscriptions,
+                financeCategories, assetCategories, assets, warnings.ToArray()));
         }).DisableAntiforgery();
 
         return app;
@@ -500,6 +600,49 @@ public static class OdsEndpoints
             .ToDictionary(g => g.Key, g => g.First().index);
         return (headers, rows.Skip(rows.IndexOf(headerRow) + 1));
     }
+
+    static List<List<string>> BuildMappedTable(List<List<string>> rows, Dictionary<string, string> columns)
+    {
+        var (headers, data) = SplitHeader(rows);
+        var canonicalHeaders = columns.Keys.Where(k => !string.IsNullOrWhiteSpace(k)).ToList();
+        var mapped = new List<List<string>> { canonicalHeaders };
+        foreach (var row in data)
+        {
+            mapped.Add(canonicalHeaders.Select(canonical =>
+            {
+                var source = columns[canonical];
+                if (string.IsNullOrWhiteSpace(source)) return "";
+                return Get(row, headers, source) ?? "";
+            }).ToList());
+        }
+        return mapped;
+    }
+
+    static string SuggestedTarget(string sheetName, string[] headers)
+    {
+        var name = Normalize(sheetName);
+        var normalizedHeaders = headers.Select(Normalize).ToHashSet();
+        if (name.Contains("transaction") || normalizedHeaders.Contains("payee")) return "Transactions";
+        if (name.Contains("monthly") || name.Contains("monatssummen")) return "Monthly summaries";
+        if (name.Contains("subscription") || name.Contains("abos")) return "Subscriptions";
+        if (name.Contains("account") || name.Contains("konten")) return "Accounts";
+        if (name.Contains("financecategor")) return "Finance categories";
+        if (name.Contains("assetcategor") || name.Contains("kategorien")) return "Asset categories";
+        if (name.Contains("asset") || name.Contains("inventar")) return "Assets";
+        return "";
+    }
+
+    static string CanonicalSheetName(string target) => Normalize(target) switch
+    {
+        "accounts" => "Accounts",
+        "transactions" => "Transactions",
+        "monthlysummaries" => "Monthly summaries",
+        "subscriptions" => "Subscriptions",
+        "financecategories" => "Finance categories",
+        "assetcategories" => "Asset categories",
+        "assets" => "Assets",
+        _ => target
+    };
 
     static string? Get(List<string> row, Dictionary<string, int> headers, params string[] names)
     {

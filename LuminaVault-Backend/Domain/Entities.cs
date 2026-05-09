@@ -169,6 +169,7 @@ public class FinanceAccount
 
     public List<FinanceTransaction> Transactions { get; set; } = new();
     public List<Subscription> Subscriptions { get; set; } = new();
+    public List<AccountBalanceSnapshot> BalanceSnapshots { get; set; } = new();
 }
 
 public class FinanceTransaction
@@ -202,6 +203,32 @@ public class MonthlyAccountSummary
     public decimal Expenses { get; set; }
     public decimal? OpeningBalance { get; set; }
     public decimal? ClosingBalance { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class FinanceBudget
+{
+    public int Id { get; set; }
+    [Required, MaxLength(80)] public string Category { get; set; } = "General";
+    public DateTime Month { get; set; } = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+    public decimal LimitAmount { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class AccountBalanceSnapshot
+{
+    public int Id { get; set; }
+    public int AccountId { get; set; }
+    public FinanceAccount? Account { get; set; }
+    public DateTime SnapshotDate { get; set; } = DateTime.UtcNow.Date;
+    public decimal ActualBalance { get; set; }
+    public decimal ExpectedBalance { get; set; }
+    public decimal Difference { get; set; }
+    public bool IsReconciled { get; set; } = true;
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

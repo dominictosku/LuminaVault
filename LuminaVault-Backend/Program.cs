@@ -180,11 +180,41 @@ using (var scope = app.Services.CreateScope())
         );
         """);
 
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS FinanceBudgets (
+            Id INTEGER NOT NULL CONSTRAINT PK_FinanceBudgets PRIMARY KEY AUTOINCREMENT,
+            Category TEXT NOT NULL,
+            Month TEXT NOT NULL,
+            LimitAmount TEXT NOT NULL,
+            Notes TEXT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS AccountBalanceSnapshots (
+            Id INTEGER NOT NULL CONSTRAINT PK_AccountBalanceSnapshots PRIMARY KEY AUTOINCREMENT,
+            AccountId INTEGER NOT NULL,
+            SnapshotDate TEXT NOT NULL,
+            ActualBalance TEXT NOT NULL,
+            ExpectedBalance TEXT NOT NULL,
+            Difference TEXT NOT NULL,
+            IsReconciled INTEGER NOT NULL,
+            Notes TEXT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL,
+            CONSTRAINT FK_AccountBalanceSnapshots_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
+        );
+        """);
+
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_OccurredOn ON FinanceTransactions (OccurredOn)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Category ON FinanceTransactions (Category)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_AccountId ON FinanceTransactions (AccountId)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_TransferAccountId ON FinanceTransactions (TransferAccountId)");
     db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_MonthlyAccountSummaries_AccountId_Month ON MonthlyAccountSummaries (AccountId, Month)");
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_FinanceBudgets_Category_Month ON FinanceBudgets (Category, Month)");
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AccountBalanceSnapshots_AccountId_SnapshotDate ON AccountBalanceSnapshots (AccountId, SnapshotDate)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_NextDueOn ON Subscriptions (NextDueOn)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_AccountId ON Subscriptions (AccountId)");
 

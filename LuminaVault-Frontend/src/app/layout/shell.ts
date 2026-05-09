@@ -32,6 +32,10 @@ import { AuthService } from '../core/auth.service';
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-chart-bar text-violet-300"></i> Statistics
           </a>
+          <a routerLink="/budgets" routerLinkActive="bg-white/8 text-white"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
+            <i class="pi pi-chart-pie text-violet-300"></i> Budgets
+          </a>
           <a routerLink="/accounts" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-wallet text-violet-300"></i> Accounts

@@ -1,0 +1,116 @@
+<div class="p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Budgets</h1>
+      <p class="text-slate-400 text-sm mt-1">Plan monthly category limits and compare them against actual spending.</p>
+    </div>
+    <input class="input max-w-44" type="month" [ngModel]="month()" (ngModelChange)="onMonthChange($event)" />
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_390px] gap-4">
+    <section class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Budgeted</div>
+          <div class="text-2xl font-semibold mt-2">{{ overview()?.totalBudget ?? 0 | currency:'CHF':'symbol-narrow' }}</div>
+        </div>
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Spent</div>
+          <div class="text-2xl font-semibold mt-2">{{ overview()?.totalSpent ?? 0 | currency:'CHF':'symbol-narrow' }}</div>
+        </div>
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Remaining</div>
+          <div class="text-2xl font-semibold mt-2"
+               [class.text-emerald-300]="(overview()?.remaining ?? 0) >= 0"
+               [class.text-red-300]="(overview()?.remaining ?? 0) < 0">
+            {{ overview()?.remaining ?? 0 | currency:'CHF':'symbol-narrow' }}
+          </div>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3,4]; track _) { <div class="surface h-20 animate-pulse"></div> }
+        </div>
+      } @else if (!overview()?.rows?.length) {
+        <div class="surface p-8 text-center">
+          <i class="pi pi-chart-pie text-4xl text-violet-300/70"></i>
+          <div class="mt-3 text-lg">No budgets for this month.</div>
+        </div>
+      } @else {
+        <div class="surface overflow-hidden">
+          <div class="divide-y divide-white/5">
+            @for (row of overview()!.rows; track row.id) {
+              <button type="button" class="w-full text-left px-4 py-4 hover:bg-white/5 transition" (click)="edit(row)">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="font-medium truncate">{{ row.category }}</div>
+                      <div class="text-sm text-slate-300">
+                        {{ row.spent | currency:'CHF':'symbol-narrow' }} / {{ row.limitAmount | currency:'CHF':'symbol-narrow' }}
+                      </div>
+                    </div>
+                    <div class="mt-3 h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div class="h-full"
+                           [class.bg-emerald-400]="row.usedPercent < 80"
+                           [class.bg-amber-300]="row.usedPercent >= 80 && row.usedPercent <= 100"
+                           [class.bg-red-400]="row.usedPercent > 100"
+                           [style.width.%]="usageWidth(row)">
+                      </div>
+                    </div>
+                    <div class="mt-2 flex justify-between text-xs text-slate-500">
+                      <span>{{ row.usedPercent | number:'1.0-1' }}% used</span>
+                      <span [class.text-emerald-300]="row.remaining >= 0" [class.text-red-300]="row.remaining < 0">
+                        {{ row.remaining | currency:'CHF':'symbol-narrow' }} left
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            }
+          </div>
+        </div>
+      }
+    </section>
+
+    <aside class="surface p-5 h-fit">
+      <h2 class="font-medium flex items-center gap-2 mb-4">
+        <i class="pi pi-pen-to-square text-violet-300"></i>
+        {{ editingId() ? 'Edit budget' : 'New budget' }}
+      </h2>
+      <form (ngSubmit)="save()" class="space-y-4">
+        <div>
+          <label class="label">Category</label>
+          <select class="select" name="category" [(ngModel)]="model.category">
+            @for (category of categoryNames(); track category) {
+              <option [ngValue]="category">{{ category }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <label class="label">Limit</label>
+          <input class="input" type="number" step="0.01" min="0" name="limit" [(ngModel)]="model.limitAmount" />
+        </div>
+        <div>
+          <label class="label">Notes</label>
+          <textarea class="textarea" rows="3" name="notes" [(ngModel)]="model.notes"></textarea>
+        </div>
+        @if (error()) {
+          <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{{ error() }}</div>
+        }
+        <div class="flex gap-2">
+          @if (editingId()) {
+            <button type="button" class="btn btn-danger" (click)="remove()" [disabled]="saving()">
+              <i class="pi pi-trash"></i>
+            </button>
+          }
+          <button type="button" class="btn btn-ghost flex-1 justify-center" (click)="reset()">Cancel</button>
+          <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving()">
+            @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+            Save
+          </button>
+        </div>
+      </form>
+    </aside>
+  </div>
+</div>

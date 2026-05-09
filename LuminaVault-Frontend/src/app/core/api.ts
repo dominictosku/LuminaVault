@@ -6,6 +6,8 @@ import { InventoryApi } from './data-access/inventory-api';
 import { SettingsApi } from './data-access/settings-api';
 import {
   AssetCategoryInput,
+  AccountBalanceSnapshotInput,
+  FinanceBudgetInput,
   FinanceAccountInput,
   FinanceTransactionInput,
   FinanceTransactionKind,
@@ -171,6 +173,38 @@ export class Api {
 
   deleteFinanceAccount(id: number) {
     return this.finance.deleteFinanceAccount(id);
+  }
+
+  listBudgets(month?: string) {
+    return this.finance.listBudgets(month);
+  }
+
+  budgetOverview(month?: string) {
+    return this.finance.budgetOverview(month);
+  }
+
+  createBudget(input: FinanceBudgetInput) {
+    return this.finance.createBudget(input);
+  }
+
+  updateBudget(id: number, input: FinanceBudgetInput) {
+    return this.finance.updateBudget(id, input);
+  }
+
+  deleteBudget(id: number) {
+    return this.finance.deleteBudget(id);
+  }
+
+  listBalanceSnapshots(accountId?: number) {
+    return this.finance.listBalanceSnapshots(accountId);
+  }
+
+  createBalanceSnapshot(input: AccountBalanceSnapshotInput) {
+    return this.finance.createBalanceSnapshot(input);
+  }
+
+  deleteBalanceSnapshot(id: number) {
+    return this.finance.deleteBalanceSnapshot(id);
   }
 
   listFinanceTransactions(opts: {

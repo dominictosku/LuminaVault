@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
-import { OdsImportResult } from '../models';
+import { OdsImportResult, OdsMappedImportRequest, OdsPreviewResult } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class DataTransferApi {
@@ -18,5 +18,18 @@ export class DataTransferApi {
     const fd = new FormData();
     fd.append('file', file);
     return this.http.post<OdsImportResult>(`${API_BASE}/api/data/import/ods`, fd);
+  }
+
+  previewOds(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<OdsPreviewResult>(`${API_BASE}/api/data/import/ods/preview`, fd);
+  }
+
+  importMappedOds(file: File, mapping: OdsMappedImportRequest) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('mappingJson', JSON.stringify(mapping));
+    return this.http.post<OdsImportResult>(`${API_BASE}/api/data/import/ods/mapped`, fd);
   }
 }

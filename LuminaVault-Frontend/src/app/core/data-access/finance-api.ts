@@ -4,6 +4,11 @@ import { API_BASE } from '../api-base';
 import {
   FinanceAccount,
   FinanceAccountInput,
+  AccountBalanceSnapshot,
+  AccountBalanceSnapshotInput,
+  FinanceBudget,
+  FinanceBudgetInput,
+  FinanceBudgetOverview,
   FinanceStatistics,
   FinanceSummary,
   FinanceTransaction,
@@ -43,6 +48,41 @@ export class FinanceApi {
 
   deleteFinanceAccount(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/accounts/${id}`);
+  }
+
+  listBudgets(month?: string) {
+    const params = month ? new HttpParams().set('month', month) : undefined;
+    return this.http.get<FinanceBudget[]>(`${API_BASE}/api/finance/budgets`, { params });
+  }
+
+  budgetOverview(month?: string) {
+    const params = month ? new HttpParams().set('month', month) : undefined;
+    return this.http.get<FinanceBudgetOverview>(`${API_BASE}/api/finance/budgets/overview`, { params });
+  }
+
+  createBudget(input: FinanceBudgetInput) {
+    return this.http.post<FinanceBudget>(`${API_BASE}/api/finance/budgets`, input);
+  }
+
+  updateBudget(id: number, input: FinanceBudgetInput) {
+    return this.http.put<FinanceBudget>(`${API_BASE}/api/finance/budgets/${id}`, input);
+  }
+
+  deleteBudget(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/finance/budgets/${id}`);
+  }
+
+  listBalanceSnapshots(accountId?: number) {
+    const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
+    return this.http.get<AccountBalanceSnapshot[]>(`${API_BASE}/api/finance/balance-snapshots`, { params });
+  }
+
+  createBalanceSnapshot(input: AccountBalanceSnapshotInput) {
+    return this.http.post<AccountBalanceSnapshot>(`${API_BASE}/api/finance/balance-snapshots`, input);
+  }
+
+  deleteBalanceSnapshot(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/finance/balance-snapshots/${id}`);
   }
 
   listFinanceTransactions(opts: {

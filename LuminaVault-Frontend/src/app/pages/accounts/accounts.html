@@ -106,6 +106,57 @@
           <input type="checkbox" name="archived" [(ngModel)]="model.isArchived" />
           Archived
         </label>
+
+        @if (editingId()) {
+          <div class="surface-muted p-3 space-y-3">
+            <div>
+              <div class="font-medium text-sm">Reconcile balance</div>
+              <div class="text-xs text-slate-500 mt-1">
+                Save a bank-statement balance. Future balances are calculated from this checkpoint.
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="label">Statement date</label>
+                <input class="input" type="date" name="snapshotDate" [(ngModel)]="snapshotDate" />
+              </div>
+              <div>
+                <label class="label">Actual balance</label>
+                <input class="input" type="number" step="0.01" name="snapshotBalance" [(ngModel)]="snapshotActualBalance" />
+              </div>
+            </div>
+            <div>
+              <label class="label">Snapshot notes</label>
+              <input class="input" name="snapshotNotes" [(ngModel)]="snapshotNotes" placeholder="bank statement, manual correction..." />
+            </div>
+            <button type="button" class="btn btn-ghost w-full justify-center" (click)="saveSnapshot()">
+              <i class="pi pi-check-circle"></i> Save reconciliation snapshot
+            </button>
+          </div>
+
+          @if (snapshots().length) {
+            <div class="space-y-2">
+              <div class="label">Recent snapshots</div>
+              @for (snapshot of snapshots(); track snapshot.id) {
+                <div class="surface-muted p-3 flex items-center justify-between gap-3 text-sm">
+                  <div class="min-w-0">
+                    <div>{{ snapshot.actualBalance | currency:snapshot.currency:'symbol-narrow' }}</div>
+                    <div class="text-xs text-slate-500 truncate">
+                      {{ snapshot.snapshotDate | date:'mediumDate' }} · diff
+                      <span [class.text-emerald-300]="snapshot.difference === 0" [class.text-red-300]="snapshot.difference !== 0">
+                        {{ snapshot.difference | currency:snapshot.currency:'symbol-narrow' }}
+                      </span>
+                    </div>
+                  </div>
+                  <button type="button" class="btn btn-danger px-3" (click)="deleteSnapshot(snapshot)">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        }
+
         @if (error()) {
           <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
             {{ error() }}
