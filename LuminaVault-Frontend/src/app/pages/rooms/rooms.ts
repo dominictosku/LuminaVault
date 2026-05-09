@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-rooms',
@@ -12,6 +13,7 @@ import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } fro
 })
 export class RoomsComponent {
   private api = inject(InventoryApi);
+  private confirmDialog = inject(ConfirmDialogService);
 
   kinds = FURNITURE_KINDS;
   house = signal<House | null>(null);
@@ -60,9 +62,16 @@ export class RoomsComponent {
     this.api.listFurniture(r.id).subscribe(f => this.furniture.set(f));
   }
 
-  deleteRoom() {
+  async deleteRoom() {
     const r = this.selectedRoom();
-    if (!r || !confirm(`Delete room "${r.name}" and all its furniture?`)) return;
+    if (!r) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete room?',
+      message: `Delete "${r.name}" and all its furniture?`,
+      detail: 'Containers inside that furniture are removed too.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteRoom(r.id).subscribe(() => {
       this.selectedRoom.set(null);
       this.refresh();
@@ -96,9 +105,14 @@ export class RoomsComponent {
     this.api.listContainers(f.id).subscribe(c => this.containers.set(c));
   }
 
-  deleteFurniture(id: number, event: Event) {
+  async deleteFurniture(id: number, event: Event) {
     event.stopPropagation();
-    if (!confirm('Delete this furniture and all its containers?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete furniture?',
+      message: 'Delete this furniture and all its containers?',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteFurniture(id).subscribe(() => {
       if (this.selectedFurniture()?.id === id) {
         this.selectedFurniture.set(null);
@@ -150,8 +164,13 @@ export class RoomsComponent {
     });
   }
 
-  deleteContainer(id: number) {
-    if (!confirm('Delete this container?')) return;
+  async deleteContainer(id: number) {
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete container?',
+      message: 'This container will be removed.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteContainer(id).subscribe(() => {
       const f = this.selectedFurniture();
       if (f) this.api.listContainers(f.id).subscribe(c => this.containers.set(c));

@@ -5,6 +5,7 @@ import { forkJoin, of, switchMap } from 'rxjs';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import { AssetCategory, Container, Furniture, House, Item, Room } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-item-form',
@@ -15,6 +16,7 @@ import { AssetCategory, Container, Furniture, House, Item, Room } from '../../co
 export class ItemFormComponent {
   protected api = inject(InventoryApi);
   private settingsApi = inject(SettingsApi);
+  private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -149,9 +151,15 @@ export class ItemFormComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.id()) return;
-    if (!confirm('Delete this item permanently?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete asset?',
+      message: 'This asset will be permanently deleted.',
+      detail: 'Photos and the attached 3D model are removed with it.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteItem(this.id()!).subscribe(() => this.router.navigate(['/items']));
   }
 

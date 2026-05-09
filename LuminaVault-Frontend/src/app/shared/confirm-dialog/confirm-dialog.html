@@ -1,0 +1,51 @@
+@if (dialog.request(); as request) {
+  <div class="fixed inset-0 z-50 grid place-items-center px-4 py-6">
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+      aria-label="Cancel"
+      (click)="dialog.close(false)">
+    </button>
+
+    <section
+      class="surface relative w-full max-w-md p-5 shadow-2xl shadow-black/40 fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title">
+      <div class="flex items-start gap-4">
+        <div
+          class="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-xl border"
+          [class.border-red-400/30]="request.tone === 'danger'"
+          [class.bg-red-500/15]="request.tone === 'danger'"
+          [class.text-red-300]="request.tone === 'danger'"
+          [class.border-violet-400/30]="request.tone !== 'danger'"
+          [class.bg-violet-500/15]="request.tone !== 'danger'"
+          [class.text-violet-300]="request.tone !== 'danger'">
+          <i class="pi" [class.pi-trash]="request.tone === 'danger'" [class.pi-question]="request.tone !== 'danger'"></i>
+        </div>
+
+        <div class="min-w-0 flex-1">
+          <h2 id="confirm-dialog-title" class="text-lg font-semibold tracking-tight">{{ request.title }}</h2>
+          <p class="mt-2 text-sm text-slate-300">{{ request.message }}</p>
+          @if (request.detail) {
+            <p class="mt-2 text-xs text-slate-500">{{ request.detail }}</p>
+          }
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" class="btn btn-ghost justify-center" (click)="dialog.close(false)">
+          {{ request.cancelText }}
+        </button>
+        <button
+          type="button"
+          class="btn justify-center"
+          [class.btn-danger]="request.tone === 'danger'"
+          [class.btn-primary]="request.tone !== 'danger'"
+          (click)="dialog.close(true)">
+          {{ request.confirmText }}
+        </button>
+      </div>
+    </section>
+  </div>
+}

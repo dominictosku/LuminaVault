@@ -7,6 +7,7 @@ import {
   FinanceCategory,
   FinanceCategoryInput,
 } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 type SettingsTab = 'assets' | 'finance';
 type EditableCategory = AssetCategory | FinanceCategory;
@@ -20,6 +21,7 @@ type CategoryInput = AssetCategoryInput | FinanceCategoryInput;
 })
 export class SettingsComponent {
   private api = inject(SettingsApi);
+  private confirmDialog = inject(ConfirmDialogService);
   tab = signal<SettingsTab>('assets');
   assetCategories = signal<AssetCategory[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
@@ -102,10 +104,16 @@ export class SettingsComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.editingId()) return;
     const label = this.tab() === 'assets' ? 'asset' : 'finance';
-    if (!confirm(`Delete this ${label} category? Existing records keep their category text.`)) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: `Delete ${label} category?`,
+      message: `This ${label} category will be removed from the predefined dropdowns.`,
+      detail: 'Existing records keep their category text.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     const op = this.tab() === 'assets'
       ? this.api.deleteAssetCategory(this.editingId()!)
       : this.api.deleteFinanceCategory(this.editingId()!);

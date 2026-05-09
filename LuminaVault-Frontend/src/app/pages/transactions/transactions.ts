@@ -14,6 +14,7 @@ import {
   FinanceTransactionKind,
   FinanceTransactionStatus,
 } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-transactions',
@@ -24,6 +25,7 @@ import {
 export class TransactionsComponent {
   private api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
+  private confirmDialog = inject(ConfirmDialogService);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   transactions = signal<FinanceTransaction[]>([]);
@@ -158,9 +160,14 @@ export class TransactionsComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.editingId()) return;
-    if (!confirm('Delete this transaction?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete transaction?',
+      message: 'This transaction will be removed from your account history.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteFinanceTransaction(this.editingId()!).subscribe(() => {
       this.reset();
       this.fetch();

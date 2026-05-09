@@ -8,6 +8,7 @@ import {
   FinanceAccountInput,
   FinanceAccountType,
 } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-accounts',
@@ -17,6 +18,7 @@ import {
 })
 export class AccountsComponent {
   private api = inject(FinanceApi);
+  private confirmDialog = inject(ConfirmDialogService);
   accounts = signal<FinanceAccount[]>([]);
   loading = signal(true);
   saving = signal(false);
@@ -82,9 +84,15 @@ export class AccountsComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.editingId()) return;
-    if (!confirm('Archive or delete this account?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete account?',
+      message: 'Archive or delete this account?',
+      detail: 'Accounts with financial history may be archived by the backend instead of removed.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteFinanceAccount(this.editingId()!).subscribe(() => {
       this.reset();
       this.fetch();

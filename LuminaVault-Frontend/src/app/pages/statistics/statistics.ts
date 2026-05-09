@@ -80,4 +80,8 @@ export class StatisticsComponent {
   shortMonth(month: string) {
     return month.split(' ')[0];
   }
+
+  money(value: number) {
+    return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(value);
+  }
 }

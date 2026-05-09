@@ -62,10 +62,16 @@
           @for (m of stats()!.monthlySeries; track m.month; let i = $index) {
             <g>
               <rect [attr.x]="monthX(i) - 12" [attr.y]="barY(m.income)" width="9" [attr.height]="barHeight(m.income)"
-                    rx="2" fill="#34d399" opacity=".85"></rect>
+                    rx="2" fill="#34d399" opacity=".85">
+                <title>{{ m.month }} income: {{ money(m.income) }}</title>
+              </rect>
               <rect [attr.x]="monthX(i)" [attr.y]="barY(m.expenses)" width="9" [attr.height]="barHeight(m.expenses)"
-                    rx="2" fill="#fb7185" opacity=".85"></rect>
-              <circle [attr.cx]="monthX(i) + 4" [attr.cy]="netY(m.net)" r="3" fill="#c4b5fd"></circle>
+                    rx="2" fill="#fb7185" opacity=".85">
+                <title>{{ m.month }} expenses: {{ money(m.expenses) }}</title>
+              </rect>
+              <circle [attr.cx]="monthX(i) + 4" [attr.cy]="netY(m.net)" r="3" fill="#c4b5fd">
+                <title>{{ m.month }} net: {{ money(m.net) }}</title>
+              </circle>
               @if (i > 0) {
                 <line [attr.x1]="monthX(i - 1) + 4" [attr.y1]="netY(stats()!.monthlySeries[i - 1].net)"
                       [attr.x2]="monthX(i) + 4" [attr.y2]="netY(m.net)"
@@ -86,13 +92,16 @@
         <h2 class="font-medium flex items-center gap-2 mb-5"><i class="pi pi-wallet text-violet-300"></i> Account balances</h2>
         <div class="space-y-3">
           @for (a of stats()!.accountBalances; track a.account) {
-            <div>
+            <div class="group relative">
               <div class="flex justify-between gap-3 text-sm mb-1">
                 <span class="truncate">{{ a.account }}</span>
                 <span class="text-slate-300">{{ a.balance | currency:a.currency:'symbol-narrow' }}</span>
               </div>
               <div class="h-2 rounded-full bg-white/5 overflow-hidden">
                 <div class="h-full bg-gradient-to-r from-violet-500 to-pink-500" [style.width.%]="accountWidth(a.balance)"></div>
+              </div>
+              <div class="chart-tooltip right-0 top-7">
+                {{ a.account }} · {{ a.balance | currency:a.currency:'symbol-narrow' }}
               </div>
               <div class="text-xs text-slate-500 mt-1">{{ a.type }}</div>
             </div>
@@ -111,13 +120,16 @@
         <h2 class="font-medium flex items-center gap-2 mb-5"><i class="pi pi-calendar-clock text-violet-300"></i> Subscription costs by category</h2>
         <div class="space-y-3">
           @for (row of stats()!.subscriptionCategoryBreakdown; track row.category) {
-            <div>
+            <div class="group relative">
               <div class="flex justify-between text-sm mb-1">
                 <span class="truncate">{{ row.category }}</span>
                 <span class="text-slate-300">{{ row.monthlyAmount | currency:'CHF':'symbol-narrow' }}/mo</span>
               </div>
               <div class="h-2 rounded-full bg-white/5 overflow-hidden">
                 <div class="h-full bg-gradient-to-r from-amber-300 to-pink-400" [style.width.%]="subscriptionWidth(row)"></div>
+              </div>
+              <div class="chart-tooltip right-0 top-7">
+                {{ row.category }} · {{ row.monthlyAmount | currency:'CHF':'symbol-narrow' }}/mo
               </div>
               <div class="text-xs text-slate-500 mt-1">{{ row.count }} active · {{ row.annualAmount | currency:'CHF':'symbol-narrow' }}/year</div>
             </div>
@@ -180,7 +192,7 @@
       } @else {
         <div class="space-y-3">
           @for (row of rows; track row.category; let i = $index) {
-            <div>
+            <div class="group relative">
               <div class="flex justify-between text-sm mb-1">
                 <span class="truncate">{{ row.category }}</span>
                 <span class="text-slate-300">{{ row.amount | currency:'CHF':'symbol-narrow' }}</span>
@@ -190,6 +202,9 @@
                      [class.bg-red-400]="mode === 'expense'"
                      [class.bg-emerald-400]="mode === 'income'"
                      [style.width.%]="share(row.amount, total)"></div>
+              </div>
+              <div class="chart-tooltip right-0 top-7">
+                {{ row.category }} · {{ row.amount | currency:'CHF':'symbol-narrow' }}
               </div>
               <div class="flex justify-between text-xs text-slate-500 mt-1">
                 <span>{{ row.count }} entries</span>

@@ -8,6 +8,7 @@ import {
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
 } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-monthly-summaries',
@@ -17,6 +18,7 @@ import {
 })
 export class MonthlySummariesComponent {
   private api = inject(FinanceApi);
+  private confirmDialog = inject(ConfirmDialogService);
   accounts = signal<FinanceAccount[]>([]);
   summaries = signal<MonthlyAccountSummary[]>([]);
   loading = signal(true);
@@ -106,9 +108,14 @@ export class MonthlySummariesComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.editingId()) return;
-    if (!confirm('Delete this monthly summary?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete monthly summary?',
+      message: 'This monthly income and expense summary will be removed.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteMonthlySummary(this.editingId()!).subscribe(() => {
       this.reset();
       this.fetchSummaries();

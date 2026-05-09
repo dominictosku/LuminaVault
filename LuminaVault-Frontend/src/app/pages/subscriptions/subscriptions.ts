@@ -12,6 +12,7 @@ import {
   SubscriptionInput,
   SubscriptionStatus,
 } from '../../core/models';
+import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 @Component({
   selector: 'app-subscriptions',
@@ -22,6 +23,7 @@ import {
 export class SubscriptionsComponent {
   private api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
+  private confirmDialog = inject(ConfirmDialogService);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
@@ -167,9 +169,14 @@ export class SubscriptionsComponent {
     });
   }
 
-  remove() {
+  async remove() {
     if (!this.editingId()) return;
-    if (!confirm('Delete this subscription?')) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: 'Delete subscription?',
+      message: 'This recurring subscription record will be removed.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
     this.api.deleteSubscription(this.editingId()!).subscribe(() => {
       this.reset();
       this.fetchAll();
