@@ -1,6 +1,6 @@
 import { CurrencyPipe, DatePipe, DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
 import { FinanceStatistics } from '../../core/models';
 
 type AmountRow = { category: string; amount: number; count: number; average?: number };
@@ -13,7 +13,7 @@ type SubscriptionRow = { category: string; monthlyAmount: number; annualAmount: 
   styleUrl: './statistics.scss'
 })
 export class StatisticsComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
   stats = signal<FinanceStatistics | null>(null);
 
   maxFlow = computed(() => Math.max(

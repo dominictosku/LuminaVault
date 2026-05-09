@@ -2,7 +2,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
 import {
   FinanceAccount,
   MonthlyAccountSummary,
@@ -16,7 +16,7 @@ import {
   styleUrl: './monthly-summaries.scss'
 })
 export class MonthlySummariesComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
   accounts = signal<FinanceAccount[]>([]);
   summaries = signal<MonthlyAccountSummary[]>([]);
   loading = signal(true);

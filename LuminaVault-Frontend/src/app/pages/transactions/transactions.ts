@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
+import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   FINANCE_TRANSACTION_KINDS,
   FINANCE_TRANSACTION_STATUSES,
@@ -21,7 +22,8 @@ import {
   styleUrl: './transactions.scss'
 })
 export class TransactionsComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
+  private settingsApi = inject(SettingsApi);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   transactions = signal<FinanceTransaction[]>([]);
@@ -59,7 +61,7 @@ export class TransactionsComponent {
     forkJoin({
       accounts: this.api.listFinanceAccounts(),
       transactions: this.api.listFinanceTransactions(),
-      financeCategories: this.api.listFinanceCategories(),
+      financeCategories: this.settingsApi.listFinanceCategories(),
     }).subscribe({
       next: r => {
         this.accounts.set(r.accounts);

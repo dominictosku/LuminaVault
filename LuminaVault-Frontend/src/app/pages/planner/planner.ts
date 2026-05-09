@@ -4,7 +4,7 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
-import { Api } from '../../core/api';
+import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Furniture, Item, Room } from '../../core/models';
 import { PlannerScene, PlannerState } from './scene';
 
@@ -15,7 +15,7 @@ import { PlannerScene, PlannerState } from './scene';
   styleUrl: './planner.scss'
 })
 export class PlannerComponent implements AfterViewInit, OnDestroy {
-  protected api = inject(Api);
+  protected api = inject(InventoryApi);
   private router = inject(Router);
 
   @ViewChild('host', { static: true }) host!: ElementRef<HTMLDivElement>;

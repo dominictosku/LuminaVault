@@ -1,7 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
 import {
   FINANCE_ACCOUNT_TYPES,
   FinanceAccount,
@@ -16,7 +16,7 @@ import {
   styleUrl: './accounts.scss'
 })
 export class AccountsComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
   accounts = signal<FinanceAccount[]>([]);
   loading = signal(true);
   saving = signal(false);

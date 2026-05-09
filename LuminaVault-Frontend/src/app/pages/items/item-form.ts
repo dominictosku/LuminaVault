@@ -2,7 +2,8 @@ import { Component, inject, signal, effect, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
-import { Api } from '../../core/api';
+import { InventoryApi } from '../../core/data-access/inventory-api';
+import { SettingsApi } from '../../core/data-access/settings-api';
 import { AssetCategory, Container, Furniture, House, Item, Room } from '../../core/models';
 
 @Component({
@@ -12,7 +13,8 @@ import { AssetCategory, Container, Furniture, House, Item, Room } from '../../co
   styleUrl: './item-form.scss'
 })
 export class ItemFormComponent {
-  protected api = inject(Api);
+  protected api = inject(InventoryApi);
+  private settingsApi = inject(SettingsApi);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
 
@@ -55,7 +57,7 @@ export class ItemFormComponent {
     this.tagsRaw.split(',').map(t => t.trim()).filter(t => t.length > 0));
 
   constructor() {
-    this.api.listAssetCategories().subscribe(categories => this.assetCategories.set(categories));
+    this.settingsApi.listAssetCategories().subscribe(categories => this.assetCategories.set(categories));
 
     this.api.listHouses().pipe(
       switchMap(houses => {

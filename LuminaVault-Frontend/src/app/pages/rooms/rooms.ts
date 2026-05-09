@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin, of, switchMap } from 'rxjs';
-import { Api } from '../../core/api';
+import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } from '../../core/models';
 
 @Component({
@@ -11,7 +11,7 @@ import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } fro
   styleUrl: './rooms.scss'
 })
 export class RoomsComponent {
-  private api = inject(Api);
+  private api = inject(InventoryApi);
 
   kinds = FURNITURE_KINDS;
   house = signal<House | null>(null);

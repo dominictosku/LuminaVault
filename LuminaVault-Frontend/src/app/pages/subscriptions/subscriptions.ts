@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
+import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   SUBSCRIPTION_STATUSES,
   FinanceAccount,
@@ -19,7 +20,8 @@ import {
   styleUrl: './subscriptions.scss'
 })
 export class SubscriptionsComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
+  private settingsApi = inject(SettingsApi);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
@@ -100,7 +102,7 @@ export class SubscriptionsComponent {
     forkJoin({
       accounts: this.api.listFinanceAccounts(),
       subscriptions: this.api.listSubscriptions(true),
-      financeCategories: this.api.listFinanceCategories(),
+      financeCategories: this.settingsApi.listFinanceCategories(),
     }).subscribe({
       next: r => {
         this.accounts.set(r.accounts);

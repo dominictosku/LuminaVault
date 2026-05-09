@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Api } from '../../core/api';
+import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   AssetCategory,
   AssetCategoryInput,
@@ -19,7 +19,7 @@ type CategoryInput = AssetCategoryInput | FinanceCategoryInput;
   styleUrl: './settings.scss'
 })
 export class SettingsComponent {
-  private api = inject(Api);
+  private api = inject(SettingsApi);
   tab = signal<SettingsTab>('assets');
   assetCategories = signal<AssetCategory[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);

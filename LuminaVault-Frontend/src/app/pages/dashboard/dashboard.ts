@@ -1,7 +1,7 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { Api } from '../../core/api';
+import { FinanceApi } from '../../core/data-access/finance-api';
 import { FinanceSummary } from '../../core/models';
 
 @Component({
@@ -11,7 +11,7 @@ import { FinanceSummary } from '../../core/models';
   styleUrl: './dashboard.scss'
 })
 export class DashboardComponent {
-  private api = inject(Api);
+  private api = inject(FinanceApi);
   summary = signal<FinanceSummary | null>(null);
   today = new Date();
 

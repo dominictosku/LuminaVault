@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
-import { Api } from '../../core/api';
+import { AuthApi } from '../../core/data-access/auth-api';
 
 @Component({
   selector: 'app-login',
@@ -12,7 +12,7 @@ import { Api } from '../../core/api';
 })
 export class LoginComponent {
   private auth = inject(AuthService);
-  private api = inject(Api);
+  private api = inject(AuthApi);
   private router = inject(Router);
 
   username = '';

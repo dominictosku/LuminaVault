@@ -1,14 +1,14 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs';
-import { Api } from './api';
+import { AuthApi } from './data-access/auth-api';
 
 const TOKEN_KEY = 'lv_token';
 const USER_KEY = 'lv_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private api = inject(Api);
+  private api = inject(AuthApi);
   private router = inject(Router);
 
   private _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));

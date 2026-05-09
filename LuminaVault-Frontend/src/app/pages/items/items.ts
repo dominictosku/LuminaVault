@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Api } from '../../core/api';
+import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Item } from '../../core/models';
 
 @Component({
@@ -12,7 +12,7 @@ import { Item } from '../../core/models';
   styleUrl: './items.scss'
 })
 export class ItemsComponent {
-  protected api = inject(Api);
+  protected api = inject(InventoryApi);
   items = signal<Item[]>([]);
   loading = signal(true);
   query = '';

@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { Api } from '../../core/api';
+import { DataTransferApi } from '../../core/data-access/data-transfer-api';
 import { OdsImportResult } from '../../core/models';
 
 @Component({
@@ -8,7 +8,7 @@ import { OdsImportResult } from '../../core/models';
   styleUrl: './data.scss'
 })
 export class DataComponent {
-  private api = inject(Api);
+  private api = inject(DataTransferApi);
   exporting = signal(false);
   importing = signal(false);
   error = signal<string | null>(null);
