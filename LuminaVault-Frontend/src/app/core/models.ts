@@ -79,3 +79,141 @@ export interface StatsSummary {
   byRoom: { roomId: number; roomName: string; count: number }[];
   recent: { id: number; name: string; createdAt: string }[];
 }
+
+export type FinanceAccountType =
+  | 'Checking' | 'Savings' | 'Cash' | 'CreditCard' | 'Investment' | 'Crypto' | 'Loan' | 'Other';
+
+export const FINANCE_ACCOUNT_TYPES: FinanceAccountType[] = [
+  'Checking', 'Savings', 'Cash', 'CreditCard', 'Investment', 'Crypto', 'Loan', 'Other'
+];
+
+export type FinanceTransactionKind = 'Income' | 'Expense' | 'Transfer';
+export const FINANCE_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Income', 'Expense', 'Transfer'];
+
+export type FinanceTransactionStatus = 'Pending' | 'Cleared' | 'Reconciled';
+export const FINANCE_TRANSACTION_STATUSES: FinanceTransactionStatus[] = ['Pending', 'Cleared', 'Reconciled'];
+
+export type SubscriptionStatus = 'Active' | 'Paused' | 'Cancelled';
+export const SUBSCRIPTION_STATUSES: SubscriptionStatus[] = ['Active', 'Paused', 'Cancelled'];
+
+export interface FinanceAccount {
+  id: number;
+  name: string;
+  institution?: string | null;
+  type: FinanceAccountType;
+  currency: string;
+  startingBalance: number;
+  balance: number;
+  color: string;
+  notes?: string | null;
+  isArchived: boolean;
+  createdAt: string;
+}
+
+export interface FinanceAccountInput {
+  name: string;
+  institution?: string | null;
+  type: FinanceAccountType;
+  currency: string;
+  startingBalance: number;
+  balance: number;
+  color: string;
+  notes?: string | null;
+  isArchived: boolean;
+}
+
+export interface FinanceTransaction {
+  id: number;
+  accountId: number;
+  accountName?: string | null;
+  transferAccountId?: number | null;
+  transferAccountName?: string | null;
+  kind: FinanceTransactionKind;
+  status: FinanceTransactionStatus;
+  occurredOn: string;
+  payee: string;
+  category: string;
+  amount: number;
+  description?: string | null;
+  notes?: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceTransactionInput {
+  accountId: number;
+  transferAccountId?: number | null;
+  kind: FinanceTransactionKind;
+  status: FinanceTransactionStatus;
+  occurredOn: string;
+  payee: string;
+  category: string;
+  amount: number;
+  description?: string | null;
+  notes?: string | null;
+  tags: string[];
+}
+
+export interface Subscription {
+  id: number;
+  name: string;
+  category: string;
+  provider?: string | null;
+  accountId?: number | null;
+  accountName?: string | null;
+  amount: number;
+  currency: string;
+  billingIntervalDays: number;
+  startedOn: string;
+  nextDueOn: string;
+  autoRenew: boolean;
+  status: SubscriptionStatus;
+  notes?: string | null;
+  monthlyAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubscriptionInput {
+  name: string;
+  category: string;
+  provider?: string | null;
+  accountId?: number | null;
+  amount: number;
+  currency: string;
+  billingIntervalDays: number;
+  startedOn: string;
+  nextDueOn: string;
+  autoRenew: boolean;
+  status: SubscriptionStatus;
+  notes?: string | null;
+}
+
+export interface FinanceSummary {
+  netWorth: number;
+  accountNetWorth: number;
+  inventoryValue: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  monthlyCashFlow: number;
+  savingsRate: number;
+  recurringMonthly: number;
+  activeSubscriptionCount: number;
+  accountCount: number;
+  walletCount: number;
+  investmentValue: number;
+  recentTransactions: FinanceTransaction[];
+  upcomingSubscriptions: {
+    id: number;
+    name: string;
+    category: string;
+    nextDueOn: string;
+    amount: number;
+    currency: string;
+    monthlyAmount: number;
+  }[];
+  monthlySeries: { month: string; income: number; expenses: number; net: number }[];
+  categoryBreakdown: { category: string; amount: number }[];
+  accountMix: { type: string; balance: number }[];
+}

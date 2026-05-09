@@ -82,6 +82,71 @@ using (var scope = app.Services.CreateScope())
     AddColumnIfMissing("Items", "RoomId", "INTEGER NULL REFERENCES Rooms(Id) ON DELETE SET NULL");
     AddColumnIfMissing("Items", "ModelFileName", "TEXT NULL");
     AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS FinanceAccounts (
+            Id INTEGER NOT NULL CONSTRAINT PK_FinanceAccounts PRIMARY KEY AUTOINCREMENT,
+            Name TEXT NOT NULL,
+            Institution TEXT NULL,
+            Type INTEGER NOT NULL,
+            Currency TEXT NOT NULL,
+            StartingBalance TEXT NOT NULL,
+            Balance TEXT NOT NULL,
+            Color TEXT NOT NULL,
+            Notes TEXT NULL,
+            IsArchived INTEGER NOT NULL,
+            CreatedAt TEXT NOT NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS FinanceTransactions (
+            Id INTEGER NOT NULL CONSTRAINT PK_FinanceTransactions PRIMARY KEY AUTOINCREMENT,
+            AccountId INTEGER NOT NULL,
+            TransferAccountId INTEGER NULL,
+            Kind INTEGER NOT NULL,
+            Status INTEGER NOT NULL,
+            OccurredOn TEXT NOT NULL,
+            Payee TEXT NOT NULL,
+            Category TEXT NOT NULL,
+            Amount TEXT NOT NULL,
+            Description TEXT NULL,
+            Notes TEXT NULL,
+            TagsCsv TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL,
+            CONSTRAINT FK_FinanceTransactions_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE,
+            CONSTRAINT FK_FinanceTransactions_FinanceAccounts_TransferAccountId FOREIGN KEY (TransferAccountId) REFERENCES FinanceAccounts (Id) ON DELETE SET NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS Subscriptions (
+            Id INTEGER NOT NULL CONSTRAINT PK_Subscriptions PRIMARY KEY AUTOINCREMENT,
+            Name TEXT NOT NULL,
+            Category TEXT NOT NULL,
+            Provider TEXT NULL,
+            AccountId INTEGER NULL,
+            Amount TEXT NOT NULL,
+            Currency TEXT NOT NULL,
+            BillingIntervalDays INTEGER NOT NULL,
+            StartedOn TEXT NOT NULL,
+            NextDueOn TEXT NOT NULL,
+            AutoRenew INTEGER NOT NULL,
+            Status INTEGER NOT NULL,
+            Notes TEXT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL,
+            CONSTRAINT FK_Subscriptions_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE SET NULL
+        );
+        """);
+
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_OccurredOn ON FinanceTransactions (OccurredOn)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Category ON FinanceTransactions (Category)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_AccountId ON FinanceTransactions (AccountId)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_TransferAccountId ON FinanceTransactions (TransferAccountId)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_NextDueOn ON Subscriptions (NextDueOn)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_AccountId ON Subscriptions (AccountId)");
 }
 
 if (app.Environment.IsDevelopment())
@@ -100,5 +165,6 @@ app.MapHouses();
 app.MapFurniture();
 app.MapItems();
 app.MapPhotos();
+app.MapFinance();
 
 app.Run();

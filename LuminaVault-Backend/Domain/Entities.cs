@@ -113,3 +113,82 @@ public class ItemPhoto
     [Required] public string ContentType { get; set; } = "";
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 }
+
+public enum FinanceAccountType
+{
+    Checking, Savings, Cash, CreditCard, Investment, Crypto, Loan, Other
+}
+
+public enum FinanceTransactionKind
+{
+    Income, Expense, Transfer
+}
+
+public enum FinanceTransactionStatus
+{
+    Pending, Cleared, Reconciled
+}
+
+public enum SubscriptionStatus
+{
+    Active, Paused, Cancelled
+}
+
+public class FinanceAccount
+{
+    public int Id { get; set; }
+    [Required, MaxLength(120)] public string Name { get; set; } = "";
+    [MaxLength(120)] public string? Institution { get; set; }
+    public FinanceAccountType Type { get; set; } = FinanceAccountType.Checking;
+    [Required, MaxLength(8)] public string Currency { get; set; } = "CHF";
+    public decimal StartingBalance { get; set; }
+    public decimal Balance { get; set; }
+    [MaxLength(24)] public string Color { get; set; } = "#14b8a6";
+    public string? Notes { get; set; }
+    public bool IsArchived { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<FinanceTransaction> Transactions { get; set; } = new();
+    public List<Subscription> Subscriptions { get; set; } = new();
+}
+
+public class FinanceTransaction
+{
+    public int Id { get; set; }
+    public int AccountId { get; set; }
+    public FinanceAccount? Account { get; set; }
+    public int? TransferAccountId { get; set; }
+    public FinanceAccount? TransferAccount { get; set; }
+
+    public FinanceTransactionKind Kind { get; set; } = FinanceTransactionKind.Expense;
+    public FinanceTransactionStatus Status { get; set; } = FinanceTransactionStatus.Cleared;
+    public DateTime OccurredOn { get; set; } = DateTime.UtcNow.Date;
+    [Required, MaxLength(140)] public string Payee { get; set; } = "";
+    [Required, MaxLength(80)] public string Category { get; set; } = "General";
+    public decimal Amount { get; set; }
+    public string? Description { get; set; }
+    public string? Notes { get; set; }
+    public string TagsCsv { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class Subscription
+{
+    public int Id { get; set; }
+    [Required, MaxLength(140)] public string Name { get; set; } = "";
+    [Required, MaxLength(80)] public string Category { get; set; } = "Subscriptions";
+    [MaxLength(120)] public string? Provider { get; set; }
+    public int? AccountId { get; set; }
+    public FinanceAccount? Account { get; set; }
+    public decimal Amount { get; set; }
+    [Required, MaxLength(8)] public string Currency { get; set; } = "CHF";
+    public int BillingIntervalDays { get; set; } = 30;
+    public DateTime StartedOn { get; set; } = DateTime.UtcNow.Date;
+    public DateTime NextDueOn { get; set; } = DateTime.UtcNow.Date;
+    public bool AutoRenew { get; set; } = true;
+    public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

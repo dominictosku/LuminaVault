@@ -21,6 +21,18 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/items/items').then(m => m.ItemsComponent),
       },
       {
+        path: 'transactions',
+        loadComponent: () => import('./pages/transactions/transactions').then(m => m.TransactionsComponent),
+      },
+      {
+        path: 'accounts',
+        loadComponent: () => import('./pages/accounts/accounts').then(m => m.AccountsComponent),
+      },
+      {
+        path: 'subscriptions',
+        loadComponent: () => import('./pages/subscriptions/subscriptions').then(m => m.SubscriptionsComponent),
+      },
+      {
         path: 'items/new',
         loadComponent: () => import('./pages/items/item-form').then(m => m.ItemFormComponent),
       },

@@ -14,6 +14,9 @@ public class AppDbContext : DbContext
     public DbSet<Container> Containers => Set<Container>();
     public DbSet<Item> Items => Set<Item>();
     public DbSet<ItemPhoto> ItemPhotos => Set<ItemPhoto>();
+    public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
+    public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -62,5 +65,33 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Item>().Property(i => i.Value).HasColumnType("decimal(18,2)");
+
+        b.Entity<FinanceAccount>().Property(a => a.StartingBalance).HasColumnType("decimal(18,2)");
+        b.Entity<FinanceAccount>().Property(a => a.Balance).HasColumnType("decimal(18,2)");
+
+        b.Entity<FinanceTransaction>()
+            .HasOne(t => t.Account)
+            .WithMany(a => a.Transactions)
+            .HasForeignKey(t => t.AccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<FinanceTransaction>()
+            .HasOne(t => t.TransferAccount)
+            .WithMany()
+            .HasForeignKey(t => t.TransferAccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<FinanceTransaction>().Property(t => t.Amount).HasColumnType("decimal(18,2)");
+        b.Entity<FinanceTransaction>().HasIndex(t => t.OccurredOn);
+        b.Entity<FinanceTransaction>().HasIndex(t => t.Category);
+
+        b.Entity<Subscription>()
+            .HasOne(s => s.Account)
+            .WithMany(a => a.Subscriptions)
+            .HasForeignKey(s => s.AccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<Subscription>().Property(s => s.Amount).HasColumnType("decimal(18,2)");
+        b.Entity<Subscription>().HasIndex(s => s.NextDueOn);
     }
 }

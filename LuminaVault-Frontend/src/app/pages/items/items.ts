@@ -12,8 +12,8 @@ import { Item } from '../../core/models';
     <div class="p-8 fade-in">
       <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 class="text-3xl font-semibold tracking-tight">Items</h1>
-          <p class="text-slate-400 text-sm mt-1">{{ items().length }} item(s)</p>
+          <h1 class="text-3xl font-semibold tracking-tight">Assets</h1>
+          <p class="text-slate-400 text-sm mt-1">{{ items().length }} tracked item(s)</p>
         </div>
         <div class="flex gap-3 items-center">
           <div class="relative">
@@ -22,7 +22,7 @@ import { Item } from '../../core/models';
                    [(ngModel)]="query" (ngModelChange)="onQuery($event)" />
           </div>
           <a routerLink="/items/new" class="btn btn-primary">
-            <i class="pi pi-plus"></i> New item
+            <i class="pi pi-plus"></i> Asset
           </a>
         </div>
       </div>
@@ -36,10 +36,10 @@ import { Item } from '../../core/models';
       } @else if (items().length === 0) {
         <div class="glass rounded-2xl p-10 text-center">
           <i class="pi pi-box text-5xl text-violet-300/60"></i>
-          <div class="mt-4 text-lg">No items yet.</div>
-          <p class="text-slate-400 text-sm mt-1">Start by adding your first thing.</p>
+          <div class="mt-4 text-lg">No assets yet.</div>
+          <p class="text-slate-400 text-sm mt-1">Track valuables that contribute to your net worth.</p>
           <a routerLink="/items/new" class="btn btn-primary mt-4">
-            <i class="pi pi-plus"></i> Add item
+            <i class="pi pi-plus"></i> Add asset
           </a>
         </div>
       } @else {
