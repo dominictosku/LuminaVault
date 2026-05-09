@@ -33,6 +33,10 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/subscriptions/subscriptions').then(m => m.SubscriptionsComponent),
       },
       {
+        path: 'data',
+        loadComponent: () => import('./pages/data/data').then(m => m.DataComponent),
+      },
+      {
         path: 'items/new',
         loadComponent: () => import('./pages/items/item-form').then(m => m.ItemFormComponent),
       },

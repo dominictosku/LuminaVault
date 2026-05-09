@@ -166,5 +166,6 @@ app.MapFurniture();
 app.MapItems();
 app.MapPhotos();
 app.MapFinance();
+app.MapOdsData();
 
 app.Run();

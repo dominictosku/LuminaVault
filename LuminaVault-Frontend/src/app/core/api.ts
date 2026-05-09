@@ -5,7 +5,7 @@ import {
   AuthResponse, AuthStatus, House, Room, Furniture, Container,
   Item, ItemInput, ItemPhoto, StatsSummary, FinanceAccount, FinanceAccountInput,
   FinanceSummary, FinanceTransaction, FinanceTransactionInput, FinanceTransactionKind,
-  Subscription, SubscriptionInput
+  Subscription, SubscriptionInput, OdsImportResult
 } from './models';
 
 export const API_BASE = 'http://localhost:5256';
@@ -187,5 +187,19 @@ export class Api {
   }
   deleteSubscription(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/subscriptions/${id}`);
+  }
+
+  // --- Import / Export ---
+  exportOds() {
+    return this.http.get(`${API_BASE}/api/data/export/ods`, {
+      observe: 'response',
+      responseType: 'blob',
+    });
+  }
+
+  importOds(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<OdsImportResult>(`${API_BASE}/api/data/import/ods`, fd);
   }
 }

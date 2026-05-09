@@ -217,3 +217,11 @@ export interface FinanceSummary {
   categoryBreakdown: { category: string; amount: number }[];
   accountMix: { type: string; balance: number }[];
 }
+
+export interface OdsImportResult {
+  accounts: number;
+  transactions: number;
+  subscriptions: number;
+  assets: number;
+  warnings: string[];
+}
