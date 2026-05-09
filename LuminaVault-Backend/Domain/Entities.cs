@@ -124,6 +124,15 @@ public class AssetCategory
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+public class FinanceCategory
+{
+    public int Id { get; set; }
+    [Required, MaxLength(80)] public string Name { get; set; } = "";
+    [MaxLength(24)] public string Color { get; set; } = "#7c3aed";
+    public int SortOrder { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
 public enum FinanceAccountType
 {
     Checking, Savings, Cash, CreditCard, Investment, Crypto, Loan, Other

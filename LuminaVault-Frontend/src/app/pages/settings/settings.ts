@@ -1,7 +1,16 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api } from '../../core/api';
-import { AssetCategory, AssetCategoryInput } from '../../core/models';
+import {
+  AssetCategory,
+  AssetCategoryInput,
+  FinanceCategory,
+  FinanceCategoryInput,
+} from '../../core/models';
+
+type SettingsTab = 'assets' | 'finance';
+type EditableCategory = AssetCategory | FinanceCategory;
+type CategoryInput = AssetCategoryInput | FinanceCategoryInput;
 
 @Component({
   selector: 'app-settings',
@@ -13,11 +22,28 @@ import { AssetCategory, AssetCategoryInput } from '../../core/models';
         <p class="text-slate-400 text-sm mt-1">Configure shared lists and app defaults.</p>
       </div>
 
+      <div class="surface p-1 inline-flex gap-1 mb-4">
+        <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+                [class.bg-white/10]="tab() === 'assets'"
+                [class.text-white]="tab() === 'assets'"
+                [class.text-slate-400]="tab() !== 'assets'"
+                (click)="setTab('assets')">
+          Asset categories
+        </button>
+        <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+                [class.bg-white/10]="tab() === 'finance'"
+                [class.text-white]="tab() === 'finance'"
+                [class.text-slate-400]="tab() !== 'finance'"
+                (click)="setTab('finance')">
+          Transaction & subscription categories
+        </button>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
         <section class="surface p-5">
           <div class="flex items-center justify-between mb-4">
             <h2 class="font-medium flex items-center gap-2">
-              <i class="pi pi-tags text-violet-300"></i> Asset categories
+              <i class="pi pi-tags text-violet-300"></i> {{ title() }}
             </h2>
             <button class="btn btn-primary" (click)="newCategory()">
               <i class="pi pi-plus"></i> Category
@@ -28,11 +54,11 @@ import { AssetCategory, AssetCategoryInput } from '../../core/models';
             <div class="space-y-2">
               @for (_ of [1,2,3,4]; track _) { <div class="surface-muted h-12 animate-pulse"></div> }
             </div>
-          } @else if (categories().length === 0) {
+          } @else if (currentCategories().length === 0) {
             <div class="text-sm text-slate-500">No categories yet.</div>
           } @else {
             <div class="divide-y divide-white/5">
-              @for (category of categories(); track category.id) {
+              @for (category of currentCategories(); track category.id) {
                 <button type="button" class="w-full py-3 flex items-center gap-3 text-left hover:bg-white/5 px-2 rounded-lg transition"
                         (click)="editCategory(category)">
                   <span class="w-3 h-3 rounded-sm shrink-0" [style.background]="category.color"></span>
@@ -100,22 +126,48 @@ import { AssetCategory, AssetCategoryInput } from '../../core/models';
 })
 export class SettingsComponent {
   private api = inject(Api);
-  categories = signal<AssetCategory[]>([]);
+  tab = signal<SettingsTab>('assets');
+  assetCategories = signal<AssetCategory[]>([]);
+  financeCategories = signal<FinanceCategory[]>([]);
   loading = signal(true);
   saving = signal(false);
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
   colors = ['#7c3aed', '#ec4899', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#94a3b8'];
-  model: AssetCategoryInput = this.defaultModel();
+
+  title = computed(() => this.tab() === 'assets'
+    ? 'Asset categories'
+    : 'Transaction & subscription categories');
+
+  currentCategories = computed<EditableCategory[]>(() =>
+    this.tab() === 'assets' ? this.assetCategories() : this.financeCategories());
+
+  model: CategoryInput = this.defaultModel();
 
   constructor() {
     this.fetch();
   }
 
+  setTab(tab: SettingsTab) {
+    this.tab.set(tab);
+    this.reset();
+  }
+
   fetch() {
     this.loading.set(true);
-    this.api.listAssetCategories().subscribe({
-      next: categories => { this.categories.set(categories); this.loading.set(false); },
+    const asset$ = this.api.listAssetCategories();
+    const finance$ = this.api.listFinanceCategories();
+    asset$.subscribe({
+      next: categories => {
+        this.assetCategories.set(categories);
+        finance$.subscribe({
+          next: financeCategories => {
+            this.financeCategories.set(financeCategories);
+            this.loading.set(false);
+          },
+          error: () => this.loading.set(false),
+        });
+      },
       error: () => this.loading.set(false),
     });
   }
@@ -124,7 +176,7 @@ export class SettingsComponent {
     this.reset();
   }
 
-  editCategory(category: AssetCategory) {
+  editCategory(category: EditableCategory) {
     this.editingId.set(category.id);
     this.error.set(null);
     this.model = { name: category.name, color: category.color, sortOrder: category.sortOrder };
@@ -143,9 +195,13 @@ export class SettingsComponent {
       color: this.model.color || '#7c3aed',
       sortOrder: Number(this.model.sortOrder) || 0,
     };
-    const op = this.editingId()
-      ? this.api.updateAssetCategory(this.editingId()!, input)
-      : this.api.createAssetCategory(input);
+    const op = this.tab() === 'assets'
+      ? (this.editingId()
+        ? this.api.updateAssetCategory(this.editingId()!, input)
+        : this.api.createAssetCategory(input))
+      : (this.editingId()
+        ? this.api.updateFinanceCategory(this.editingId()!, input)
+        : this.api.createFinanceCategory(input));
     op.subscribe({
       next: () => { this.saving.set(false); this.reset(); this.fetch(); },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
@@ -154,8 +210,12 @@ export class SettingsComponent {
 
   remove() {
     if (!this.editingId()) return;
-    if (!confirm('Delete this asset category? Existing assets keep their category text.')) return;
-    this.api.deleteAssetCategory(this.editingId()!).subscribe(() => {
+    const label = this.tab() === 'assets' ? 'asset' : 'finance';
+    if (!confirm(`Delete this ${label} category? Existing records keep their category text.`)) return;
+    const op = this.tab() === 'assets'
+      ? this.api.deleteAssetCategory(this.editingId()!)
+      : this.api.deleteFinanceCategory(this.editingId()!);
+    op.subscribe(() => {
       this.reset();
       this.fetch();
     });
@@ -167,11 +227,11 @@ export class SettingsComponent {
     this.model = this.defaultModel();
   }
 
-  private defaultModel(): AssetCategoryInput {
+  private defaultModel(): CategoryInput {
     return {
       name: '',
       color: '#7c3aed',
-      sortOrder: this.categories().length,
+      sortOrder: this.tab() === 'assets' ? this.assetCategories().length : this.financeCategories().length,
     };
   }
 }

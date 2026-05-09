@@ -6,7 +6,7 @@ import {
   Item, ItemInput, ItemPhoto, StatsSummary, FinanceAccount, FinanceAccountInput,
   FinanceSummary, FinanceTransaction, FinanceTransactionInput, FinanceTransactionKind,
   MonthlyAccountSummary, MonthlyAccountSummaryInput, Subscription, SubscriptionInput, OdsImportResult,
-  AssetCategory, AssetCategoryInput
+  AssetCategory, AssetCategoryInput, FinanceCategory, FinanceCategoryInput
 } from './models';
 
 export const API_BASE = 'http://localhost:5256';
@@ -233,5 +233,18 @@ export class Api {
   }
   deleteAssetCategory(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/settings/asset-categories/${id}`);
+  }
+
+  listFinanceCategories() {
+    return this.http.get<FinanceCategory[]>(`${API_BASE}/api/settings/finance-categories`);
+  }
+  createFinanceCategory(input: FinanceCategoryInput) {
+    return this.http.post<FinanceCategory>(`${API_BASE}/api/settings/finance-categories`, input);
+  }
+  updateFinanceCategory(id: number, input: FinanceCategoryInput) {
+    return this.http.put<FinanceCategory>(`${API_BASE}/api/settings/finance-categories/${id}`, input);
+  }
+  deleteFinanceCategory(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/settings/finance-categories/${id}`);
   }
 }

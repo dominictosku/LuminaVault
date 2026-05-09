@@ -7,6 +7,8 @@ namespace LuminaVault.Endpoints;
 
 public record AssetCategoryDto(int Id, string Name, string Color, int SortOrder, DateTime CreatedAt);
 public record AssetCategoryInput(string Name, string Color, int SortOrder);
+public record FinanceCategoryDto(int Id, string Name, string Color, int SortOrder, DateTime CreatedAt);
+public record FinanceCategoryInput(string Name, string Color, int SortOrder);
 
 public static class SettingsEndpoints
 {
@@ -63,6 +65,59 @@ public static class SettingsEndpoints
             var category = await db.AssetCategories.FindAsync(id);
             if (category is null) return Results.NotFound();
             db.AssetCategories.Remove(category);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        g.MapGet("/finance-categories", async (AppDbContext db) =>
+            await db.FinanceCategories
+                .OrderBy(c => c.SortOrder)
+                .ThenBy(c => c.Name)
+                .Select(c => new FinanceCategoryDto(c.Id, c.Name, c.Color, c.SortOrder, c.CreatedAt))
+                .ToListAsync());
+
+        g.MapPost("/finance-categories", async ([FromBody] FinanceCategoryInput input, AppDbContext db) =>
+        {
+            var name = input.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return Results.BadRequest(new { error = "Category name is required." });
+            if (await db.FinanceCategories.AnyAsync(c => c.Name.ToLower() == name.ToLower()))
+                return Results.Conflict(new { error = "Category already exists." });
+
+            var category = new FinanceCategory
+            {
+                Name = name,
+                Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim(),
+                SortOrder = input.SortOrder,
+            };
+            db.FinanceCategories.Add(category);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/settings/finance-categories/{category.Id}",
+                new FinanceCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
+        });
+
+        g.MapPut("/finance-categories/{id:int}", async (int id, [FromBody] FinanceCategoryInput input, AppDbContext db) =>
+        {
+            var category = await db.FinanceCategories.FindAsync(id);
+            if (category is null) return Results.NotFound();
+            var name = input.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return Results.BadRequest(new { error = "Category name is required." });
+            if (await db.FinanceCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
+                return Results.Conflict(new { error = "Category already exists." });
+
+            category.Name = name;
+            category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();
+            category.SortOrder = input.SortOrder;
+            await db.SaveChangesAsync();
+            return Results.Ok(new FinanceCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
+        });
+
+        g.MapDelete("/finance-categories/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var category = await db.FinanceCategories.FindAsync(id);
+            if (category is null) return Results.NotFound();
+            db.FinanceCategories.Remove(category);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });

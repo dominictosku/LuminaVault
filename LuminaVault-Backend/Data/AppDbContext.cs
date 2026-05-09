@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<Item> Items => Set<Item>();
     public DbSet<ItemPhoto> ItemPhotos => Set<ItemPhoto>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
+    public DbSet<FinanceCategory> FinanceCategories => Set<FinanceCategory>();
     public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
     public DbSet<MonthlyAccountSummary> MonthlyAccountSummaries => Set<MonthlyAccountSummary>();
@@ -68,6 +69,7 @@ public class AppDbContext : DbContext
 
         b.Entity<Item>().Property(i => i.Value).HasColumnType("decimal(18,2)");
         b.Entity<AssetCategory>().HasIndex(c => c.Name).IsUnique();
+        b.Entity<FinanceCategory>().HasIndex(c => c.Name).IsUnique();
 
         b.Entity<FinanceAccount>().Property(a => a.StartingBalance).HasColumnType("decimal(18,2)");
         b.Entity<FinanceAccount>().Property(a => a.Balance).HasColumnType("decimal(18,2)");

@@ -89,6 +89,20 @@ export interface AssetCategoryInput {
   sortOrder: number;
 }
 
+export interface FinanceCategory {
+  id: number;
+  name: string;
+  color: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface FinanceCategoryInput {
+  name: string;
+  color: string;
+  sortOrder: number;
+}
+
 export interface StatsSummary {
   totalItems: number;
   totalValue: number;
@@ -265,6 +279,7 @@ export interface OdsImportResult {
   transactions: number;
   monthlySummaries: number;
   subscriptions: number;
+  financeCategories: number;
   assetCategories: number;
   assets: number;
   warnings: string[];

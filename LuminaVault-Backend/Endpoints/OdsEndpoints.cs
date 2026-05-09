@@ -14,6 +14,7 @@ public record OdsImportResult(
     int Transactions,
     int MonthlySummaries,
     int Subscriptions,
+    int FinanceCategories,
     int AssetCategories,
     int Assets,
     string[] Warnings);
@@ -51,6 +52,10 @@ public static class OdsEndpoints
                 .OrderBy(c => c.SortOrder)
                 .ThenBy(c => c.Name)
                 .ToListAsync();
+            var financeCategories = await db.FinanceCategories
+                .OrderBy(c => c.SortOrder)
+                .ThenBy(c => c.Name)
+                .ToListAsync();
             var assets = await db.Items.OrderBy(i => i.Name).ToListAsync();
 
             var bytes = BuildOds(new[]
@@ -72,6 +77,9 @@ public static class OdsEndpoints
                     )),
                 Sheet("Asset categories", new[] { Row("Name", "Color", "Sort order") }
                     .Concat(assetCategories.Select(c => Row(c.Name, c.Color, c.SortOrder)))
+                    ),
+                Sheet("Finance categories", new[] { Row("Name", "Color", "Sort order") }
+                    .Concat(financeCategories.Select(c => Row(c.Name, c.Color, c.SortOrder)))
                     ),
                 Sheet("Assets", new[] { Row("Name", "Category", "Description", "Brand", "Model", "Serial number", "Value", "Purchase date", "Warranty until", "Quantity", "Notes", "Tags") }
                     .Concat(assets.Select(i => Row(i.Name, i.Category, i.Description, i.Brand, i.Model, i.SerialNumber, i.Value,
@@ -97,6 +105,7 @@ public static class OdsEndpoints
 
             var accounts = await ImportAccounts(tables, db, warnings);
             await db.SaveChangesAsync();
+            var financeCategories = await ImportFinanceCategories(tables, db, warnings);
             var subscriptions = await ImportSubscriptions(tables, db, warnings);
             var assetCategories = await ImportAssetCategories(tables, db, warnings);
             var assets = await ImportAssets(tables, db, warnings);
@@ -105,7 +114,7 @@ public static class OdsEndpoints
             await db.SaveChangesAsync();
             await RecalculateFinanceBalances(db);
 
-            return Results.Ok(new OdsImportResult(accounts, transactions, monthlySummaries, subscriptions, assetCategories, assets, warnings.ToArray()));
+            return Results.Ok(new OdsImportResult(accounts, transactions, monthlySummaries, subscriptions, financeCategories, assetCategories, assets, warnings.ToArray()));
         }).DisableAntiforgery();
 
         return app;
@@ -150,6 +159,7 @@ public static class OdsEndpoints
 
         var (headers, data) = SplitHeader(rows);
         var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var financeCategories = await db.FinanceCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
         var count = 0;
         foreach (var row in data)
         {
@@ -165,6 +175,19 @@ public static class OdsEndpoints
             if (!string.IsNullOrWhiteSpace(transferName))
                 accounts.TryGetValue(transferName.ToLowerInvariant(), out transferAccount);
 
+            var category = EmptyToNull(Get(row, headers, "Category")) ?? "General";
+            if (!financeCategories.ContainsKey(category.ToLowerInvariant()))
+            {
+                var financeCategory = new FinanceCategory
+                {
+                    Name = category,
+                    Color = "#7c3aed",
+                    SortOrder = financeCategories.Count,
+                };
+                db.FinanceCategories.Add(financeCategory);
+                financeCategories[financeCategory.Name.ToLowerInvariant()] = financeCategory;
+            }
+
             db.FinanceTransactions.Add(new FinanceTransaction
             {
                 AccountId = account.Id,
@@ -173,7 +196,7 @@ public static class OdsEndpoints
                 Status = ParseEnum(Get(row, headers, "Status"), FinanceTransactionStatus.Cleared),
                 OccurredOn = ParseDate(Get(row, headers, "Date")) ?? DateTime.UtcNow.Date,
                 Payee = EmptyToNull(Get(row, headers, "Payee")) ?? "Imported transaction",
-                Category = EmptyToNull(Get(row, headers, "Category")) ?? "General",
+                Category = category,
                 Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount"))),
                 Description = EmptyToNull(Get(row, headers, "Description")),
                 Notes = EmptyToNull(Get(row, headers, "Notes")),
@@ -241,6 +264,7 @@ public static class OdsEndpoints
 
         var (headers, data) = SplitHeader(rows);
         var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var financeCategories = await db.FinanceCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
         var existing = await db.Subscriptions.ToDictionaryAsync(s => s.Name.ToLowerInvariant());
         var count = 0;
         foreach (var row in data)
@@ -250,12 +274,24 @@ public static class OdsEndpoints
 
             var accountName = Get(row, headers, "Account", "Konto");
             accounts.TryGetValue((accountName ?? "").ToLowerInvariant(), out var account);
+            var category = EmptyToNull(Get(row, headers, "Category", "Kategorie")) ?? "Subscriptions";
+            if (!financeCategories.ContainsKey(category.ToLowerInvariant()))
+            {
+                var financeCategory = new FinanceCategory
+                {
+                    Name = category,
+                    Color = "#7c3aed",
+                    SortOrder = financeCategories.Count,
+                };
+                db.FinanceCategories.Add(financeCategory);
+                financeCategories[financeCategory.Name.ToLowerInvariant()] = financeCategory;
+            }
 
             var interval = ParseDecimal(Get(row, headers, "Interval days", "Intervall in Tagen"));
             var subscription = new Subscription
             {
                 Name = name,
-                Category = EmptyToNull(Get(row, headers, "Category", "Kategorie")) ?? "Subscriptions",
+                Category = category,
                 Provider = EmptyToNull(Get(row, headers, "Provider")),
                 AccountId = account?.Id,
                 Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount", "Preis"))),
@@ -274,6 +310,35 @@ public static class OdsEndpoints
             }
             db.Subscriptions.Add(subscription);
             existing[subscription.Name.ToLowerInvariant()] = subscription;
+            count++;
+        }
+        return count;
+    }
+
+    static async Task<int> ImportFinanceCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
+    {
+        if (!TryGetTable(tables, "Finance categories", out var rows) &&
+            !TryGetTable(tables, "FinanceCategories", out rows) &&
+            !TryGetTable(tables, "Finanzkategorien", out rows))
+        {
+            return 0;
+        }
+
+        var (headers, data) = SplitHeader(rows);
+        var existing = await db.FinanceCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
+        var count = 0;
+        foreach (var row in data)
+        {
+            var name = Get(row, headers, "Name", "Category", "Kategorie");
+            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
+            var category = new FinanceCategory
+            {
+                Name = name.Trim(),
+                Color = EmptyToNull(Get(row, headers, "Color", "Farbe")) ?? "#7c3aed",
+                SortOrder = (int)Math.Round(ParseDecimal(Get(row, headers, "Sort order", "Sortierung"))),
+            };
+            db.FinanceCategories.Add(category);
+            existing[category.Name.ToLowerInvariant()] = category;
             count++;
         }
         return count;

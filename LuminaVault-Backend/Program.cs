@@ -96,6 +96,17 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AssetCategories_Name ON AssetCategories (Name)");
 
     db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS FinanceCategories (
+            Id INTEGER NOT NULL CONSTRAINT PK_FinanceCategories PRIMARY KEY AUTOINCREMENT,
+            Name TEXT NOT NULL,
+            Color TEXT NOT NULL,
+            SortOrder INTEGER NOT NULL,
+            CreatedAt TEXT NOT NULL
+        );
+        """);
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_FinanceCategories_Name ON FinanceCategories (Name)");
+
+    db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS FinanceAccounts (
             Id INTEGER NOT NULL CONSTRAINT PK_FinanceAccounts PRIMARY KEY AUTOINCREMENT,
             Name TEXT NOT NULL,
@@ -182,6 +193,14 @@ using (var scope = app.Services.CreateScope())
         var defaults = new[] { "IT", "Hobby", "Möbel", "Werkzeug", "Fahrzeug", "Bürobedarf", "Kleidung", "Schule", "Reinigung", "Homelab", "Sonstiges" };
         for (var i = 0; i < defaults.Length; i++)
             db.AssetCategories.Add(new LuminaVault.Domain.AssetCategory { Name = defaults[i], SortOrder = i, Color = "#7c3aed" });
+        db.SaveChanges();
+    }
+
+    if (!db.FinanceCategories.Any())
+    {
+        var defaults = new[] { "Salary", "Food", "Housing", "Transport", "Health", "Career", "Hobby", "Savings", "Investments", "Subscriptions", "Insurance", "Utilities", "Obligatorisch", "Körper" };
+        for (var i = 0; i < defaults.Length; i++)
+            db.FinanceCategories.Add(new LuminaVault.Domain.FinanceCategory { Name = defaults[i], SortOrder = i, Color = "#7c3aed" });
         db.SaveChanges();
     }
 }

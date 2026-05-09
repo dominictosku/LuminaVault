@@ -6,6 +6,7 @@ import { Api } from '../../core/api';
 import {
   SUBSCRIPTION_STATUSES,
   FinanceAccount,
+  FinanceCategory,
   Subscription,
   SubscriptionInput,
   SubscriptionStatus,
@@ -92,10 +93,9 @@ import {
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="label">Category</label>
-                <input class="input" name="category" [(ngModel)]="model.category" list="subscription-categories" />
-                <datalist id="subscription-categories">
-                  @for (c of categories(); track c) { <option [value]="c"></option> }
-                </datalist>
+                <select class="select" name="category" [(ngModel)]="model.category">
+                  @for (c of categories(); track c) { <option [ngValue]="c">{{ c }}</option> }
+                </select>
               </div>
               <div>
                 <label class="label">Provider</label>
@@ -180,6 +180,7 @@ import {
 export class SubscriptionsComponent {
   private api = inject(Api);
   accounts = signal<FinanceAccount[]>([]);
+  financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
   loading = signal(true);
   saving = signal(false);
@@ -196,8 +197,11 @@ export class SubscriptionsComponent {
     .filter(s => s.status === 'Active')
     .reduce((sum, s) => sum + s.monthlyAmount, 0));
   categories = computed(() => {
-    const base = ['Obligatorisch', 'Karriere', 'Hobby', 'Körper', 'Software', 'Insurance', 'Utilities'];
-    return Array.from(new Set([...base, ...this.subscriptions().map(s => s.category).filter(Boolean)])).sort();
+    return Array.from(new Set([
+      ...this.financeCategories().map(c => c.name),
+      ...this.subscriptions().map(s => s.category).filter(Boolean),
+      this.model.category,
+    ].filter(Boolean) as string[])).sort();
   });
 
   constructor() {
@@ -209,10 +213,15 @@ export class SubscriptionsComponent {
     forkJoin({
       accounts: this.api.listFinanceAccounts(),
       subscriptions: this.api.listSubscriptions(true),
+      financeCategories: this.api.listFinanceCategories(),
     }).subscribe({
       next: r => {
         this.accounts.set(r.accounts);
         this.subscriptions.set(r.subscriptions);
+        this.financeCategories.set(r.financeCategories);
+        const preferred = this.preferredCategory();
+        if (preferred && this.model.category === 'Subscriptions')
+          this.model.category = preferred;
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -284,6 +293,12 @@ export class SubscriptionsComponent {
     this.startedOn = new Date().toISOString().substring(0, 10);
     this.nextDueOn = new Date().toISOString().substring(0, 10);
     this.model = this.defaultModel();
+    this.model.category = this.preferredCategory() ?? this.model.category;
+  }
+
+  preferredCategory() {
+    return this.financeCategories().find(c => c.name === 'Subscriptions')?.name
+      ?? this.financeCategories()[0]?.name;
   }
 
   private defaultModel(): SubscriptionInput {

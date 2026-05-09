@@ -7,6 +7,7 @@ import {
   FINANCE_TRANSACTION_KINDS,
   FINANCE_TRANSACTION_STATUSES,
   FinanceAccount,
+  FinanceCategory,
   FinanceTransaction,
   FinanceTransactionInput,
   FinanceTransactionKind,
@@ -149,10 +150,9 @@ import {
             </div>
             <div>
               <label class="label">Category</label>
-              <input class="input" name="category" [(ngModel)]="model.category" list="finance-categories" />
-              <datalist id="finance-categories">
-                @for (c of categories(); track c) { <option [value]="c"></option> }
-              </datalist>
+              <select class="select" name="category" [(ngModel)]="model.category">
+                @for (c of categories(); track c) { <option [ngValue]="c">{{ c }}</option> }
+              </select>
             </div>
             <div>
               <label class="label">Tags</label>
@@ -188,6 +188,7 @@ import {
 export class TransactionsComponent {
   private api = inject(Api);
   accounts = signal<FinanceAccount[]>([]);
+  financeCategories = signal<FinanceCategory[]>([]);
   transactions = signal<FinanceTransaction[]>([]);
   loading = signal(true);
   saving = signal(false);
@@ -204,8 +205,11 @@ export class TransactionsComponent {
   kinds = FINANCE_TRANSACTION_KINDS;
   statuses = FINANCE_TRANSACTION_STATUSES;
   categories = computed(() => {
-    const base = ['Salary', 'Food', 'Housing', 'Transport', 'Health', 'Career', 'Hobby', 'Savings', 'Investments', 'Subscriptions'];
-    return Array.from(new Set([...base, ...this.transactions().map(t => t.category).filter(Boolean)])).sort();
+    return Array.from(new Set([
+      ...this.financeCategories().map(c => c.name),
+      ...this.transactions().map(t => t.category).filter(Boolean),
+      this.model.category,
+    ].filter(Boolean) as string[])).sort();
   });
 
   model: FinanceTransactionInput = this.defaultModel();
@@ -214,12 +218,15 @@ export class TransactionsComponent {
     forkJoin({
       accounts: this.api.listFinanceAccounts(),
       transactions: this.api.listFinanceTransactions(),
+      financeCategories: this.api.listFinanceCategories(),
     }).subscribe({
       next: r => {
         this.accounts.set(r.accounts);
         this.transactions.set(r.transactions);
+        this.financeCategories.set(r.financeCategories);
         this.loading.set(false);
         if (r.accounts[0]) this.model.accountId = r.accounts[0].id;
+        if (r.financeCategories[0]) this.model.category = r.financeCategories[0].name;
       },
       error: () => this.loading.set(false),
     });
@@ -310,6 +317,7 @@ export class TransactionsComponent {
     this.tagsRaw = '';
     this.model = this.defaultModel();
     if (this.accounts()[0]) this.model.accountId = this.accounts()[0].id;
+    if (this.financeCategories()[0]) this.model.category = this.financeCategories()[0].name;
   }
 
   sign(kind: FinanceTransactionKind) {
