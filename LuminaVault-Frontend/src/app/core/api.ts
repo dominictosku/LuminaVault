@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import {
   AuthResponse, AuthStatus, House, Room, Furniture, Container,
   Item, ItemInput, ItemPhoto, StatsSummary, FinanceAccount, FinanceAccountInput,
-  FinanceSummary, FinanceTransaction, FinanceTransactionInput, FinanceTransactionKind,
+  FinanceStatistics, FinanceSummary, FinanceTransaction, FinanceTransactionInput, FinanceTransactionKind,
   MonthlyAccountSummary, MonthlyAccountSummaryInput, Subscription, SubscriptionInput, OdsImportResult,
   AssetCategory, AssetCategoryInput, FinanceCategory, FinanceCategoryInput
 } from './models';
@@ -131,6 +131,10 @@ export class Api {
   // --- Finance ---
   financeSummary() {
     return this.http.get<FinanceSummary>(`${API_BASE}/api/finance/summary`);
+  }
+
+  financeStatistics() {
+    return this.http.get<FinanceStatistics>(`${API_BASE}/api/finance/statistics`);
   }
 
   listFinanceAccounts(includeArchived = false) {

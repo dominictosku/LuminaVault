@@ -433,6 +433,228 @@ public static class FinanceEndpoints
             });
         });
 
+        summary.MapGet("/statistics", async (AppDbContext db) =>
+        {
+            await RecalculateBalances(db);
+
+            var today = DateTime.UtcNow.Date;
+            var currentMonth = MonthStart(today);
+            var fromMonth = currentMonth.AddMonths(-11);
+            var nextMonth = currentMonth.AddMonths(1);
+
+            var accounts = await db.FinanceAccounts
+                .Where(a => !a.IsArchived)
+                .OrderByDescending(a => a.Balance)
+                .ToListAsync();
+            var transactions = await db.FinanceTransactions
+                .Include(t => t.Account)
+                .Include(t => t.TransferAccount)
+                .Where(t => t.OccurredOn >= fromMonth && t.OccurredOn < nextMonth)
+                .ToListAsync();
+            var monthlySummaries = await db.MonthlyAccountSummaries
+                .Include(s => s.Account)
+                .Where(s => s.Month >= fromMonth && s.Month < nextMonth)
+                .ToListAsync();
+            var summaryKeys = monthlySummaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+            var unsummarizedTransactions = transactions
+                .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
+                .ToList();
+            var activeSubscriptions = await db.Subscriptions
+                .Include(s => s.Account)
+                .Where(s => s.Status == SubscriptionStatus.Active)
+                .ToListAsync();
+            var assets = await db.Items.ToListAsync();
+
+            var assetCategoryBreakdown = assets
+                .GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Uncategorized" : i.Category!)
+                .Select(g =>
+                {
+                    var total = g.Sum(i => (i.Value ?? 0m) * i.Quantity);
+                    var quantity = g.Sum(i => i.Quantity);
+                    return new
+                    {
+                        category = g.Key,
+                        amount = total,
+                        count = quantity,
+                        average = quantity <= 0 ? 0 : Math.Round(total / quantity, 2)
+                    };
+                })
+                .OrderByDescending(x => x.amount)
+                .ToList();
+
+            var subscriptionCategoryBreakdown = activeSubscriptions
+                .GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category)
+                .Select(g =>
+                {
+                    var monthly = g.Sum(s => ToMonthlyAmount(s.Amount, s.BillingIntervalDays));
+                    return new
+                    {
+                        category = g.Key,
+                        monthlyAmount = monthly,
+                        annualAmount = Math.Round(monthly * 12, 2),
+                        count = g.Count()
+                    };
+                })
+                .OrderByDescending(x => x.monthlyAmount)
+                .ToList();
+
+            var transactionExpenseBreakdown = unsummarizedTransactions
+                .Where(t => t.Kind == FinanceTransactionKind.Expense)
+                .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    amount = g.Sum(t => t.Amount),
+                    count = g.Count(),
+                    average = Math.Round(g.Average(t => t.Amount), 2)
+                })
+                .Concat(monthlySummaries
+                    .Where(s => s.Expenses > 0)
+                    .GroupBy(_ => "Bank summaries")
+                    .Select(g => new
+                    {
+                        category = g.Key,
+                        amount = g.Sum(s => s.Expenses),
+                        count = g.Count(),
+                        average = Math.Round(g.Average(s => s.Expenses), 2)
+                    }))
+                .GroupBy(x => x.category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    amount = g.Sum(x => x.amount),
+                    count = g.Sum(x => x.count),
+                    average = g.Sum(x => x.count) <= 0 ? 0 : Math.Round(g.Sum(x => x.amount) / g.Sum(x => x.count), 2)
+                })
+                .OrderByDescending(x => x.amount)
+                .ToList();
+
+            var transactionIncomeBreakdown = unsummarizedTransactions
+                .Where(t => t.Kind == FinanceTransactionKind.Income)
+                .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    amount = g.Sum(t => t.Amount),
+                    count = g.Count(),
+                    average = Math.Round(g.Average(t => t.Amount), 2)
+                })
+                .Concat(monthlySummaries
+                    .Where(s => s.Income > 0)
+                    .GroupBy(_ => "Bank summaries")
+                    .Select(g => new
+                    {
+                        category = g.Key,
+                        amount = g.Sum(s => s.Income),
+                        count = g.Count(),
+                        average = Math.Round(g.Average(s => s.Income), 2)
+                    }))
+                .GroupBy(x => x.category)
+                .Select(g => new
+                {
+                    category = g.Key,
+                    amount = g.Sum(x => x.amount),
+                    count = g.Sum(x => x.count),
+                    average = g.Sum(x => x.count) <= 0 ? 0 : Math.Round(g.Sum(x => x.amount) / g.Sum(x => x.count), 2)
+                })
+                .OrderByDescending(x => x.amount)
+                .ToList();
+
+            var monthlySeries = new List<object>();
+            for (var i = 11; i >= 0; i--)
+            {
+                var start = currentMonth.AddMonths(-i);
+                var end = start.AddMonths(1);
+                var monthSummaries = monthlySummaries.Where(s => s.Month == start).ToList();
+                var monthKeys = monthSummaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+                var monthTransactions = transactions
+                    .Where(t => t.OccurredOn >= start && t.OccurredOn < end)
+                    .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, monthKeys))
+                    .ToList();
+                var income = monthTransactions.Where(t => t.Kind == FinanceTransactionKind.Income).Sum(t => t.Amount)
+                    + monthSummaries.Sum(s => s.Income);
+                var expenses = monthTransactions.Where(t => t.Kind == FinanceTransactionKind.Expense).Sum(t => t.Amount)
+                    + monthSummaries.Sum(s => s.Expenses);
+                monthlySeries.Add(new
+                {
+                    month = start.ToString("MMM yyyy"),
+                    income,
+                    expenses,
+                    net = income - expenses,
+                    summaryCount = monthSummaries.Count,
+                    transactionCount = monthTransactions.Count
+                });
+            }
+
+            var totalAssetValue = assetCategoryBreakdown.Sum(x => x.amount);
+            var totalMonthlySubscriptions = subscriptionCategoryBreakdown.Sum(x => x.monthlyAmount);
+            var totalTransactionExpenses = transactionExpenseBreakdown.Sum(x => x.amount);
+            var totalTransactionIncome = transactionIncomeBreakdown.Sum(x => x.amount);
+            var accountNetWorth = accounts.Sum(a => a.Balance);
+
+            return Results.Ok(new
+            {
+                generatedAt = DateTime.UtcNow,
+                rangeStart = fromMonth,
+                rangeEnd = currentMonth,
+                totals = new
+                {
+                    netWorth = accountNetWorth + totalAssetValue,
+                    accountNetWorth,
+                    assetValue = totalAssetValue,
+                    monthlySubscriptionCost = totalMonthlySubscriptions,
+                    annualSubscriptionCost = Math.Round(totalMonthlySubscriptions * 12, 2),
+                    transactionIncome = totalTransactionIncome,
+                    transactionExpenses = totalTransactionExpenses,
+                    transactionNet = totalTransactionIncome - totalTransactionExpenses,
+                    assetCount = assets.Sum(i => i.Quantity),
+                    activeSubscriptionCount = activeSubscriptions.Count,
+                    transactionCount = unsummarizedTransactions.Count,
+                    summarizedMonthCount = monthlySummaries.Count
+                },
+                assetCategoryBreakdown,
+                subscriptionCategoryBreakdown,
+                transactionExpenseBreakdown,
+                transactionIncomeBreakdown,
+                monthlySeries,
+                accountBalances = accounts.Select(a => new
+                {
+                    account = a.Name,
+                    type = a.Type.ToString(),
+                    balance = a.Balance,
+                    currency = a.Currency,
+                    color = a.Color
+                }),
+                topExpenses = unsummarizedTransactions
+                    .Where(t => t.Kind == FinanceTransactionKind.Expense)
+                    .OrderByDescending(t => t.Amount)
+                    .Take(10)
+                    .Select(t => new
+                    {
+                        t.Id,
+                        t.Payee,
+                        t.Category,
+                        t.Amount,
+                        t.OccurredOn,
+                        accountName = t.Account?.Name
+                    }),
+                subscriptionRunway = activeSubscriptions
+                    .OrderByDescending(s => ToMonthlyAmount(s.Amount, s.BillingIntervalDays))
+                    .Take(10)
+                    .Select(s => new
+                    {
+                        s.Id,
+                        s.Name,
+                        s.Category,
+                        s.Amount,
+                        s.Currency,
+                        monthlyAmount = ToMonthlyAmount(s.Amount, s.BillingIntervalDays),
+                        annualAmount = Math.Round(ToMonthlyAmount(s.Amount, s.BillingIntervalDays) * 12, 2),
+                        s.NextDueOn
+                    })
+            });
+        });
+
         return app;
     }
 

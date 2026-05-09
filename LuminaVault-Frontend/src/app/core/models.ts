@@ -274,6 +274,34 @@ export interface FinanceSummary {
   accountMix: { type: string; balance: number }[];
 }
 
+export interface FinanceStatistics {
+  generatedAt: string;
+  rangeStart: string;
+  rangeEnd: string;
+  totals: {
+    netWorth: number;
+    accountNetWorth: number;
+    assetValue: number;
+    monthlySubscriptionCost: number;
+    annualSubscriptionCost: number;
+    transactionIncome: number;
+    transactionExpenses: number;
+    transactionNet: number;
+    assetCount: number;
+    activeSubscriptionCount: number;
+    transactionCount: number;
+    summarizedMonthCount: number;
+  };
+  assetCategoryBreakdown: { category: string; amount: number; count: number; average: number }[];
+  subscriptionCategoryBreakdown: { category: string; monthlyAmount: number; annualAmount: number; count: number }[];
+  transactionExpenseBreakdown: { category: string; amount: number; count: number; average: number }[];
+  transactionIncomeBreakdown: { category: string; amount: number; count: number; average: number }[];
+  monthlySeries: { month: string; income: number; expenses: number; net: number; summaryCount: number; transactionCount: number }[];
+  accountBalances: { account: string; type: string; balance: number; currency: string; color: string }[];
+  topExpenses: { id: number; payee: string; category: string; amount: number; occurredOn: string; accountName?: string | null }[];
+  subscriptionRunway: { id: number; name: string; category: string; amount: number; currency: string; monthlyAmount: number; annualAmount: number; nextDueOn: string }[];
+}
+
 export interface OdsImportResult {
   accounts: number;
   transactions: number;
