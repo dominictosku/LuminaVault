@@ -28,11 +28,15 @@ public record FinanceTransactionInput(
 public record MonthlyAccountSummaryDto(
     int Id, int AccountId, string? AccountName, string Currency, DateTime Month,
     decimal Income, decimal Expenses, decimal Net, decimal? OpeningBalance,
-    decimal? ClosingBalance, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+    decimal? ClosingBalance, decimal? ExpectedClosingBalance, decimal? ClosingDifference,
+    bool IsReconciled, DateTime? ReconciledAt, string? ReconciliationNotes,
+    string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
 
 public record MonthlyAccountSummaryInput(
     int AccountId, DateTime Month, decimal Income, decimal Expenses,
     decimal? OpeningBalance, decimal? ClosingBalance, string? Notes);
+
+public record MonthlyReconciliationInput(bool IsReconciled, string? Notes);
 
 public record SubscriptionDto(
     int Id, string Name, string Category, string? Provider, int? AccountId, string? AccountName,
@@ -58,6 +62,8 @@ public record AccountBalanceSnapshotDto(
 
 public record AccountBalanceSnapshotInput(
     int AccountId, DateTime SnapshotDate, decimal ActualBalance, bool IsReconciled, string? Notes);
+
+public record SubscriptionGenerateTransactionInput(FinanceTransactionStatus Status, bool AdvanceNextDueOn);
 
 public static class FinanceEndpoints
 {
@@ -215,7 +221,8 @@ public static class FinanceEndpoints
                 .ThenBy(s => s.Account!.Name)
                 .Take(500)
                 .ToListAsync();
-            return Results.Ok(result.Select(MapMonthlySummary));
+            var expected = await ExpectedClosingBalances(db, result);
+            return Results.Ok(result.Select(s => MapMonthlySummary(s, expected.GetValueOrDefault(s.Id))));
         });
 
         monthlySummaries.MapPost("/", async ([FromBody] MonthlyAccountSummaryInput input, AppDbContext db) =>
@@ -233,7 +240,8 @@ public static class FinanceEndpoints
             await db.SaveChangesAsync();
             await RecalculateBalances(db);
             await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
-            return Results.Created($"/api/finance/monthly-summaries/{monthlySummary.Id}", MapMonthlySummary(monthlySummary));
+            var expected = await ExpectedBalanceAt(db, monthlySummary.AccountId, MonthEnd(monthlySummary.Month));
+            return Results.Created($"/api/finance/monthly-summaries/{monthlySummary.Id}", MapMonthlySummary(monthlySummary, expected));
         });
 
         monthlySummaries.MapPut("/{id:int}", async (int id, [FromBody] MonthlyAccountSummaryInput input, AppDbContext db) =>
@@ -257,7 +265,8 @@ public static class FinanceEndpoints
             await db.SaveChangesAsync();
             await RecalculateBalances(db);
             await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
-            return Results.Ok(MapMonthlySummary(monthlySummary));
+            var expected = await ExpectedBalanceAt(db, monthlySummary.AccountId, MonthEnd(monthlySummary.Month));
+            return Results.Ok(MapMonthlySummary(monthlySummary, expected));
         });
 
         monthlySummaries.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
@@ -268,6 +277,51 @@ public static class FinanceEndpoints
             await db.SaveChangesAsync();
             await RecalculateBalances(db);
             return Results.NoContent();
+        });
+
+        monthlySummaries.MapPost("/{id:int}/reconcile", async (int id, [FromBody] MonthlyReconciliationInput input, AppDbContext db) =>
+        {
+            var monthlySummary = await db.MonthlyAccountSummaries
+                .Include(s => s.Account)
+                .FirstOrDefaultAsync(s => s.Id == id);
+            if (monthlySummary is null) return Results.NotFound();
+            if (input.IsReconciled && monthlySummary.ClosingBalance is null)
+                return Results.BadRequest(new { error = "Add a closing balance before reconciling this month." });
+
+            var endOfMonth = MonthEnd(monthlySummary.Month);
+            var expected = await ExpectedBalanceAt(db, monthlySummary.AccountId, endOfMonth);
+            monthlySummary.IsReconciled = input.IsReconciled;
+            monthlySummary.ReconciledAt = input.IsReconciled ? DateTime.UtcNow : null;
+            monthlySummary.ReconciliationNotes = Clean(input.Notes);
+            monthlySummary.UpdatedAt = DateTime.UtcNow;
+
+            var snapshot = await db.AccountBalanceSnapshots
+                .FirstOrDefaultAsync(s => s.AccountId == monthlySummary.AccountId && s.SnapshotDate == endOfMonth);
+            if (input.IsReconciled && monthlySummary.ClosingBalance.HasValue)
+            {
+                if (snapshot is null)
+                {
+                    snapshot = new AccountBalanceSnapshot { AccountId = monthlySummary.AccountId, SnapshotDate = endOfMonth };
+                    db.AccountBalanceSnapshots.Add(snapshot);
+                }
+                snapshot.ActualBalance = monthlySummary.ClosingBalance.Value;
+                snapshot.ExpectedBalance = expected;
+                snapshot.Difference = monthlySummary.ClosingBalance.Value - expected;
+                snapshot.IsReconciled = true;
+                snapshot.Notes = Clean(input.Notes) ?? $"Reconciled {monthlySummary.Month:yyyy-MM}";
+                snapshot.UpdatedAt = DateTime.UtcNow;
+            }
+            else if (!input.IsReconciled && snapshot is not null)
+            {
+                snapshot.IsReconciled = false;
+                snapshot.Notes = Clean(input.Notes) ?? snapshot.Notes;
+                snapshot.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            var refreshedExpected = await ExpectedBalanceAt(db, monthlySummary.AccountId, endOfMonth);
+            return Results.Ok(MapMonthlySummary(monthlySummary, refreshedExpected));
         });
 
         subscriptions.MapGet("/", async (AppDbContext db, bool includeInactive = false) =>
@@ -315,6 +369,79 @@ public static class FinanceEndpoints
             db.Subscriptions.Remove(subscription);
             await db.SaveChangesAsync();
             return Results.NoContent();
+        });
+
+        subscriptions.MapPost("/{id:int}/generate-transaction", async (
+            int id,
+            [FromBody] SubscriptionGenerateTransactionInput input,
+            AppDbContext db) =>
+        {
+            var subscription = await db.Subscriptions
+                .Include(s => s.Account)
+                .Include(s => s.Attachments)
+                .FirstOrDefaultAsync(s => s.Id == id);
+            if (subscription is null) return Results.NotFound();
+            if (subscription.AccountId is null)
+                return Results.BadRequest(new { error = "Choose an account before generating transactions." });
+            if (subscription.Status == SubscriptionStatus.Cancelled)
+                return Results.BadRequest(new { error = "Cancelled subscriptions cannot generate transactions." });
+            if (input.Status == FinanceTransactionStatus.Reconciled)
+                return Results.BadRequest(new { error = "Generate as pending forecast or cleared transaction." });
+
+            var tag = SubscriptionTransactionTag(subscription.Id, subscription.NextDueOn);
+            var existing = await db.FinanceTransactions
+                .Include(t => t.Account)
+                .Include(t => t.TransferAccount)
+                .FirstOrDefaultAsync(t => t.TagsCsv.Contains(tag));
+
+            FinanceTransaction transaction;
+            if (existing is not null)
+            {
+                if (input.Status == FinanceTransactionStatus.Cleared &&
+                    existing.Status == FinanceTransactionStatus.Pending)
+                {
+                    existing.Status = FinanceTransactionStatus.Cleared;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    transaction = existing;
+                }
+                else
+                {
+                    return Results.Conflict(new { error = "A transaction for this subscription due date already exists." });
+                }
+            }
+            else
+            {
+                transaction = new FinanceTransaction
+                {
+                    AccountId = subscription.AccountId.Value,
+                    Kind = FinanceTransactionKind.Expense,
+                    Status = input.Status,
+                    OccurredOn = subscription.NextDueOn.Date,
+                    Payee = subscription.Provider ?? subscription.Name,
+                    Category = subscription.Category,
+                    Amount = subscription.Amount,
+                    Description = $"Generated from subscription: {subscription.Name}",
+                    Notes = subscription.Notes,
+                    TagsCsv = tag,
+                };
+                db.FinanceTransactions.Add(transaction);
+            }
+
+            if (input.AdvanceNextDueOn || input.Status == FinanceTransactionStatus.Cleared)
+            {
+                subscription.NextDueOn = AdvanceDueDate(subscription.NextDueOn, subscription.BillingIntervalDays);
+                subscription.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await db.SaveChangesAsync();
+            await RecalculateBalances(db);
+            await LoadTransactionRefs(db, transaction);
+            await db.Entry(subscription).Reference(s => s.Account).LoadAsync();
+            return Results.Ok(new
+            {
+                transaction = MapTransaction(transaction),
+                subscription = MapSubscription(subscription)
+            });
         });
 
         budgets.MapGet("/", async (AppDbContext db, DateTime? month) =>
@@ -439,6 +566,7 @@ public static class FinanceEndpoints
             var rawMonthlyTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Where(t => t.OccurredOn >= monthStart && t.OccurredOn < nextMonth)
+                .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
             var monthlySummaryRows = await db.MonthlyAccountSummaries
                 .Include(s => s.Account)
@@ -481,6 +609,7 @@ public static class FinanceEndpoints
                 var end = start.AddMonths(1);
                 var tx = await db.FinanceTransactions
                     .Where(t => t.OccurredOn >= start && t.OccurredOn < end)
+                    .Where(t => t.Status != FinanceTransactionStatus.Pending)
                     .ToListAsync();
                 var summaryRows = await db.MonthlyAccountSummaries
                     .Where(s => s.Month == start)
@@ -579,6 +708,7 @@ public static class FinanceEndpoints
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
                 .Where(t => t.OccurredOn >= fromMonth && t.OccurredOn < nextMonth)
+                .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
             var monthlySummaries = await db.MonthlyAccountSummaries
                 .Include(s => s.Account)
@@ -945,7 +1075,9 @@ public static class FinanceEndpoints
                 : a.StartingBalance);
         var summaries = await db.MonthlyAccountSummaries.ToListAsync();
         var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
-        var tx = await db.FinanceTransactions.ToListAsync();
+        var tx = await db.FinanceTransactions
+            .Where(t => t.Status != FinanceTransactionStatus.Pending)
+            .ToListAsync();
         foreach (var t in tx)
         {
             if (balances.ContainsKey(t.AccountId) &&
@@ -994,6 +1126,16 @@ public static class FinanceEndpoints
         Dictionary<int, AccountBalanceSnapshot> latestSnapshots) =>
         !latestSnapshots.TryGetValue(accountId, out var snapshot) || date.Date > snapshot.SnapshotDate.Date;
 
+    static async Task<Dictionary<int, decimal>> ExpectedClosingBalances(
+        AppDbContext db,
+        IEnumerable<MonthlyAccountSummary> summaries)
+    {
+        var result = new Dictionary<int, decimal>();
+        foreach (var summary in summaries)
+            result[summary.Id] = await ExpectedBalanceAt(db, summary.AccountId, MonthEnd(summary.Month));
+        return result;
+    }
+
     static async Task<decimal> ExpectedBalanceAt(AppDbContext db, int accountId, DateTime date)
     {
         var account = await db.FinanceAccounts.FindAsync(accountId);
@@ -1014,6 +1156,7 @@ public static class FinanceEndpoints
 
         var tx = await db.FinanceTransactions
             .Where(t => (t.AccountId == accountId || t.TransferAccountId == accountId) && t.OccurredOn <= date.Date)
+            .Where(t => t.Status != FinanceTransactionStatus.Pending)
             .ToListAsync();
         if (fromDate.HasValue)
             tx = tx.Where(t => t.OccurredOn > fromDate.Value).ToList();
@@ -1039,6 +1182,7 @@ public static class FinanceEndpoints
         var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
         var tx = await db.FinanceTransactions
             .Where(t => t.Kind == FinanceTransactionKind.Expense && t.OccurredOn >= start && t.OccurredOn < end)
+            .Where(t => t.Status != FinanceTransactionStatus.Pending)
             .ToListAsync();
         var result = tx
             .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
@@ -1051,6 +1195,16 @@ public static class FinanceEndpoints
 
     static decimal ToMonthlyAmount(decimal amount, int billingIntervalDays) =>
         billingIntervalDays <= 0 ? amount : Math.Round(amount * 30.4375m / billingIntervalDays, 2);
+
+    static DateTime AdvanceDueDate(DateTime currentDueDate, int intervalDays)
+    {
+        var days = Math.Max(1, intervalDays);
+        var next = currentDueDate.Date.AddDays(days);
+        return next;
+    }
+
+    static string SubscriptionTransactionTag(int subscriptionId, DateTime dueDate) =>
+        $"subscription:{subscriptionId}:{dueDate:yyyy-MM-dd}";
 
     static FinanceAccountDto MapAccount(FinanceAccount account) =>
         new(account.Id, account.Name, account.Institution, account.Type, account.Currency,
@@ -1066,12 +1220,18 @@ public static class FinanceEndpoints
             string.IsNullOrWhiteSpace(transaction.TagsCsv) ? Array.Empty<string>() : transaction.TagsCsv.Split(','),
             transaction.CreatedAt, transaction.UpdatedAt);
 
-    static MonthlyAccountSummaryDto MapMonthlySummary(MonthlyAccountSummary monthlySummary) =>
-        new(monthlySummary.Id, monthlySummary.AccountId, monthlySummary.Account?.Name,
+    static MonthlyAccountSummaryDto MapMonthlySummary(MonthlyAccountSummary monthlySummary, decimal expectedClosingBalance)
+    {
+        var difference = monthlySummary.ClosingBalance.HasValue
+            ? monthlySummary.ClosingBalance.Value - expectedClosingBalance
+            : (decimal?)null;
+        return new(monthlySummary.Id, monthlySummary.AccountId, monthlySummary.Account?.Name,
             monthlySummary.Account?.Currency ?? "CHF", monthlySummary.Month,
             monthlySummary.Income, monthlySummary.Expenses, monthlySummary.Income - monthlySummary.Expenses,
-            monthlySummary.OpeningBalance, monthlySummary.ClosingBalance, monthlySummary.Notes,
-            monthlySummary.CreatedAt, monthlySummary.UpdatedAt);
+            monthlySummary.OpeningBalance, monthlySummary.ClosingBalance, expectedClosingBalance, difference,
+            monthlySummary.IsReconciled, monthlySummary.ReconciledAt, monthlySummary.ReconciliationNotes,
+            monthlySummary.Notes, monthlySummary.CreatedAt, monthlySummary.UpdatedAt);
+    }
 
     static SubscriptionDto MapSubscription(Subscription subscription) =>
         new(subscription.Id, subscription.Name, subscription.Category, subscription.Provider,
@@ -1099,6 +1259,8 @@ public static class FinanceEndpoints
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     static DateTime MonthStart(DateTime value) => new(value.Year, value.Month, 1);
+
+    static DateTime MonthEnd(DateTime value) => MonthStart(value).AddMonths(1).AddDays(-1);
 
     static string SummaryKey(int accountId, DateTime month) => $"{accountId}:{MonthStart(month):yyyy-MM-dd}";
 

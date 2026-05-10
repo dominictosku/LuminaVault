@@ -42,6 +42,7 @@ export class SubscriptionsComponent {
   subscriptions = signal<Subscription[]>([]);
   loading = signal(true);
   saving = signal(false);
+  generatingTransaction = signal(false);
   uploadingAttachment = signal(false);
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
@@ -229,6 +230,25 @@ export class SubscriptionsComponent {
 
   removeAttachment(id: number) {
     this.api.deleteAttachment(id).subscribe(() => this.fetchAll());
+  }
+
+  generateTransaction(status: 'Pending' | 'Cleared') {
+    if (!this.editingId()) return;
+    this.generatingTransaction.set(true);
+    this.error.set(null);
+    this.api.generateSubscriptionTransaction(this.editingId()!, {
+      status,
+      advanceNextDueOn: status === 'Cleared',
+    }).subscribe({
+      next: () => {
+        this.generatingTransaction.set(false);
+        this.fetchAll();
+      },
+      error: e => {
+        this.generatingTransaction.set(false);
+        this.error.set(e?.error?.error ?? 'Could not generate transaction.');
+      },
+    });
   }
 
   clearFilters() {

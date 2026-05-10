@@ -16,7 +16,10 @@ import {
   FinanceTransactionKind,
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
+  MonthlyReconciliationInput,
   Subscription,
+  SubscriptionGenerateTransactionInput,
+  SubscriptionGenerateTransactionResult,
   SubscriptionInput,
   DocumentAttachment,
 } from '../models';
@@ -144,6 +147,13 @@ export class FinanceApi {
     return this.http.delete<void>(`${API_BASE}/api/finance/monthly-summaries/${id}`);
   }
 
+  reconcileMonthlySummary(id: number, input: MonthlyReconciliationInput) {
+    return this.http.post<MonthlyAccountSummary>(
+      `${API_BASE}/api/finance/monthly-summaries/${id}/reconcile`,
+      input,
+    );
+  }
+
   listSubscriptions(includeInactive = false) {
     return this.http.get<Subscription[]>(`${API_BASE}/api/finance/subscriptions`, {
       params: includeInactive ? new HttpParams().set('includeInactive', true) : undefined,
@@ -160,6 +170,13 @@ export class FinanceApi {
 
   deleteSubscription(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/subscriptions/${id}`);
+  }
+
+  generateSubscriptionTransaction(id: number, input: SubscriptionGenerateTransactionInput) {
+    return this.http.post<SubscriptionGenerateTransactionResult>(
+      `${API_BASE}/api/finance/subscriptions/${id}/generate-transaction`,
+      input,
+    );
   }
 
   uploadSubscriptionAttachment(subscriptionId: number, file: File) {

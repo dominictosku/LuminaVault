@@ -23,11 +23,14 @@ export class MonthlySummariesComponent {
   summaries = signal<MonthlyAccountSummary[]>([]);
   loading = signal(true);
   saving = signal(false);
+  reconciling = signal(false);
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
+  editingSummary = signal<MonthlyAccountSummary | null>(null);
   accountFilter: number | null = null;
   yearFilter = signal<number | null>(null);
   monthPickerValue = new Date().toISOString().substring(0, 10);
+  reconciliationNotes = '';
   model: MonthlyAccountSummaryInput = this.defaultModel();
 
   netPreview = computed(() => (Number(this.model.income) || 0) - (Number(this.model.expenses) || 0));
@@ -71,7 +74,9 @@ export class MonthlySummariesComponent {
 
   editSummary(summary: MonthlyAccountSummary) {
     this.editingId.set(summary.id);
+    this.editingSummary.set(summary);
     this.error.set(null);
+    this.reconciliationNotes = summary.reconciliationNotes ?? '';
     this.monthPickerValue = summary.month.substring(0, 10);
     this.model = {
       accountId: summary.accountId,
@@ -122,9 +127,32 @@ export class MonthlySummariesComponent {
     });
   }
 
+  reconcile(isReconciled: boolean) {
+    const id = this.editingId();
+    if (!id) return;
+    this.reconciling.set(true);
+    this.error.set(null);
+    this.api.reconcileMonthlySummary(id, {
+      isReconciled,
+      notes: this.reconciliationNotes,
+    }).subscribe({
+      next: summary => {
+        this.reconciling.set(false);
+        this.editingSummary.set(summary);
+        this.fetchSummaries();
+      },
+      error: e => {
+        this.reconciling.set(false);
+        this.error.set(e?.error?.error ?? 'Reconciliation failed.');
+      },
+    });
+  }
+
   reset() {
     this.editingId.set(null);
+    this.editingSummary.set(null);
     this.error.set(null);
+    this.reconciliationNotes = '';
     this.monthPickerValue = new Date().toISOString().substring(0, 10);
     this.model = this.defaultModel();
     if (this.accounts()[0]) this.model.accountId = this.accounts()[0].id;

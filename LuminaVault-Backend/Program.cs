@@ -83,6 +83,9 @@ using (var scope = app.Services.CreateScope())
     AddColumnIfMissing("Items", "Category", "TEXT NULL");
     AddColumnIfMissing("Items", "ModelFileName", "TEXT NULL");
     AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
+    AddColumnIfMissing("MonthlyAccountSummaries", "IsReconciled", "INTEGER NOT NULL DEFAULT 0");
+    AddColumnIfMissing("MonthlyAccountSummaries", "ReconciledAt", "TEXT NULL");
+    AddColumnIfMissing("MonthlyAccountSummaries", "ReconciliationNotes", "TEXT NULL");
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS DocumentAttachments (

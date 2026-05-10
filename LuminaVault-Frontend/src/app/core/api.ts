@@ -12,6 +12,8 @@ import {
   FinanceTransactionInput,
   FinanceTransactionKind,
   FinanceCategoryInput,
+  MonthlyReconciliationInput,
+  SubscriptionGenerateTransactionInput,
   ItemInput,
   MonthlyAccountSummaryInput,
   SubscriptionInput,
@@ -246,6 +248,10 @@ export class Api {
     return this.finance.deleteMonthlySummary(id);
   }
 
+  reconcileMonthlySummary(id: number, input: MonthlyReconciliationInput) {
+    return this.finance.reconcileMonthlySummary(id, input);
+  }
+
   listSubscriptions(includeInactive = false) {
     return this.finance.listSubscriptions(includeInactive);
   }
@@ -260,6 +266,10 @@ export class Api {
 
   deleteSubscription(id: number) {
     return this.finance.deleteSubscription(id);
+  }
+
+  generateSubscriptionTransaction(id: number, input: SubscriptionGenerateTransactionInput) {
+    return this.finance.generateSubscriptionTransaction(id, input);
   }
 
   exportOds() {

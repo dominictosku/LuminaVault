@@ -201,6 +201,30 @@
 
         @if (editingId()) {
           <div class="surface-muted p-3 space-y-3">
+            <div>
+              <div class="font-medium text-sm">Recurring transactions</div>
+              <div class="text-xs text-slate-500 mt-1">
+                Generate a pending forecast or a cleared expense for the current due date.
+              </div>
+            </div>
+            @if (!model.accountId) {
+              <div class="text-xs text-amber-200/90">Choose an account before generating transactions.</div>
+            }
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" class="btn btn-ghost justify-center" (click)="generateTransaction('Pending')"
+                      [disabled]="generatingTransaction() || !model.accountId">
+                @if (generatingTransaction()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-clock"></i> }
+                Forecast
+              </button>
+              <button type="button" class="btn btn-primary justify-center" (click)="generateTransaction('Cleared')"
+                      [disabled]="generatingTransaction() || !model.accountId">
+                @if (generatingTransaction()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+                Create paid
+              </button>
+            </div>
+          </div>
+
+          <div class="surface-muted p-3 space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div>
                 <div class="font-medium text-sm">Documents</div>

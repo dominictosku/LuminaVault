@@ -137,6 +137,11 @@ export interface MonthlyAccountSummary {
   net: number;
   openingBalance?: number | null;
   closingBalance?: number | null;
+  expectedClosingBalance?: number | null;
+  closingDifference?: number | null;
+  isReconciled: boolean;
+  reconciledAt?: string | null;
+  reconciliationNotes?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -149,6 +154,11 @@ export interface MonthlyAccountSummaryInput {
   expenses: number;
   openingBalance?: number | null;
   closingBalance?: number | null;
+  notes?: string | null;
+}
+
+export interface MonthlyReconciliationInput {
+  isReconciled: boolean;
   notes?: string | null;
 }
 
@@ -186,6 +196,16 @@ export interface SubscriptionInput {
   autoRenew: boolean;
   status: SubscriptionStatus;
   notes?: string | null;
+}
+
+export interface SubscriptionGenerateTransactionInput {
+  status: FinanceTransactionStatus;
+  advanceNextDueOn: boolean;
+}
+
+export interface SubscriptionGenerateTransactionResult {
+  transaction: FinanceTransaction;
+  subscription: Subscription;
 }
 
 export interface FinanceSummary {
