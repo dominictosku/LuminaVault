@@ -85,6 +85,23 @@ using (var scope = app.Services.CreateScope())
     AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
 
     db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS DocumentAttachments (
+            Id INTEGER NOT NULL CONSTRAINT PK_DocumentAttachments PRIMARY KEY AUTOINCREMENT,
+            ItemId INTEGER NULL,
+            SubscriptionId INTEGER NULL,
+            OriginalFileName TEXT NOT NULL,
+            FileName TEXT NOT NULL,
+            ContentType TEXT NOT NULL,
+            Size INTEGER NOT NULL,
+            UploadedAt TEXT NOT NULL,
+            CONSTRAINT FK_DocumentAttachments_Items_ItemId FOREIGN KEY (ItemId) REFERENCES Items (Id) ON DELETE CASCADE,
+            CONSTRAINT FK_DocumentAttachments_Subscriptions_SubscriptionId FOREIGN KEY (SubscriptionId) REFERENCES Subscriptions (Id) ON DELETE CASCADE
+        );
+        """);
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_DocumentAttachments_ItemId ON DocumentAttachments (ItemId)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_DocumentAttachments_SubscriptionId ON DocumentAttachments (SubscriptionId)");
+
+    db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS AssetCategories (
             Id INTEGER NOT NULL CONSTRAINT PK_AssetCategories PRIMARY KEY AUTOINCREMENT,
             Name TEXT NOT NULL,
@@ -251,6 +268,7 @@ app.MapHouses();
 app.MapFurniture();
 app.MapItems();
 app.MapPhotos();
+app.MapAttachments();
 app.MapFinance();
 app.MapOdsData();
 app.MapSettings();

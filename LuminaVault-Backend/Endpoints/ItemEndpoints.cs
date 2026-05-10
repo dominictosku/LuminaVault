@@ -16,6 +16,7 @@ public record ItemDto(
     int? RoomId, string? RoomName,
     DateTime CreatedAt, DateTime UpdatedAt,
     ItemPhotoDto[] Photos,
+    DocumentAttachmentDto[] Attachments,
     string? ModelUrl);
 
 public record ItemInput(
@@ -64,6 +65,7 @@ public static class ItemEndpoints
         {
             var i = await db.Items
                 .Include(x => x.Photos)
+                .Include(x => x.Attachments)
                 .Include(x => x.Room)
                 .Include(x => x.Furniture).ThenInclude(f => f!.Room)
                 .Include(x => x.Container)
@@ -89,6 +91,7 @@ public static class ItemEndpoints
         {
             var item = await db.Items
                 .Include(x => x.Photos)
+                .Include(x => x.Attachments)
                 .Include(x => x.Room)
                 .Include(x => x.Furniture).ThenInclude(f => f!.Room)
                 .Include(x => x.Container)
@@ -103,9 +106,13 @@ public static class ItemEndpoints
 
         g.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
         {
-            var item = await db.Items.Include(x => x.Photos).FirstOrDefaultAsync(x => x.Id == id);
+            var item = await db.Items
+                .Include(x => x.Photos)
+                .Include(x => x.Attachments)
+                .FirstOrDefaultAsync(x => x.Id == id);
             if (item is null) return Results.NotFound();
             foreach (var p in item.Photos) DeleteUploadFile(env, p.FileName);
+            foreach (var attachment in item.Attachments) DeleteUploadFile(env, attachment.FileName);
             if (item.ModelFileName != null) DeleteUploadFile(env, item.ModelFileName);
             db.Items.Remove(item);
             await db.SaveChangesAsync();
@@ -226,6 +233,7 @@ public static class ItemEndpoints
             roomId, roomName,
             i.CreatedAt, i.UpdatedAt,
             i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray(),
+            i.Attachments.Select(AttachmentEndpoints.MapAttachment).ToArray(),
             i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
     }
 

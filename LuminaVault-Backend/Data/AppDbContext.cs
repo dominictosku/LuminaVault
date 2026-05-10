@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Container> Containers => Set<Container>();
     public DbSet<Item> Items => Set<Item>();
     public DbSet<ItemPhoto> ItemPhotos => Set<ItemPhoto>();
+    public DbSet<DocumentAttachment> DocumentAttachments => Set<DocumentAttachment>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<FinanceCategory> FinanceCategories => Set<FinanceCategory>();
     public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
@@ -67,6 +68,18 @@ public class AppDbContext : DbContext
             .HasOne(p => p.Item)
             .WithMany(i => i.Photos)
             .HasForeignKey(p => p.ItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<DocumentAttachment>()
+            .HasOne(a => a.Item)
+            .WithMany(i => i.Attachments)
+            .HasForeignKey(a => a.ItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<DocumentAttachment>()
+            .HasOne(a => a.Subscription)
+            .WithMany(s => s.Attachments)
+            .HasForeignKey(a => a.SubscriptionId)
             .OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Item>().Property(i => i.Value).HasColumnType("decimal(18,2)");

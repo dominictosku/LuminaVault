@@ -1,6 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
@@ -15,6 +16,14 @@ import {
   FinanceTransactionStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { FilterPreset, FilterPresetsService } from '../../shared/filters/filter-presets.service';
+
+type TransactionFilters = {
+  q: string;
+  account: number | null;
+  kind: FinanceTransactionKind | null;
+  month: string;
+};
 
 @Component({
   selector: 'app-transactions',
@@ -26,6 +35,9 @@ export class TransactionsComponent {
   private api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private filterPresetsService = inject(FilterPresetsService);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   transactions = signal<FinanceTransaction[]>([]);
@@ -41,6 +53,8 @@ export class TransactionsComponent {
   dateValue = new Date().toISOString().substring(0, 10);
   tagsRaw = '';
   private debounce: any = null;
+  presetName = '';
+  filterPresets = signal<FilterPreset<TransactionFilters>[]>([]);
 
   kinds = FINANCE_TRANSACTION_KINDS;
   statuses = FINANCE_TRANSACTION_STATUSES;
@@ -60,9 +74,20 @@ export class TransactionsComponent {
   model: FinanceTransactionInput = this.defaultModel();
 
   constructor() {
+    this.filterPresets.set(this.filterPresetsService.load<TransactionFilters>('transactions'));
+    const params = this.route.snapshot.queryParamMap;
+    this.query = params.get('q') ?? '';
+    this.accountFilter = params.has('account') ? Number(params.get('account')) : null;
+    this.kindFilter = (params.get('kind') as FinanceTransactionKind | null) || null;
+    this.monthFilter.set(params.get('month') ?? '');
     forkJoin({
       accounts: this.api.listFinanceAccounts(),
-      transactions: this.api.listFinanceTransactions(),
+      transactions: this.api.listFinanceTransactions({
+        q: this.query.trim() || undefined,
+        accountId: this.accountFilter || undefined,
+        kind: this.kindFilter || undefined,
+        ...this.monthRange(),
+      }),
       financeCategories: this.settingsApi.listFinanceCategories(),
     }).subscribe({
       next: r => {
@@ -79,6 +104,7 @@ export class TransactionsComponent {
 
   fetch() {
     this.loading.set(true);
+    this.syncFiltersToUrl();
     this.api.listFinanceTransactions({
       q: this.query.trim() || undefined,
       accountId: this.accountFilter || undefined,
@@ -106,6 +132,62 @@ export class TransactionsComponent {
     this.kindFilter = null;
     this.monthFilter.set('');
     this.fetch();
+  }
+
+  saveFilterPreset() {
+    const name = this.presetName.trim();
+    if (!name) return;
+    this.filterPresets.set(this.filterPresetsService.save('transactions', {
+      name,
+      values: this.currentFilters(),
+    }));
+    this.presetName = '';
+  }
+
+  applyFilterPreset(preset?: FilterPreset<TransactionFilters>) {
+    if (!preset) return;
+    this.query = preset.values.q;
+    this.accountFilter = preset.values.account;
+    this.kindFilter = preset.values.kind;
+    this.monthFilter.set(preset.values.month);
+    this.fetch();
+  }
+
+  hasActiveFilters() {
+    const f = this.currentFilters();
+    return !!f.q || f.account != null || !!f.kind || !!f.month;
+  }
+
+  clearFilter(name: keyof TransactionFilters) {
+    if (name === 'q') this.query = '';
+    if (name === 'account') this.accountFilter = null;
+    if (name === 'kind') this.kindFilter = null;
+    if (name === 'month') this.monthFilter.set('');
+    this.fetch();
+  }
+
+  currentFilters(): TransactionFilters {
+    return {
+      q: this.query,
+      account: this.accountFilter,
+      kind: this.kindFilter,
+      month: this.monthFilter(),
+    };
+  }
+
+  private syncFiltersToUrl() {
+    const f = this.currentFilters();
+    this.router.navigate([], {
+      relativeTo: this.route,
+      replaceUrl: true,
+      queryParams: {
+        q: f.q || null,
+        account: f.account,
+        kind: f.kind,
+        month: f.month || null,
+      },
+      queryParamsHandling: 'merge',
+    });
   }
 
   newTransaction() {

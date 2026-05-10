@@ -28,6 +28,15 @@ export interface Container {
 
 export interface ItemPhoto { id: number; url: string; contentType: string; }
 
+export interface DocumentAttachment {
+  id: number;
+  originalFileName: string;
+  url: string;
+  contentType: string;
+  size: number;
+  uploadedAt: string;
+}
+
 export interface Item {
   id: number;
   name: string;
@@ -51,6 +60,7 @@ export interface Item {
   createdAt: string;
   updatedAt: string;
   photos: ItemPhoto[];
+  attachments: DocumentAttachment[];
   modelUrl?: string | null;
 }
 

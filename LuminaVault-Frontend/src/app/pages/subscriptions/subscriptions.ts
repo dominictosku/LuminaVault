@@ -1,6 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
@@ -13,6 +14,15 @@ import {
   SubscriptionStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { FilterPreset, FilterPresetsService } from '../../shared/filters/filter-presets.service';
+
+type SubscriptionFilters = {
+  q: string;
+  status: SubscriptionStatus | null;
+  category: string | null;
+  account: number | null;
+  sort: SubscriptionSort;
+};
 
 @Component({
   selector: 'app-subscriptions',
@@ -21,14 +31,18 @@ import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog
   styleUrl: './subscriptions.scss'
 })
 export class SubscriptionsComponent {
-  private api = inject(FinanceApi);
+  protected api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private filterPresetsService = inject(FilterPresetsService);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
   loading = signal(true);
   saving = signal(false);
+  uploadingAttachment = signal(false);
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
 
@@ -38,6 +52,8 @@ export class SubscriptionsComponent {
   categoryFilter = signal<string | null>(null);
   accountFilter = signal<number | null>(null);
   sortBy = signal<SubscriptionSort>('dueAsc');
+  presetName = '';
+  filterPresets = signal<FilterPreset<SubscriptionFilters>[]>([]);
   startedOn = new Date().toISOString().substring(0, 10);
   nextDueOn = new Date().toISOString().substring(0, 10);
   model: SubscriptionInput = this.defaultModel();
@@ -96,6 +112,13 @@ export class SubscriptionsComponent {
   });
 
   constructor() {
+    this.filterPresets.set(this.filterPresetsService.load<SubscriptionFilters>('subscriptions'));
+    const params = this.route.snapshot.queryParamMap;
+    this.query.set(params.get('q') ?? '');
+    this.statusFilter.set((params.get('status') as SubscriptionStatus | null) || null);
+    this.categoryFilter.set(params.get('category'));
+    this.accountFilter.set(params.has('account') ? Number(params.get('account')) : null);
+    this.sortBy.set((params.get('sort') as SubscriptionSort | null) ?? 'dueAsc');
     this.fetchAll();
   }
 
@@ -144,6 +167,9 @@ export class SubscriptionsComponent {
     };
   }
 
+  selectedSubscription = computed(() =>
+    this.subscriptions().find(s => s.id === this.editingId()) ?? null);
+
   save() {
     if (!this.model.name.trim()) {
       this.error.set('Name is required.');
@@ -183,12 +209,99 @@ export class SubscriptionsComponent {
     });
   }
 
+  onUploadAttachment(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file || !this.editingId()) return;
+    this.uploadingAttachment.set(true);
+    this.api.uploadSubscriptionAttachment(this.editingId()!, file).subscribe({
+      next: () => {
+        this.uploadingAttachment.set(false);
+        input.value = '';
+        this.fetchAll();
+      },
+      error: e => {
+        this.uploadingAttachment.set(false);
+        input.value = '';
+        this.error.set(e?.error?.error ?? 'Upload failed.');
+      },
+    });
+  }
+
+  removeAttachment(id: number) {
+    this.api.deleteAttachment(id).subscribe(() => this.fetchAll());
+  }
+
   clearFilters() {
     this.query.set('');
     this.statusFilter.set(null);
     this.categoryFilter.set(null);
     this.accountFilter.set(null);
     this.sortBy.set('dueAsc');
+    this.syncFiltersToUrl();
+  }
+
+  filterChanged() {
+    this.syncFiltersToUrl();
+  }
+
+  saveFilterPreset() {
+    const name = this.presetName.trim();
+    if (!name) return;
+    this.filterPresets.set(this.filterPresetsService.save('subscriptions', {
+      name,
+      values: this.currentFilters(),
+    }));
+    this.presetName = '';
+  }
+
+  applyFilterPreset(preset?: FilterPreset<SubscriptionFilters>) {
+    if (!preset) return;
+    this.query.set(preset.values.q);
+    this.statusFilter.set(preset.values.status);
+    this.categoryFilter.set(preset.values.category);
+    this.accountFilter.set(preset.values.account);
+    this.sortBy.set(preset.values.sort);
+    this.syncFiltersToUrl();
+  }
+
+  hasActiveFilters() {
+    const f = this.currentFilters();
+    return !!f.q || !!f.status || !!f.category || f.account != null || f.sort !== 'dueAsc';
+  }
+
+  clearFilter(name: keyof SubscriptionFilters) {
+    if (name === 'q') this.query.set('');
+    if (name === 'status') this.statusFilter.set(null);
+    if (name === 'category') this.categoryFilter.set(null);
+    if (name === 'account') this.accountFilter.set(null);
+    if (name === 'sort') this.sortBy.set('dueAsc');
+    this.syncFiltersToUrl();
+  }
+
+  currentFilters(): SubscriptionFilters {
+    return {
+      q: this.query(),
+      status: this.statusFilter(),
+      category: this.categoryFilter(),
+      account: this.accountFilter(),
+      sort: this.sortBy(),
+    };
+  }
+
+  private syncFiltersToUrl() {
+    const f = this.currentFilters();
+    this.router.navigate([], {
+      relativeTo: this.route,
+      replaceUrl: true,
+      queryParams: {
+        q: f.q || null,
+        status: f.status,
+        category: f.category,
+        account: f.account,
+        sort: f.sort === 'dueAsc' ? null : f.sort,
+      },
+      queryParamsHandling: 'merge',
+    });
   }
 
   reset() {

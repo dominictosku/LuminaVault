@@ -18,6 +18,7 @@ import {
   MonthlyAccountSummaryInput,
   Subscription,
   SubscriptionInput,
+  DocumentAttachment,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -159,5 +160,19 @@ export class FinanceApi {
 
   deleteSubscription(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/subscriptions/${id}`);
+  }
+
+  uploadSubscriptionAttachment(subscriptionId: number, file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<DocumentAttachment>(`${API_BASE}/api/finance/subscriptions/${subscriptionId}/attachments`, fd);
+  }
+
+  deleteAttachment(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/attachments/${id}`);
+  }
+
+  attachmentUrl(attachment: DocumentAttachment) {
+    return `${API_BASE}${attachment.url}`;
   }
 }

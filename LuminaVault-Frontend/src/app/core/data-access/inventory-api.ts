@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
 import {
   Container,
+  DocumentAttachment,
   Furniture,
   House,
   Item,
@@ -132,6 +133,20 @@ export class InventoryApi {
 
   deleteItemModel(itemId: number) {
     return this.http.delete<void>(`${API_BASE}/api/items/${itemId}/model`);
+  }
+
+  uploadItemAttachment(itemId: number, file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<DocumentAttachment>(`${API_BASE}/api/items/${itemId}/attachments`, fd);
+  }
+
+  deleteAttachment(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/attachments/${id}`);
+  }
+
+  attachmentUrl(attachment: DocumentAttachment) {
+    return `${API_BASE}${attachment.url}`;
   }
 
   stats() {

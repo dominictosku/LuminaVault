@@ -1,3 +1,5 @@
+import { DocumentAttachment } from './inventory.models';
+
 export type FinanceAccountType =
   | 'Checking' | 'Savings' | 'Cash' | 'CreditCard' | 'Investment' | 'Crypto' | 'Loan' | 'Other';
 
@@ -166,6 +168,7 @@ export interface Subscription {
   status: SubscriptionStatus;
   notes?: string | null;
   monthlyAmount: number;
+  attachments: DocumentAttachment[];
   createdAt: string;
   updatedAt: string;
 }

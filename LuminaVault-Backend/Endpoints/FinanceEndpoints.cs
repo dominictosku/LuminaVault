@@ -38,7 +38,7 @@ public record SubscriptionDto(
     int Id, string Name, string Category, string? Provider, int? AccountId, string? AccountName,
     decimal Amount, string Currency, int BillingIntervalDays, DateTime StartedOn,
     DateTime NextDueOn, bool AutoRenew, SubscriptionStatus Status, string? Notes,
-    decimal MonthlyAmount, DateTime CreatedAt, DateTime UpdatedAt);
+    decimal MonthlyAmount, DocumentAttachmentDto[] Attachments, DateTime CreatedAt, DateTime UpdatedAt);
 
 public record SubscriptionInput(
     string Name, string Category, string? Provider, int? AccountId, decimal Amount, string Currency,
@@ -272,7 +272,7 @@ public static class FinanceEndpoints
 
         subscriptions.MapGet("/", async (AppDbContext db, bool includeInactive = false) =>
         {
-            var query = db.Subscriptions.Include(s => s.Account).AsQueryable();
+            var query = db.Subscriptions.Include(s => s.Account).Include(s => s.Attachments).AsQueryable();
             if (!includeInactive) query = query.Where(s => s.Status != SubscriptionStatus.Cancelled);
             var result = await query
                 .OrderBy(s => s.Status == SubscriptionStatus.Active ? 0 : 1)
@@ -295,7 +295,7 @@ public static class FinanceEndpoints
 
         subscriptions.MapPut("/{id:int}", async (int id, [FromBody] SubscriptionInput input, AppDbContext db) =>
         {
-            var subscription = await db.Subscriptions.Include(s => s.Account).FirstOrDefaultAsync(s => s.Id == id);
+            var subscription = await db.Subscriptions.Include(s => s.Account).Include(s => s.Attachments).FirstOrDefaultAsync(s => s.Id == id);
             if (subscription is null) return Results.NotFound();
             var validation = await ValidateSubscription(input, db);
             if (validation is not null) return validation;
@@ -306,10 +306,12 @@ public static class FinanceEndpoints
             return Results.Ok(MapSubscription(subscription));
         });
 
-        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
+        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
         {
-            var subscription = await db.Subscriptions.FindAsync(id);
+            var subscription = await db.Subscriptions.Include(s => s.Attachments).FirstOrDefaultAsync(s => s.Id == id);
             if (subscription is null) return Results.NotFound();
+            foreach (var attachment in subscription.Attachments)
+                AttachmentEndpoints.DeleteUploadFile(env, attachment.FileName);
             db.Subscriptions.Remove(subscription);
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -1077,6 +1079,7 @@ public static class FinanceEndpoints
             subscription.BillingIntervalDays, subscription.StartedOn, subscription.NextDueOn,
             subscription.AutoRenew, subscription.Status, subscription.Notes,
             ToMonthlyAmount(subscription.Amount, subscription.BillingIntervalDays),
+            subscription.Attachments.Select(AttachmentEndpoints.MapAttachment).ToArray(),
             subscription.CreatedAt, subscription.UpdatedAt);
 
     static FinanceBudgetDto MapBudget(FinanceBudget budget, decimal spent)

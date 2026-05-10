@@ -29,14 +29,34 @@
           <input class="input" type="month" aria-label="Filter by month"
                  [ngModel]="monthFilter()" (ngModelChange)="setMonthFilter($event || '')" />
           @if (monthFilter()) {
-            <button type="button" class="btn btn-ghost px-3" title="Clear month filter" (click)="monthFilter.set('')">
+            <button type="button" class="btn btn-ghost px-3" title="Clear month filter" (click)="setMonthFilter('')">
               <i class="pi pi-times"></i>
             </button>
           }
         </div>
-      </div>
+          </div>
 
-      @if (loading()) {
+          <div class="surface p-3 flex flex-wrap items-center gap-2">
+            @if (hasActiveFilters()) {
+              @if (query) { <button class="tag" type="button" (click)="clearFilter('q')">Search: {{ query }} ×</button> }
+              @if (accountFilter != null) { <button class="tag" type="button" (click)="clearFilter('account')">Account filter ×</button> }
+              @if (kindFilter) { <button class="tag" type="button" (click)="clearFilter('kind')">Type: {{ kindFilter }} ×</button> }
+              @if (monthFilter()) { <button class="tag" type="button" (click)="clearFilter('month')">Month: {{ monthFilter() }} ×</button> }
+              <button class="btn btn-ghost !py-1 !px-2 text-xs" type="button" (click)="clearFilters()">Clear all</button>
+            } @else {
+              <span class="text-xs text-slate-500">No active filters</span>
+            }
+            <div class="ml-auto flex flex-wrap gap-2">
+              <select class="select !w-44" (change)="applyFilterPreset(filterPresets()[$any($event.target).selectedIndex - 1])">
+                <option>Apply preset</option>
+                @for (preset of filterPresets(); track preset.name) { <option>{{ preset.name }}</option> }
+              </select>
+              <input class="input !w-36" placeholder="Preset name" [(ngModel)]="presetName" />
+              <button class="btn btn-ghost" type="button" (click)="saveFilterPreset()"><i class="pi pi-save"></i></button>
+            </div>
+          </div>
+
+          @if (loading()) {
         <div class="space-y-2">
           @for (_ of [1,2,3,4,5,6]; track _) { <div class="surface h-16 animate-pulse"></div> }
         </div>

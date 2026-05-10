@@ -205,6 +205,38 @@
         }
       </div>
 
+      <div class="glass rounded-2xl p-5">
+        <h3 class="font-medium flex items-center gap-2 mb-4">
+          <i class="pi pi-paperclip text-violet-300"></i> Documents
+        </h3>
+        @if (id()) {
+          <input #attachmentFile type="file" class="hidden"
+                 accept=".pdf,.txt,.csv,.ods,.xlsx,.doc,.docx,image/*"
+                 (change)="onUploadAttachment(attachmentFile)" />
+          <button type="button" class="btn btn-ghost w-full justify-center" (click)="attachmentFile.click()" [disabled]="uploadingAttachment()">
+            @if (uploadingAttachment()) { <i class="pi pi-spin pi-spinner"></i> Uploading… }
+            @else { <i class="pi pi-upload"></i> Upload receipt or document }
+          </button>
+          @if (current()?.attachments?.length) {
+            <div class="space-y-2 mt-3">
+              @for (attachment of current()!.attachments; track attachment.id) {
+                <div class="surface-muted p-3 flex items-center gap-3">
+                  <i class="pi pi-file text-violet-300"></i>
+                  <a class="text-sm flex-1 truncate hover:text-violet-300" [href]="api.attachmentUrl(attachment)" target="_blank">
+                    {{ attachment.originalFileName }}
+                  </a>
+                  <button type="button" class="btn btn-danger !py-1 !px-2 text-xs" (click)="removeAttachment(attachment.id)">
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          <p class="text-xs text-slate-400">Save the item first to upload documents.</p>
+        }
+      </div>
+
       <div class="flex gap-2">
         <a routerLink="/items" class="btn btn-ghost flex-1 justify-center">Cancel</a>
         <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving()">

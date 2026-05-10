@@ -15,22 +15,22 @@
         <div class="relative">
           <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
           <input class="input pl-9" placeholder="Search name, provider, notes"
-                 [ngModel]="query()" (ngModelChange)="query.set($event || '')" />
+                 [ngModel]="query()" (ngModelChange)="query.set($event || ''); filterChanged()" />
         </div>
-        <select class="select" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <select class="select" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); filterChanged()">
           <option [ngValue]="null">All statuses</option>
           @for (status of statuses; track status) { <option [ngValue]="status">{{ status }}</option> }
         </select>
-        <select class="select" [ngModel]="categoryFilter()" (ngModelChange)="categoryFilter.set($event)">
+        <select class="select" [ngModel]="categoryFilter()" (ngModelChange)="categoryFilter.set($event); filterChanged()">
           <option [ngValue]="null">All categories</option>
           @for (category of categories(); track category) { <option [ngValue]="category">{{ category }}</option> }
         </select>
-        <select class="select" [ngModel]="accountFilter()" (ngModelChange)="accountFilter.set($event)">
+        <select class="select" [ngModel]="accountFilter()" (ngModelChange)="accountFilter.set($event); filterChanged()">
           <option [ngValue]="null">All accounts</option>
           <option [ngValue]="0">No account</option>
           @for (account of accounts(); track account.id) { <option [ngValue]="account.id">{{ account.name }}</option> }
         </select>
-        <select class="select" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)">
+        <select class="select" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event); filterChanged()">
           <option value="dueAsc">Due soon</option>
           <option value="dueDesc">Due latest</option>
           <option value="monthlyDesc">Monthly high</option>
@@ -39,6 +39,27 @@
           <option value="categoryAsc">Category A-Z</option>
           <option value="statusAsc">Status</option>
         </select>
+      </div>
+
+      <div class="surface p-3 flex flex-wrap items-center gap-2">
+        @if (hasActiveFilters()) {
+          @if (query()) { <button class="tag" type="button" (click)="clearFilter('q')">Search: {{ query() }} ×</button> }
+          @if (statusFilter()) { <button class="tag" type="button" (click)="clearFilter('status')">Status: {{ statusFilter() }} ×</button> }
+          @if (categoryFilter()) { <button class="tag" type="button" (click)="clearFilter('category')">Category: {{ categoryFilter() }} ×</button> }
+          @if (accountFilter() != null) { <button class="tag" type="button" (click)="clearFilter('account')">Account filter ×</button> }
+          @if (sortBy() !== 'dueAsc') { <button class="tag" type="button" (click)="clearFilter('sort')">Sort: {{ sortBy() }} ×</button> }
+          <button class="btn btn-ghost !py-1 !px-2 text-xs" type="button" (click)="clearFilters()">Clear all</button>
+        } @else {
+          <span class="text-xs text-slate-500">No active filters</span>
+        }
+        <div class="ml-auto flex flex-wrap gap-2">
+          <select class="select !w-44" (change)="applyFilterPreset(filterPresets()[$any($event.target).selectedIndex - 1])">
+            <option>Apply preset</option>
+            @for (preset of filterPresets(); track preset.name) { <option>{{ preset.name }}</option> }
+          </select>
+          <input class="input !w-36" placeholder="Preset name" [(ngModel)]="presetName" />
+          <button class="btn btn-ghost" type="button" (click)="saveFilterPreset()"><i class="pi pi-save"></i></button>
+        </div>
       </div>
 
       @if (loading()) {
@@ -177,6 +198,39 @@
           <label class="label">Notes</label>
           <textarea class="textarea" rows="3" name="notes" [(ngModel)]="model.notes"></textarea>
         </div>
+
+        @if (editingId()) {
+          <div class="surface-muted p-3 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <div class="font-medium text-sm">Documents</div>
+                <div class="text-xs text-slate-500">Contracts, invoices, cancellation letters.</div>
+              </div>
+              <input #subAttachment type="file" class="hidden"
+                     accept=".pdf,.txt,.csv,.ods,.xlsx,.doc,.docx,image/*"
+                     (change)="onUploadAttachment(subAttachment)" />
+              <button type="button" class="btn btn-ghost px-3" (click)="subAttachment.click()" [disabled]="uploadingAttachment()">
+                @if (uploadingAttachment()) { <i class="pi pi-spin pi-spinner"></i> }
+                @else { <i class="pi pi-upload"></i> }
+              </button>
+            </div>
+            @if (selectedSubscription()?.attachments?.length) {
+              <div class="space-y-2">
+                @for (attachment of selectedSubscription()!.attachments; track attachment.id) {
+                  <div class="flex items-center gap-2 text-sm">
+                    <i class="pi pi-file text-amber-300"></i>
+                    <a class="flex-1 truncate hover:text-amber-300" [href]="api.attachmentUrl(attachment)" target="_blank">
+                      {{ attachment.originalFileName }}
+                    </a>
+                    <button type="button" class="btn btn-danger !py-1 !px-2 text-xs" (click)="removeAttachment(attachment.id)">
+                      <i class="pi pi-trash"></i>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
         @if (error()) {
           <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
             {{ error() }}

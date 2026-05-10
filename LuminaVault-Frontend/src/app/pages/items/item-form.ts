@@ -25,6 +25,7 @@ export class ItemFormComponent {
   saving = signal(false);
   uploading = signal(false);
   uploadingModel = signal(false);
+  uploadingAttachment = signal(false);
   error = signal<string | null>(null);
   modelError = signal<string | null>(null);
 
@@ -180,6 +181,30 @@ export class ItemFormComponent {
   removePhoto(id: number) {
     this.api.deletePhoto(id).subscribe(() => {
       this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
+    });
+  }
+
+  onUploadAttachment(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file || !this.id()) return;
+    this.uploadingAttachment.set(true);
+    this.api.uploadItemAttachment(this.id()!, file).subscribe({
+      next: () => {
+        this.uploadingAttachment.set(false);
+        input.value = '';
+        this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
+      },
+      error: e => {
+        this.uploadingAttachment.set(false);
+        input.value = '';
+        this.error.set(e?.error?.error ?? 'Upload failed.');
+      },
+    });
+  }
+
+  removeAttachment(id: number) {
+    this.api.deleteAttachment(id).subscribe(() => {
+      if (this.id()) this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }
 

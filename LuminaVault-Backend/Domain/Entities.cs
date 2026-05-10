@@ -103,6 +103,7 @@ public class Item
     public string? ModelContentType { get; set; }
 
     public List<ItemPhoto> Photos { get; set; } = new();
+    public List<DocumentAttachment> Attachments { get; set; } = new();
 }
 
 public class ItemPhoto
@@ -112,6 +113,20 @@ public class ItemPhoto
     public Item? Item { get; set; }
     [Required] public string FileName { get; set; } = "";
     [Required] public string ContentType { get; set; } = "";
+    public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class DocumentAttachment
+{
+    public int Id { get; set; }
+    public int? ItemId { get; set; }
+    public Item? Item { get; set; }
+    public int? SubscriptionId { get; set; }
+    public Subscription? Subscription { get; set; }
+    [Required, MaxLength(220)] public string OriginalFileName { get; set; } = "";
+    [Required] public string FileName { get; set; } = "";
+    [Required, MaxLength(120)] public string ContentType { get; set; } = "";
+    public long Size { get; set; }
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -252,4 +267,5 @@ public class Subscription
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public List<DocumentAttachment> Attachments { get; set; } = new();
 }
