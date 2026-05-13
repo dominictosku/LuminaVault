@@ -12,6 +12,7 @@ import {
   FinanceTransactionInput,
   FinanceTransactionKind,
   FinanceCategoryInput,
+  HoldingPriceInput,
   MonthlyReconciliationInput,
   SubscriptionGenerateTransactionInput,
   ItemInput,
@@ -195,6 +196,22 @@ export class Api {
 
   deleteBudget(id: number) {
     return this.finance.deleteBudget(id);
+  }
+
+  listHoldings(accountId?: number) {
+    return this.finance.listHoldings(accountId);
+  }
+
+  updateHolding(id: number, input: HoldingPriceInput) {
+    return this.finance.updateHolding(id, input);
+  }
+
+  deleteHolding(id: number) {
+    return this.finance.deleteHolding(id);
+  }
+
+  recomputeHoldings() {
+    return this.finance.recomputeHoldings();
   }
 
   listBalanceSnapshots(accountId?: number) {

@@ -7,8 +7,17 @@ export const FINANCE_ACCOUNT_TYPES: FinanceAccountType[] = [
   'Checking', 'Savings', 'Cash', 'CreditCard', 'Investment', 'Crypto', 'Loan', 'Other'
 ];
 
-export type FinanceTransactionKind = 'Income' | 'Expense' | 'Transfer';
-export const FINANCE_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Income', 'Expense', 'Transfer'];
+export type FinanceTransactionKind =
+  | 'Income' | 'Expense' | 'Transfer' | 'Buy' | 'Sell' | 'Dividend' | 'Fee';
+export const FINANCE_TRANSACTION_KINDS: FinanceTransactionKind[] = [
+  'Income', 'Expense', 'Transfer', 'Buy', 'Sell', 'Dividend', 'Fee'
+];
+export const TRADE_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Buy', 'Sell', 'Dividend', 'Fee'];
+export const CASH_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Income', 'Expense', 'Transfer'];
+
+export const INVESTMENT_ACCOUNT_TYPES: FinanceAccountType[] = ['Investment', 'Crypto'];
+export const isInvestmentAccount = (type: FinanceAccountType | null | undefined) =>
+  type === 'Investment' || type === 'Crypto';
 
 export type FinanceTransactionStatus = 'Pending' | 'Cleared' | 'Reconciled';
 export const FINANCE_TRANSACTION_STATUSES: FinanceTransactionStatus[] = ['Pending', 'Cleared', 'Reconciled'];
@@ -108,6 +117,9 @@ export interface FinanceTransaction {
   description?: string | null;
   notes?: string | null;
   tags: string[];
+  symbol?: string | null;
+  quantity?: number | null;
+  pricePerUnit?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -124,6 +136,35 @@ export interface FinanceTransactionInput {
   description?: string | null;
   notes?: string | null;
   tags: string[];
+  symbol?: string | null;
+  quantity?: number | null;
+  pricePerUnit?: number | null;
+}
+
+export interface Holding {
+  id: number;
+  accountId: number;
+  accountName?: string | null;
+  currency: string;
+  symbol: string;
+  name?: string | null;
+  quantity: number;
+  averageCost: number;
+  lastPrice?: number | null;
+  lastPriceAt?: string | null;
+  costBasis: number;
+  marketValue?: number | null;
+  unrealizedPnL?: number | null;
+  unrealizedPnLPercent?: number | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HoldingPriceInput {
+  lastPrice?: number | null;
+  name?: string | null;
+  notes?: string | null;
 }
 
 export interface MonthlyAccountSummary {
@@ -212,6 +253,9 @@ export interface FinanceSummary {
   netWorth: number;
   accountNetWorth: number;
   inventoryValue: number;
+  holdingsMarketValue: number;
+  holdingsCostBasis: number;
+  holdingsUnrealizedPnL: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyCashFlow: number;

@@ -14,6 +14,8 @@ import {
   FinanceTransaction,
   FinanceTransactionInput,
   FinanceTransactionKind,
+  Holding,
+  HoldingPriceInput,
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
   MonthlyReconciliationInput,
@@ -74,6 +76,23 @@ export class FinanceApi {
 
   deleteBudget(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/budgets/${id}`);
+  }
+
+  listHoldings(accountId?: number) {
+    const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
+    return this.http.get<Holding[]>(`${API_BASE}/api/finance/holdings`, { params });
+  }
+
+  updateHolding(id: number, input: HoldingPriceInput) {
+    return this.http.put<Holding>(`${API_BASE}/api/finance/holdings/${id}`, input);
+  }
+
+  deleteHolding(id: number) {
+    return this.http.delete<void>(`${API_BASE}/api/finance/holdings/${id}`);
+  }
+
+  recomputeHoldings() {
+    return this.http.post<void>(`${API_BASE}/api/finance/holdings/recompute`, {});
   }
 
   listBalanceSnapshots(accountId?: number) {

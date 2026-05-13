@@ -1,4 +1,4 @@
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -6,6 +6,7 @@ import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import {
+  CASH_TRANSACTION_KINDS,
   FINANCE_TRANSACTION_KINDS,
   FINANCE_TRANSACTION_STATUSES,
   FinanceAccount,
@@ -14,6 +15,8 @@ import {
   FinanceTransactionInput,
   FinanceTransactionKind,
   FinanceTransactionStatus,
+  TRADE_TRANSACTION_KINDS,
+  isInvestmentAccount,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { FilterPreset, FilterPresetsService } from '../../shared/filters/filter-presets.service';
@@ -27,7 +30,7 @@ type TransactionFilters = {
 
 @Component({
   selector: 'app-transactions',
-  imports: [FormsModule, CurrencyPipe, DatePipe],
+  imports: [FormsModule, CurrencyPipe, DatePipe, NgClass],
   templateUrl: './transactions.html',
   styleUrl: './transactions.scss'
 })
@@ -65,6 +68,25 @@ export class TransactionsComponent {
       this.model.category,
     ].filter(Boolean) as string[])).sort();
   });
+
+  selectedAccount = computed(() =>
+    this.accounts().find(a => a.id === this.model.accountId) ?? null
+  );
+
+  availableKinds = computed<FinanceTransactionKind[]>(() => {
+    const account = this.selectedAccount();
+    return isInvestmentAccount(account?.type)
+      ? [...CASH_TRANSACTION_KINDS, ...TRADE_TRANSACTION_KINDS]
+      : CASH_TRANSACTION_KINDS;
+  });
+
+  isTradeKind(kind: FinanceTransactionKind): boolean {
+    return TRADE_TRANSACTION_KINDS.includes(kind);
+  }
+
+  needsTradeDetails(kind: FinanceTransactionKind): boolean {
+    return kind === 'Buy' || kind === 'Sell';
+  }
   filteredTransactions = computed(() => {
     const month = this.monthFilter();
     if (!month) return this.transactions();
@@ -211,7 +233,32 @@ export class TransactionsComponent {
       description: transaction.description ?? '',
       notes: transaction.notes ?? '',
       tags: transaction.tags,
+      symbol: transaction.symbol ?? '',
+      quantity: transaction.quantity ?? null,
+      pricePerUnit: transaction.pricePerUnit ?? null,
     };
+  }
+
+  onAccountChange() {
+    if (!this.availableKinds().includes(this.model.kind)) {
+      this.model.kind = 'Expense';
+    }
+  }
+
+  onKindChange() {
+    if (!this.isTradeKind(this.model.kind)) {
+      this.model.symbol = '';
+      this.model.quantity = null;
+      this.model.pricePerUnit = null;
+    }
+  }
+
+  recomputeAmountFromTrade() {
+    const qty = Number(this.model.quantity) || 0;
+    const price = Number(this.model.pricePerUnit) || 0;
+    if (qty > 0 && price > 0 && this.needsTradeDetails(this.model.kind)) {
+      this.model.amount = Number((qty * price).toFixed(2));
+    }
   }
 
   save() {
@@ -225,6 +272,7 @@ export class TransactionsComponent {
     }
     this.saving.set(true);
     this.error.set(null);
+    const isTrade = this.isTradeKind(this.model.kind);
     const input: FinanceTransactionInput = {
       ...this.model,
       amount: Number(this.model.amount) || 0,
@@ -232,6 +280,9 @@ export class TransactionsComponent {
       category: this.model.category || 'General',
       occurredOn: new Date(this.dateValue).toISOString(),
       tags: this.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
+      symbol: isTrade ? (this.model.symbol?.trim().toUpperCase() || null) : null,
+      quantity: isTrade && this.model.quantity != null ? Number(this.model.quantity) || null : null,
+      pricePerUnit: isTrade && this.model.pricePerUnit != null ? Number(this.model.pricePerUnit) || null : null,
     };
     const op = this.editingId()
       ? this.api.updateFinanceTransaction(this.editingId()!, input)
@@ -267,7 +318,16 @@ export class TransactionsComponent {
   }
 
   sign(kind: FinanceTransactionKind) {
-    return kind === 'Income' ? '+' : kind === 'Expense' ? '-' : '';
+    if (kind === 'Income' || kind === 'Sell' || kind === 'Dividend') return '+';
+    if (kind === 'Expense' || kind === 'Buy' || kind === 'Fee') return '-';
+    return '';
+  }
+
+  amountToneClass(kind: FinanceTransactionKind): Record<string, boolean> {
+    return {
+      'text-emerald-300': kind === 'Income' || kind === 'Sell' || kind === 'Dividend',
+      'text-red-300': kind === 'Expense' || kind === 'Buy' || kind === 'Fee',
+    };
   }
 
   private defaultModel(): FinanceTransactionInput {
@@ -283,6 +343,9 @@ export class TransactionsComponent {
       description: '',
       notes: '',
       tags: [],
+      symbol: '',
+      quantity: null,
+      pricePerUnit: null,
     };
   }
 

@@ -155,7 +155,7 @@ public enum FinanceAccountType
 
 public enum FinanceTransactionKind
 {
-    Income, Expense, Transfer
+    Income, Expense, Transfer, Buy, Sell, Dividend, Fee
 }
 
 public enum FinanceTransactionStatus
@@ -185,6 +185,7 @@ public class FinanceAccount
     public List<FinanceTransaction> Transactions { get; set; } = new();
     public List<Subscription> Subscriptions { get; set; } = new();
     public List<AccountBalanceSnapshot> BalanceSnapshots { get; set; } = new();
+    public List<Holding> Holdings { get; set; } = new();
 }
 
 public class FinanceTransaction
@@ -204,6 +205,28 @@ public class FinanceTransaction
     public string? Description { get; set; }
     public string? Notes { get; set; }
     public string TagsCsv { get; set; } = "";
+
+    // Trade fields — populated only for Buy / Sell / Dividend / Fee on investment & crypto accounts.
+    [MaxLength(24)] public string? Symbol { get; set; }
+    public decimal? Quantity { get; set; }
+    public decimal? PricePerUnit { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class Holding
+{
+    public int Id { get; set; }
+    public int AccountId { get; set; }
+    public FinanceAccount? Account { get; set; }
+    [Required, MaxLength(24)] public string Symbol { get; set; } = "";
+    [MaxLength(120)] public string? Name { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal AverageCost { get; set; }
+    public decimal? LastPrice { get; set; }
+    public DateTime? LastPriceAt { get; set; }
+    public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

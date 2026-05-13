@@ -23,6 +23,7 @@ public class AppDbContext : DbContext
     public DbSet<FinanceBudget> FinanceBudgets => Set<FinanceBudget>();
     public DbSet<AccountBalanceSnapshot> AccountBalanceSnapshots => Set<AccountBalanceSnapshot>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<Holding> Holdings => Set<Holding>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -102,8 +103,22 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         b.Entity<FinanceTransaction>().Property(t => t.Amount).HasColumnType("decimal(18,2)");
+        b.Entity<FinanceTransaction>().Property(t => t.Quantity).HasColumnType("decimal(28,8)");
+        b.Entity<FinanceTransaction>().Property(t => t.PricePerUnit).HasColumnType("decimal(18,8)");
         b.Entity<FinanceTransaction>().HasIndex(t => t.OccurredOn);
         b.Entity<FinanceTransaction>().HasIndex(t => t.Category);
+        b.Entity<FinanceTransaction>().HasIndex(t => t.Symbol);
+
+        b.Entity<Holding>()
+            .HasOne(h => h.Account)
+            .WithMany(a => a.Holdings)
+            .HasForeignKey(h => h.AccountId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<Holding>().Property(h => h.Quantity).HasColumnType("decimal(28,8)");
+        b.Entity<Holding>().Property(h => h.AverageCost).HasColumnType("decimal(18,8)");
+        b.Entity<Holding>().Property(h => h.LastPrice).HasColumnType("decimal(18,8)");
+        b.Entity<Holding>().HasIndex(h => new { h.AccountId, h.Symbol }).IsUnique();
 
         b.Entity<MonthlyAccountSummary>()
             .HasOne(s => s.Account)

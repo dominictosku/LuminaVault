@@ -18,12 +18,22 @@ public record FinanceTransactionDto(
     int Id, int AccountId, string? AccountName, int? TransferAccountId, string? TransferAccountName,
     FinanceTransactionKind Kind, FinanceTransactionStatus Status, DateTime OccurredOn,
     string Payee, string Category, decimal Amount, string? Description, string? Notes,
-    string[] Tags, DateTime CreatedAt, DateTime UpdatedAt);
+    string[] Tags, string? Symbol, decimal? Quantity, decimal? PricePerUnit,
+    DateTime CreatedAt, DateTime UpdatedAt);
 
 public record FinanceTransactionInput(
     int AccountId, int? TransferAccountId, FinanceTransactionKind Kind, FinanceTransactionStatus Status,
     DateTime OccurredOn, string Payee, string Category, decimal Amount,
-    string? Description, string? Notes, string[] Tags);
+    string? Description, string? Notes, string[] Tags,
+    string? Symbol, decimal? Quantity, decimal? PricePerUnit);
+
+public record HoldingDto(
+    int Id, int AccountId, string? AccountName, string Currency, string Symbol, string? Name,
+    decimal Quantity, decimal AverageCost, decimal? LastPrice, DateTime? LastPriceAt,
+    decimal CostBasis, decimal? MarketValue, decimal? UnrealizedPnL, decimal? UnrealizedPnLPercent,
+    string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record HoldingPriceInput(decimal? LastPrice, string? Name, string? Notes);
 
 public record MonthlyAccountSummaryDto(
     int Id, int AccountId, string? AccountName, string Currency, DateTime Month,
@@ -75,6 +85,7 @@ public static class FinanceEndpoints
         var subscriptions = app.MapGroup("/api/finance/subscriptions").RequireAuthorization().WithTags("Finance");
         var budgets = app.MapGroup("/api/finance/budgets").RequireAuthorization().WithTags("Finance");
         var balanceSnapshots = app.MapGroup("/api/finance/balance-snapshots").RequireAuthorization().WithTags("Finance");
+        var holdings = app.MapGroup("/api/finance/holdings").RequireAuthorization().WithTags("Finance");
         var summary = app.MapGroup("/api/finance").RequireAuthorization().WithTags("Finance");
 
         accounts.MapGet("/", async (AppDbContext db, bool includeArchived = false) =>
@@ -176,6 +187,7 @@ public static class FinanceEndpoints
             ApplyTransaction(transaction, input);
             db.FinanceTransactions.Add(transaction);
             await db.SaveChangesAsync();
+            await RecalculateHoldings(db, transaction.AccountId);
             await RecalculateBalances(db);
             await LoadTransactionRefs(db, transaction);
             return Results.Created($"/api/finance/transactions/{transaction.Id}", MapTransaction(transaction));
@@ -191,9 +203,13 @@ public static class FinanceEndpoints
             var validation = await ValidateTransaction(input, db);
             if (validation is not null) return validation;
 
+            var previousAccountId = transaction.AccountId;
             ApplyTransaction(transaction, input);
             transaction.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
+            if (previousAccountId != transaction.AccountId)
+                await RecalculateHoldings(db, previousAccountId);
+            await RecalculateHoldings(db, transaction.AccountId);
             await RecalculateBalances(db);
             await LoadTransactionRefs(db, transaction);
             return Results.Ok(MapTransaction(transaction));
@@ -203,8 +219,10 @@ public static class FinanceEndpoints
         {
             var transaction = await db.FinanceTransactions.FindAsync(id);
             if (transaction is null) return Results.NotFound();
+            var accountId = transaction.AccountId;
             db.FinanceTransactions.Remove(transaction);
             await db.SaveChangesAsync();
+            await RecalculateHoldings(db, accountId);
             await RecalculateBalances(db);
             return Results.NoContent();
         });
@@ -555,6 +573,47 @@ public static class FinanceEndpoints
             return Results.NoContent();
         });
 
+        holdings.MapGet("/", async (AppDbContext db, int? accountId) =>
+        {
+            var query = db.Holdings.Include(h => h.Account).AsQueryable();
+            if (accountId.HasValue) query = query.Where(h => h.AccountId == accountId.Value);
+            var result = await query
+                .OrderBy(h => h.Account!.Name)
+                .ThenBy(h => h.Symbol)
+                .ToListAsync();
+            return Results.Ok(result.Select(MapHolding));
+        });
+
+        holdings.MapPut("/{id:int}", async (int id, [FromBody] HoldingPriceInput input, AppDbContext db) =>
+        {
+            var holding = await db.Holdings.Include(h => h.Account).FirstOrDefaultAsync(h => h.Id == id);
+            if (holding is null) return Results.NotFound();
+            holding.LastPrice = input.LastPrice;
+            holding.LastPriceAt = input.LastPrice.HasValue ? DateTime.UtcNow : null;
+            holding.Name = Clean(input.Name);
+            holding.Notes = Clean(input.Notes);
+            holding.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(MapHolding(holding));
+        });
+
+        holdings.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
+        {
+            var holding = await db.Holdings.FindAsync(id);
+            if (holding is null) return Results.NotFound();
+            db.Holdings.Remove(holding);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        holdings.MapPost("/recompute", async (AppDbContext db) =>
+        {
+            var accountIds = await db.FinanceAccounts.Select(a => a.Id).ToListAsync();
+            foreach (var accountId in accountIds)
+                await RecalculateHoldings(db, accountId);
+            return Results.NoContent();
+        });
+
         summary.MapGet("/summary", async (AppDbContext db) =>
         {
             await RecalculateBalances(db);
@@ -601,6 +660,10 @@ public static class FinanceEndpoints
             var recurringMonthly = activeSubscriptions.Sum(s => ToMonthlyAmount(s.Amount, s.BillingIntervalDays));
             var accountNetWorth = activeAccounts.Sum(a => a.Balance);
             var assetValue = inventoryValue.Sum(i => (i.Value ?? 0m) * i.Quantity);
+            var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
+            var holdingsMarketValue = holdings.Sum(h =>
+                h.LastPrice.HasValue ? h.Quantity * h.LastPrice.Value : h.Quantity * h.AverageCost);
+            var holdingsCostBasis = holdings.Sum(h => h.Quantity * h.AverageCost);
 
             var series = new List<object>();
             for (var i = 5; i >= 0; i--)
@@ -668,9 +731,12 @@ public static class FinanceEndpoints
 
             return Results.Ok(new
             {
-                netWorth = accountNetWorth + assetValue,
+                netWorth = accountNetWorth + assetValue + holdingsMarketValue,
                 accountNetWorth,
                 inventoryValue = assetValue,
+                holdingsMarketValue,
+                holdingsCostBasis,
+                holdingsUnrealizedPnL = holdingsMarketValue - holdingsCostBasis,
                 monthlyIncome = income,
                 monthlyExpenses = expenses,
                 monthlyCashFlow = cashFlow,
@@ -682,7 +748,7 @@ public static class FinanceEndpoints
                     a.Type is FinanceAccountType.Cash or FinanceAccountType.Crypto),
                 investmentValue = activeAccounts
                     .Where(a => a.Type is FinanceAccountType.Investment or FinanceAccountType.Crypto)
-                    .Sum(a => a.Balance),
+                    .Sum(a => a.Balance) + holdingsMarketValue,
                 recentTransactions = allRecentTransactions.Select(MapTransaction),
                 upcomingSubscriptions = upcoming,
                 monthlySeries = series,
@@ -945,6 +1011,19 @@ public static class FinanceEndpoints
         transaction.Notes = Clean(input.Notes);
         transaction.TagsCsv = string.Join(",", (input.Tags ?? Array.Empty<string>())
             .Select(t => t.Trim()).Where(t => t.Length > 0));
+
+        if (IsTradeKind(input.Kind))
+        {
+            transaction.Symbol = NormalizeSymbol(input.Symbol);
+            transaction.Quantity = input.Quantity.HasValue ? Math.Abs(input.Quantity.Value) : null;
+            transaction.PricePerUnit = input.PricePerUnit.HasValue ? Math.Abs(input.PricePerUnit.Value) : null;
+        }
+        else
+        {
+            transaction.Symbol = null;
+            transaction.Quantity = null;
+            transaction.PricePerUnit = null;
+        }
     }
 
     static void ApplyMonthlySummary(MonthlyAccountSummary monthlySummary, MonthlyAccountSummaryInput input)
@@ -1011,6 +1090,15 @@ public static class FinanceEndpoints
             return Results.BadRequest(new { error = "Payee is required." });
         if (input.Amount <= 0)
             return Results.BadRequest(new { error = "Amount must be greater than zero." });
+        if (IsTradeKind(input.Kind) && (input.Kind == FinanceTransactionKind.Buy || input.Kind == FinanceTransactionKind.Sell))
+        {
+            if (string.IsNullOrWhiteSpace(input.Symbol))
+                return Results.BadRequest(new { error = "Symbol is required for buy or sell trades." });
+            if (!input.Quantity.HasValue || input.Quantity.Value <= 0)
+                return Results.BadRequest(new { error = "Quantity must be greater than zero." });
+            if (!input.PricePerUnit.HasValue || input.PricePerUnit.Value <= 0)
+                return Results.BadRequest(new { error = "Price per unit must be greater than zero." });
+        }
         return null;
     }
 
@@ -1115,10 +1203,92 @@ public static class FinanceEndpoints
         transaction.Kind switch
         {
             FinanceTransactionKind.Income => transaction.Amount,
+            FinanceTransactionKind.Dividend => transaction.Amount,
+            FinanceTransactionKind.Sell => transaction.Amount,
             FinanceTransactionKind.Expense => -transaction.Amount,
+            FinanceTransactionKind.Buy => -transaction.Amount,
+            FinanceTransactionKind.Fee => -transaction.Amount,
             FinanceTransactionKind.Transfer => -transaction.Amount,
             _ => 0m
         };
+
+    static bool IsTradeKind(FinanceTransactionKind kind) => kind is
+        FinanceTransactionKind.Buy or
+        FinanceTransactionKind.Sell or
+        FinanceTransactionKind.Dividend or
+        FinanceTransactionKind.Fee;
+
+    static string? NormalizeSymbol(string? symbol) =>
+        string.IsNullOrWhiteSpace(symbol) ? null : symbol.Trim().ToUpperInvariant();
+
+    static async Task RecalculateHoldings(AppDbContext db, int accountId)
+    {
+        var trades = await db.FinanceTransactions
+            .Where(t => t.AccountId == accountId)
+            .Where(t => t.Kind == FinanceTransactionKind.Buy || t.Kind == FinanceTransactionKind.Sell)
+            .Where(t => t.Status != FinanceTransactionStatus.Pending)
+            .Where(t => t.Symbol != null && t.Symbol != "")
+            .OrderBy(t => t.OccurredOn)
+            .ThenBy(t => t.Id)
+            .ToListAsync();
+
+        var existing = await db.Holdings.Where(h => h.AccountId == accountId).ToListAsync();
+        var existingBySymbol = existing.ToDictionary(h => h.Symbol, StringComparer.OrdinalIgnoreCase);
+
+        var seenSymbols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in trades.GroupBy(t => t.Symbol!, StringComparer.OrdinalIgnoreCase))
+        {
+            var symbol = group.Key;
+            seenSymbols.Add(symbol);
+            decimal qty = 0m, avgCost = 0m;
+            foreach (var t in group)
+            {
+                var tradeQty = t.Quantity ?? 0m;
+                var tradePrice = t.PricePerUnit ?? 0m;
+                if (tradeQty <= 0) continue;
+                if (t.Kind == FinanceTransactionKind.Buy)
+                {
+                    var newQty = qty + tradeQty;
+                    avgCost = newQty > 0 ? (qty * avgCost + tradeQty * tradePrice) / newQty : 0m;
+                    qty = newQty;
+                }
+                else if (t.Kind == FinanceTransactionKind.Sell)
+                {
+                    qty -= tradeQty;
+                    if (qty <= 0)
+                    {
+                        qty = 0m;
+                        avgCost = 0m;
+                    }
+                }
+            }
+
+            if (existingBySymbol.TryGetValue(symbol, out var holding))
+            {
+                holding.Quantity = qty;
+                holding.AverageCost = avgCost;
+                holding.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                db.Holdings.Add(new Holding
+                {
+                    AccountId = accountId,
+                    Symbol = symbol,
+                    Quantity = qty,
+                    AverageCost = avgCost,
+                });
+            }
+        }
+
+        foreach (var holding in existing)
+        {
+            if (!seenSymbols.Contains(holding.Symbol))
+                db.Holdings.Remove(holding);
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     static bool IsAfterLatestSnapshot(
         int accountId,
@@ -1218,7 +1388,26 @@ public static class FinanceEndpoints
             transaction.Payee, transaction.Category, transaction.Amount,
             transaction.Description, transaction.Notes,
             string.IsNullOrWhiteSpace(transaction.TagsCsv) ? Array.Empty<string>() : transaction.TagsCsv.Split(','),
+            transaction.Symbol, transaction.Quantity, transaction.PricePerUnit,
             transaction.CreatedAt, transaction.UpdatedAt);
+
+    static HoldingDto MapHolding(Holding holding)
+    {
+        var costBasis = holding.Quantity * holding.AverageCost;
+        decimal? marketValue = holding.LastPrice.HasValue ? holding.Quantity * holding.LastPrice.Value : null;
+        decimal? pnl = marketValue.HasValue ? marketValue.Value - costBasis : null;
+        decimal? pnlPercent = pnl.HasValue && costBasis > 0
+            ? Math.Round(pnl.Value / costBasis * 100m, 2)
+            : null;
+        return new HoldingDto(
+            holding.Id, holding.AccountId, holding.Account?.Name,
+            holding.Account?.Currency ?? "CHF",
+            holding.Symbol, holding.Name,
+            holding.Quantity, holding.AverageCost,
+            holding.LastPrice, holding.LastPriceAt,
+            costBasis, marketValue, pnl, pnlPercent,
+            holding.Notes, holding.CreatedAt, holding.UpdatedAt);
+    }
 
     static MonthlyAccountSummaryDto MapMonthlySummary(MonthlyAccountSummary monthlySummary, decimal expectedClosingBalance)
     {

@@ -669,7 +669,11 @@ public static class OdsEndpoints
                 balances[t.AccountId] += t.Kind switch
                 {
                     FinanceTransactionKind.Income => t.Amount,
+                    FinanceTransactionKind.Dividend => t.Amount,
+                    FinanceTransactionKind.Sell => t.Amount,
                     FinanceTransactionKind.Expense => -t.Amount,
+                    FinanceTransactionKind.Buy => -t.Amount,
+                    FinanceTransactionKind.Fee => -t.Amount,
                     FinanceTransactionKind.Transfer => -t.Amount,
                     _ => 0m
                 };

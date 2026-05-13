@@ -87,16 +87,24 @@
                       (click)="editTransaction(t)">
                 <div class="text-sm text-slate-400">{{ t.occurredOn | date:'MMM d, y' }}</div>
                 <div class="min-w-0">
-                  <div class="font-medium truncate">{{ t.payee }}</div>
+                  <div class="font-medium truncate flex items-center gap-2">
+                    <span>{{ t.payee }}</span>
+                    @if (isTradeKind(t.kind)) {
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-200 border border-violet-500/30">
+                        {{ t.kind }}@if (t.symbol) { · {{ t.symbol }} }
+                      </span>
+                    }
+                  </div>
                   <div class="text-xs text-slate-500 truncate">
                     {{ t.category }}
                     @if (t.kind === 'Transfer') { · {{ t.transferAccountName || 'Transfer' }} }
+                    @if (t.quantity && t.pricePerUnit) {
+                      · {{ t.quantity }} × {{ t.pricePerUnit | currency:'CHF':'symbol-narrow' }}
+                    }
                   </div>
                 </div>
                 <div class="text-sm text-slate-400 truncate">{{ t.accountName || 'Account' }}</div>
-                <div class="text-right font-medium"
-                     [class.text-emerald-300]="t.kind === 'Income'"
-                     [class.text-red-300]="t.kind === 'Expense'">
+                <div class="text-right font-medium" [ngClass]="amountToneClass(t.kind)">
                   {{ sign(t.kind) }}{{ t.amount | currency:'CHF':'symbol-narrow' }}
                 </div>
               </button>
@@ -119,11 +127,18 @@
       }
 
       <form (ngSubmit)="save()" class="space-y-4">
+        <div>
+          <label class="label">Account</label>
+          <select class="select" name="account" [(ngModel)]="model.accountId" (ngModelChange)="onAccountChange()" required>
+            <option [ngValue]="0">Choose account</option>
+            @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }} · {{ a.type }}</option> }
+          </select>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label">Type</label>
-            <select class="select" name="kind" [(ngModel)]="model.kind">
-              @for (k of kinds; track k) { <option [ngValue]="k">{{ k }}</option> }
+            <select class="select" name="kind" [(ngModel)]="model.kind" (ngModelChange)="onKindChange()">
+              @for (k of availableKinds(); track k) { <option [ngValue]="k">{{ k }}</option> }
             </select>
           </div>
           <div>
@@ -132,13 +147,6 @@
               @for (s of statuses; track s) { <option [ngValue]="s">{{ s }}</option> }
             </select>
           </div>
-        </div>
-        <div>
-          <label class="label">Account</label>
-          <select class="select" name="account" [(ngModel)]="model.accountId" required>
-            <option [ngValue]="0">Choose account</option>
-            @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
-          </select>
         </div>
         @if (model.kind === 'Transfer') {
           <div>
@@ -151,13 +159,50 @@
             </select>
           </div>
         }
+        @if (isTradeKind(model.kind)) {
+          <div class="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 space-y-3">
+            <div class="flex items-center gap-2 text-xs uppercase tracking-wide text-violet-200">
+              <i class="pi pi-chart-line"></i>
+              {{ model.kind }} trade details
+            </div>
+            @if (needsTradeDetails(model.kind)) {
+              <div class="grid grid-cols-3 gap-2">
+                <div>
+                  <label class="label">Symbol</label>
+                  <input class="input uppercase" name="symbol" [(ngModel)]="model.symbol"
+                         placeholder="TSLA" maxlength="24" />
+                </div>
+                <div>
+                  <label class="label">Quantity</label>
+                  <input class="input" type="number" step="0.00000001" min="0" name="quantity"
+                         [(ngModel)]="model.quantity" (ngModelChange)="recomputeAmountFromTrade()" />
+                </div>
+                <div>
+                  <label class="label">Unit price</label>
+                  <input class="input" type="number" step="0.0001" min="0" name="price"
+                         [(ngModel)]="model.pricePerUnit" (ngModelChange)="recomputeAmountFromTrade()" />
+                </div>
+              </div>
+              <div class="text-xs text-slate-400">
+                Cash impact will be {{ (model.quantity || 0) * (model.pricePerUnit || 0) | currency:'CHF':'symbol-narrow' }}.
+                Override below for slippage or fees baked into the order.
+              </div>
+            } @else {
+              <div>
+                <label class="label">Symbol (optional)</label>
+                <input class="input uppercase" name="symbol" [(ngModel)]="model.symbol"
+                       placeholder="TSLA" maxlength="24" />
+              </div>
+            }
+          </div>
+        }
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label">Date</label>
             <input class="input" type="date" name="date" [(ngModel)]="dateValue" required />
           </div>
           <div>
-            <label class="label">Amount</label>
+            <label class="label">{{ isTradeKind(model.kind) ? 'Cash amount' : 'Amount' }}</label>
             <input class="input" type="number" step="0.01" min="0" name="amount" [(ngModel)]="model.amount" required />
           </div>
         </div>

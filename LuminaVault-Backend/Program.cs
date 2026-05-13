@@ -86,6 +86,9 @@ using (var scope = app.Services.CreateScope())
     AddColumnIfMissing("MonthlyAccountSummaries", "IsReconciled", "INTEGER NOT NULL DEFAULT 0");
     AddColumnIfMissing("MonthlyAccountSummaries", "ReconciledAt", "TEXT NULL");
     AddColumnIfMissing("MonthlyAccountSummaries", "ReconciliationNotes", "TEXT NULL");
+    AddColumnIfMissing("FinanceTransactions", "Symbol", "TEXT NULL");
+    AddColumnIfMissing("FinanceTransactions", "Quantity", "TEXT NULL");
+    AddColumnIfMissing("FinanceTransactions", "PricePerUnit", "TEXT NULL");
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS DocumentAttachments (
@@ -237,6 +240,25 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AccountBalanceSnapshots_AccountId_SnapshotDate ON AccountBalanceSnapshots (AccountId, SnapshotDate)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_NextDueOn ON Subscriptions (NextDueOn)");
     db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_AccountId ON Subscriptions (AccountId)");
+    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Symbol ON FinanceTransactions (Symbol)");
+
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS Holdings (
+            Id INTEGER NOT NULL CONSTRAINT PK_Holdings PRIMARY KEY AUTOINCREMENT,
+            AccountId INTEGER NOT NULL,
+            Symbol TEXT NOT NULL,
+            Name TEXT NULL,
+            Quantity TEXT NOT NULL,
+            AverageCost TEXT NOT NULL,
+            LastPrice TEXT NULL,
+            LastPriceAt TEXT NULL,
+            Notes TEXT NULL,
+            CreatedAt TEXT NOT NULL,
+            UpdatedAt TEXT NOT NULL,
+            CONSTRAINT FK_Holdings_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
+        );
+        """);
+    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Holdings_AccountId_Symbol ON Holdings (AccountId, Symbol)");
 
     if (!db.AssetCategories.Any())
     {
