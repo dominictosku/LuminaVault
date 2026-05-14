@@ -188,6 +188,12 @@ export interface HoldingRefreshResult {
   providers: string[];
 }
 
+export interface PriceProviderStatus {
+  name: string;
+  isConfigured: boolean;
+  supportedAccountTypes: string[];
+}
+
 export interface MonthlyAccountSummary {
   id: number;
   accountId: number;

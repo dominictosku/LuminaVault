@@ -72,6 +72,16 @@ builder.Services.AddHttpClient<CoinGeckoPriceProvider>(c =>
         c.DefaultRequestHeaders.Add("x-cg-demo-api-key", apiKey);
 });
 builder.Services.AddTransient<IPriceProvider>(sp => sp.GetRequiredService<CoinGeckoPriceProvider>());
+
+builder.Services.AddHttpClient<FinnhubPriceProvider>(c =>
+{
+    c.BaseAddress = new Uri(builder.Configuration["PriceProviders:Finnhub:BaseUrl"]
+        ?? "https://finnhub.io/api/v1/");
+    c.Timeout = TimeSpan.FromSeconds(20);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("LuminaVault/1.0");
+});
+builder.Services.AddTransient<IPriceProvider>(sp => sp.GetRequiredService<FinnhubPriceProvider>());
+
 builder.Services.AddScoped<PriceProviderService>();
 
 builder.Services.AddOpenApi();

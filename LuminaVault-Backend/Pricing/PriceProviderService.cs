@@ -20,6 +20,15 @@ public class PriceProviderService
     public IPriceProvider? FindProvider(FinanceAccountType type) =>
         _providers.FirstOrDefault(p => p.Supports(type));
 
+    public IReadOnlyList<ProviderStatus> GetStatuses()
+    {
+        var allAccountTypes = Enum.GetValues<FinanceAccountType>();
+        return _providers.Select(p => new ProviderStatus(
+            p.Name,
+            p.IsConfigured,
+            allAccountTypes.Where(p.Supports).Select(t => t.ToString()).ToList())).ToList();
+    }
+
     public async Task<RefreshResult> RefreshAsync(AppDbContext db, int? accountId = null, CancellationToken ct = default)
     {
         var query = db.Holdings.Include(h => h.Account).AsQueryable();
@@ -38,6 +47,12 @@ public class PriceProviderService
             if (provider is null)
             {
                 skipped.Add(new RefreshSkipped(h.Id, h.Symbol, $"No price provider registered for {type} accounts"));
+                continue;
+            }
+            if (!provider.IsConfigured)
+            {
+                skipped.Add(new RefreshSkipped(h.Id, h.Symbol,
+                    $"{provider.Name} is not configured — set the API key in appsettings.json or via env var"));
                 continue;
             }
             if (!lookupsByProvider.TryGetValue(provider, out var bucket))

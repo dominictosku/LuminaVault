@@ -51,6 +51,26 @@
     </div>
   }
 
+  @if (providers().length > 0) {
+    <div class="surface p-3 mb-4 flex flex-wrap items-center gap-2 text-xs">
+      <span class="uppercase tracking-wide text-slate-400 mr-1">Price providers:</span>
+      @for (p of providers(); track p.name) {
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border"
+              [class.border-emerald-500\/30]="p.isConfigured"
+              [class.bg-emerald-500\/10]="p.isConfigured"
+              [class.text-emerald-300]="p.isConfigured"
+              [class.border-amber-500\/40]="!p.isConfigured"
+              [class.bg-amber-500\/10]="!p.isConfigured"
+              [class.text-amber-200]="!p.isConfigured">
+          <i class="pi" [class.pi-check-circle]="p.isConfigured" [class.pi-exclamation-triangle]="!p.isConfigured"></i>
+          <span class="font-medium">{{ p.name }}</span>
+          <span class="text-slate-400">· {{ p.supportedAccountTypes.join(', ') }}</span>
+          @if (!p.isConfigured) { <span>· API key missing</span> }
+        </span>
+      }
+    </div>
+  }
+
   <div class="surface p-5 mb-4 grid grid-cols-2 md:grid-cols-4 gap-4">
     <div>
       <div class="text-xs uppercase tracking-wide text-slate-400">Market value</div>

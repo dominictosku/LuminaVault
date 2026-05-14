@@ -17,6 +17,7 @@ import {
   Holding,
   HoldingPriceInput,
   HoldingRefreshResult,
+  PriceProviderStatus,
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
   MonthlyReconciliationInput,
@@ -99,6 +100,10 @@ export class FinanceApi {
   refreshHoldingPrices(accountId?: number) {
     const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
     return this.http.post<HoldingRefreshResult>(`${API_BASE}/api/finance/holdings/refresh-prices`, {}, { params });
+  }
+
+  listPriceProviders() {
+    return this.http.get<PriceProviderStatus[]>(`${API_BASE}/api/finance/price-providers`);
   }
 
   listBalanceSnapshots(accountId?: number) {

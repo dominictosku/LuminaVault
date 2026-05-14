@@ -27,7 +27,15 @@ public interface IPriceProvider
 {
     string Name { get; }
     bool Supports(FinanceAccountType accountType);
+
+    /// True when the provider has everything it needs to fetch quotes (API key, etc.).
+    /// Returning false makes the dispatcher skip it with a clear "not configured" message,
+    /// so users don't have to trigger a refresh to discover the misconfiguration.
+    bool IsConfigured { get; }
+
     Task<IReadOnlyList<PriceQuote>> GetQuotesAsync(
         IReadOnlyCollection<PriceLookup> lookups,
         CancellationToken ct = default);
 }
+
+public record ProviderStatus(string Name, bool IsConfigured, IReadOnlyList<string> SupportedAccountTypes);

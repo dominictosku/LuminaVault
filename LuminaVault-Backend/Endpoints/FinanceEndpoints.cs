@@ -609,6 +609,11 @@ public static class FinanceEndpoints
             return Results.Ok(result);
         });
 
+        app.MapGet("/api/finance/price-providers", (PriceProviderService priceService) =>
+            Results.Ok(priceService.GetStatuses()))
+            .RequireAuthorization()
+            .WithTags("Finance");
+
         holdings.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
         {
             var holding = await db.Holdings.FindAsync(id);

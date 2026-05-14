@@ -18,6 +18,7 @@ public class CoinGeckoPriceProvider : IPriceProvider
 
     public string Name => ProviderName;
     public bool Supports(FinanceAccountType accountType) => accountType == FinanceAccountType.Crypto;
+    public bool IsConfigured => true; // Free tier needs no key.
 
     public async Task<IReadOnlyList<PriceQuote>> GetQuotesAsync(
         IReadOnlyCollection<PriceLookup> lookups,

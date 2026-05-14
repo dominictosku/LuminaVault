@@ -3,7 +3,13 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
-import { FinanceAccount, Holding, HoldingPriceInput, HoldingRefreshResult } from '../../core/models';
+import {
+  FinanceAccount,
+  Holding,
+  HoldingPriceInput,
+  HoldingRefreshResult,
+  PriceProviderStatus,
+} from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 interface AccountGroup {
@@ -27,6 +33,7 @@ export class HoldingsComponent {
 
   holdings = signal<Holding[]>([]);
   accounts = signal<FinanceAccount[]>([]);
+  providers = signal<PriceProviderStatus[]>([]);
   loading = signal(true);
   saving = signal<number | null>(null);
   refreshing = signal(false);
@@ -87,12 +94,14 @@ export class HoldingsComponent {
     forkJoin({
       holdings: this.api.listHoldings(),
       accounts: this.api.listFinanceAccounts(),
+      providers: this.api.listPriceProviders(),
     }).subscribe({
       next: r => {
         this.holdings.set(r.holdings);
         this.accounts.set(r.accounts.filter(a =>
           a.type === 'Investment' || a.type === 'Crypto' || r.holdings.some(h => h.accountId === a.id)
         ));
+        this.providers.set(r.providers);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
