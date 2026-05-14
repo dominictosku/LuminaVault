@@ -16,6 +16,7 @@ import {
   FinanceTransactionKind,
   Holding,
   HoldingPriceInput,
+  HoldingRefreshResult,
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
   MonthlyReconciliationInput,
@@ -93,6 +94,11 @@ export class FinanceApi {
 
   recomputeHoldings() {
     return this.http.post<void>(`${API_BASE}/api/finance/holdings/recompute`, {});
+  }
+
+  refreshHoldingPrices(accountId?: number) {
+    const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
+    return this.http.post<HoldingRefreshResult>(`${API_BASE}/api/finance/holdings/refresh-prices`, {}, { params });
   }
 
   listBalanceSnapshots(accountId?: number) {

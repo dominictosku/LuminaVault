@@ -152,6 +152,7 @@ export interface Holding {
   averageCost: number;
   lastPrice?: number | null;
   lastPriceAt?: string | null;
+  providerId?: string | null;
   costBasis: number;
   marketValue?: number | null;
   unrealizedPnL?: number | null;
@@ -164,7 +165,27 @@ export interface Holding {
 export interface HoldingPriceInput {
   lastPrice?: number | null;
   name?: string | null;
+  providerId?: string | null;
   notes?: string | null;
+}
+
+export interface HoldingRefreshError {
+  holdingId: number;
+  symbol: string;
+  error: string;
+}
+
+export interface HoldingRefreshSkipped {
+  holdingId: number;
+  symbol: string;
+  reason: string;
+}
+
+export interface HoldingRefreshResult {
+  updated: number;
+  errors: HoldingRefreshError[];
+  skipped: HoldingRefreshSkipped[];
+  providers: string[];
 }
 
 export interface MonthlyAccountSummary {

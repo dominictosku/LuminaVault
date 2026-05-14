@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Pricing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,10 +31,10 @@ public record FinanceTransactionInput(
 public record HoldingDto(
     int Id, int AccountId, string? AccountName, string Currency, string Symbol, string? Name,
     decimal Quantity, decimal AverageCost, decimal? LastPrice, DateTime? LastPriceAt,
-    decimal CostBasis, decimal? MarketValue, decimal? UnrealizedPnL, decimal? UnrealizedPnLPercent,
-    string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+    string? ProviderId, decimal CostBasis, decimal? MarketValue, decimal? UnrealizedPnL,
+    decimal? UnrealizedPnLPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
 
-public record HoldingPriceInput(decimal? LastPrice, string? Name, string? Notes);
+public record HoldingPriceInput(decimal? LastPrice, string? Name, string? ProviderId, string? Notes);
 
 public record MonthlyAccountSummaryDto(
     int Id, int AccountId, string? AccountName, string Currency, DateTime Month,
@@ -591,10 +592,21 @@ public static class FinanceEndpoints
             holding.LastPrice = input.LastPrice;
             holding.LastPriceAt = input.LastPrice.HasValue ? DateTime.UtcNow : null;
             holding.Name = Clean(input.Name);
+            holding.ProviderId = Clean(input.ProviderId);
             holding.Notes = Clean(input.Notes);
             holding.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             return Results.Ok(MapHolding(holding));
+        });
+
+        holdings.MapPost("/refresh-prices", async (
+            PriceProviderService priceService,
+            AppDbContext db,
+            int? accountId,
+            CancellationToken ct) =>
+        {
+            var result = await priceService.RefreshAsync(db, accountId, ct);
+            return Results.Ok(result);
         });
 
         holdings.MapDelete("/{id:int}", async (int id, AppDbContext db) =>
@@ -1405,7 +1417,7 @@ public static class FinanceEndpoints
             holding.Symbol, holding.Name,
             holding.Quantity, holding.AverageCost,
             holding.LastPrice, holding.LastPriceAt,
-            costBasis, marketValue, pnl, pnlPercent,
+            holding.ProviderId, costBasis, marketValue, pnl, pnlPercent,
             holding.Notes, holding.CreatedAt, holding.UpdatedAt);
     }
 

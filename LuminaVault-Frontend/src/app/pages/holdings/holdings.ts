@@ -3,7 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
-import { FinanceAccount, Holding, HoldingPriceInput } from '../../core/models';
+import { FinanceAccount, Holding, HoldingPriceInput, HoldingRefreshResult } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 
 interface AccountGroup {
@@ -29,11 +29,14 @@ export class HoldingsComponent {
   accounts = signal<FinanceAccount[]>([]);
   loading = signal(true);
   saving = signal<number | null>(null);
+  refreshing = signal(false);
   error = signal<string | null>(null);
   accountFilter = signal<number | null>(null);
   editingId = signal<number | null>(null);
+  lastRefresh = signal<HoldingRefreshResult | null>(null);
   priceInput = '';
   nameInput = '';
+  providerIdInput = '';
   notesInput = '';
 
   filteredHoldings = computed(() => {
@@ -100,6 +103,7 @@ export class HoldingsComponent {
     this.editingId.set(holding.id);
     this.priceInput = holding.lastPrice != null ? String(holding.lastPrice) : '';
     this.nameInput = holding.name ?? '';
+    this.providerIdInput = holding.providerId ?? '';
     this.notesInput = holding.notes ?? '';
     this.error.set(null);
   }
@@ -108,6 +112,7 @@ export class HoldingsComponent {
     this.editingId.set(null);
     this.priceInput = '';
     this.nameInput = '';
+    this.providerIdInput = '';
     this.notesInput = '';
   }
 
@@ -116,6 +121,7 @@ export class HoldingsComponent {
     const input: HoldingPriceInput = {
       lastPrice: trimmed === '' ? null : Number(trimmed),
       name: this.nameInput.trim() || null,
+      providerId: this.providerIdInput.trim() || null,
       notes: this.notesInput.trim() || null,
     };
     if (input.lastPrice != null && (Number.isNaN(input.lastPrice) || input.lastPrice < 0)) {
@@ -134,6 +140,27 @@ export class HoldingsComponent {
         this.error.set(e?.error?.error ?? 'Could not update price.');
       },
     });
+  }
+
+  refreshPrices() {
+    this.refreshing.set(true);
+    this.error.set(null);
+    const accountId = this.accountFilter() ?? undefined;
+    this.api.refreshHoldingPrices(accountId).subscribe({
+      next: result => {
+        this.lastRefresh.set(result);
+        this.refreshing.set(false);
+        this.api.listHoldings().subscribe(list => this.holdings.set(list));
+      },
+      error: e => {
+        this.refreshing.set(false);
+        this.error.set(e?.error?.error ?? 'Could not refresh prices.');
+      },
+    });
+  }
+
+  dismissRefreshResult() {
+    this.lastRefresh.set(null);
   }
 
   async remove(holding: Holding) {

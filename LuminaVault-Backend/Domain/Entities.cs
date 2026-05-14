@@ -226,6 +226,7 @@ public class Holding
     public decimal AverageCost { get; set; }
     public decimal? LastPrice { get; set; }
     public DateTime? LastPriceAt { get; set; }
+    [MaxLength(80)] public string? ProviderId { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

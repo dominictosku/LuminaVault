@@ -214,6 +214,10 @@ export class Api {
     return this.finance.recomputeHoldings();
   }
 
+  refreshHoldingPrices(accountId?: number) {
+    return this.finance.refreshHoldingPrices(accountId);
+  }
+
   listBalanceSnapshots(accountId?: number) {
     return this.finance.listBalanceSnapshots(accountId);
   }

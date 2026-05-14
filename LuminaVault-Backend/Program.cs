@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Endpoints;
+using LuminaVault.Pricing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +57,23 @@ builder.Services.Configure<JsonOptions>(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
+// --- Price providers ---
+// Each provider self-declares which account types it supports via IPriceProvider.Supports().
+// Add additional providers (Finnhub, AlphaVantage, etc.) by implementing IPriceProvider and
+// registering them here — PriceProviderService dispatches by account type.
+builder.Services.AddHttpClient<CoinGeckoPriceProvider>(c =>
+{
+    c.BaseAddress = new Uri(builder.Configuration["PriceProviders:CoinGecko:BaseUrl"]
+        ?? "https://api.coingecko.com/api/v3/");
+    c.Timeout = TimeSpan.FromSeconds(20);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("LuminaVault/1.0");
+    var apiKey = builder.Configuration["PriceProviders:CoinGecko:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(apiKey))
+        c.DefaultRequestHeaders.Add("x-cg-demo-api-key", apiKey);
+});
+builder.Services.AddTransient<IPriceProvider>(sp => sp.GetRequiredService<CoinGeckoPriceProvider>());
+builder.Services.AddScoped<PriceProviderService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -89,6 +107,7 @@ using (var scope = app.Services.CreateScope())
     AddColumnIfMissing("FinanceTransactions", "Symbol", "TEXT NULL");
     AddColumnIfMissing("FinanceTransactions", "Quantity", "TEXT NULL");
     AddColumnIfMissing("FinanceTransactions", "PricePerUnit", "TEXT NULL");
+    AddColumnIfMissing("Holdings", "ProviderId", "TEXT NULL");
 
     db.Database.ExecuteSqlRaw("""
         CREATE TABLE IF NOT EXISTS DocumentAttachments (
@@ -252,6 +271,7 @@ using (var scope = app.Services.CreateScope())
             AverageCost TEXT NOT NULL,
             LastPrice TEXT NULL,
             LastPriceAt TEXT NULL,
+            ProviderId TEXT NULL,
             Notes TEXT NULL,
             CreatedAt TEXT NOT NULL,
             UpdatedAt TEXT NOT NULL,
