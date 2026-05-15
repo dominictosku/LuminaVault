@@ -131,30 +131,40 @@ The test project boots the real API via `WebApplicationFactory<Program>` against
 ```
 LuminaVault/
 ├── LuminaVault-Backend/
-│   ├── Auth/               # JWT service
-│   ├── Data/               # EF Core DbContext + first-run Seeder
-│   ├── Migrations/         # EF Core migrations
-│   ├── Domain/             # Entity classes (inventory + finance)
-│   ├── Pricing/            # Price provider abstraction + Finnhub & CoinGecko adapters
-│   ├── Validation/         # Problem / Validate helpers — consistent error envelopes
-│   ├── Endpoints/          # Minimal API route groups
-│   │   ├── HouseEndpoints.cs
-│   │   ├── FurnitureEndpoints.cs
-│   │   ├── ItemEndpoints.cs
-│   │   ├── PhotoEndpoints.cs
-│   │   ├── AttachmentEndpoints.cs
-│   │   ├── FinanceEndpoints.cs       # accounts, transactions, budgets, subscriptions, snapshots
-│   │   ├── OdsEndpoints.cs           # ODS import/export
-│   │   ├── SettingsEndpoints.cs
-│   │   └── AuthEndpoints.cs
-│   ├── uploads/            # Photos, glTF models and documents (gitignored)
-│   └── Program.cs          # App bootstrap, migrations & middleware
+│   ├── Features/                       # Vertical slices — one folder per resource
+│   │   ├── Auth/                       # User entity + JWT service + auth endpoints
+│   │   ├── Inventory/
+│   │   │   ├── Houses/                 # House entity + endpoints
+│   │   │   ├── Rooms/
+│   │   │   ├── Furniture/              # Furniture + Container
+│   │   │   ├── Items/
+│   │   │   ├── Photos/                 # ItemPhoto + photo upload
+│   │   │   └── Attachments/            # DocumentAttachment (cross-cuts to Subscriptions)
+│   │   ├── Finance/
+│   │   │   ├── FinanceEndpoints.cs     # Orchestrator: calls each per-resource Map()
+│   │   │   ├── Accounts/
+│   │   │   ├── Transactions/
+│   │   │   ├── Holdings/
+│   │   │   │   └── Pricing/            # IPriceProvider + Finnhub & CoinGecko adapters
+│   │   │   ├── Budgets/
+│   │   │   ├── Subscriptions/
+│   │   │   ├── MonthlySummaries/
+│   │   │   ├── BalanceSnapshots/
+│   │   │   ├── Summary/                # /summary and /statistics aggregates
+│   │   │   └── Shared/                 # FinanceHelpers (balance recompute), DTOs, mappers
+│   │   ├── Data/Ods/                   # ODS import/export pipeline
+│   │   └── Settings/                   # AssetCategory + FinanceCategory + endpoints
+│   ├── Infrastructure/
+│   │   ├── Data/                       # AppDbContext + Seeder + Migrations/
+│   │   └── Validation/                 # Problem + Validate helpers
+│   ├── uploads/                        # Photos, glTF models and documents (gitignored)
+│   └── Program.cs                      # App bootstrap, migrations & middleware
 │
-├── LuminaVault-Backend.Tests/  # xUnit + WebApplicationFactory integration tests
+├── LuminaVault-Backend.Tests/          # xUnit + WebApplicationFactory integration tests
 │
 └── LuminaVault-Frontend/   # Angular app
     └── src/app/
-        ├── core/           # Api service, models, auth guard & interceptor
+        ├── core/           # Focused data-access services (auth/inventory/finance/etc.)
         ├── layout/         # App shell
         ├── shared/         # Reusable filters, confirm dialog
         └── pages/
@@ -173,6 +183,8 @@ LuminaVault/
             ├── data/               # ODS import/export
             └── settings/
 ```
+
+The backend uses **vertical-slice architecture**: each feature folder owns its entity, endpoints, and DTOs together. Entity classes deliberately keep the flat `LuminaVault.Domain` namespace (folder location signals the bounded context), so EF Core's model snapshot is stable across refactors.
 
 <br>
 
