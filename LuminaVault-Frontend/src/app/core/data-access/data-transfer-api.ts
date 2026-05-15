@@ -1,7 +1,14 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
-import { OdsImportResult, OdsMappedImportRequest, OdsPreviewResult } from '../models';
+import {
+  BankCsvImportRequest,
+  BankCsvImportResult,
+  BankCsvPreviewResult,
+  OdsImportResult,
+  OdsMappedImportRequest,
+  OdsPreviewResult,
+} from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class DataTransferApi {
@@ -31,5 +38,18 @@ export class DataTransferApi {
     fd.append('file', file);
     fd.append('mappingJson', JSON.stringify(mapping));
     return this.http.post<OdsImportResult>(`${API_BASE}/api/data/import/ods/mapped`, fd);
+  }
+
+  previewBankCsv(file: File) {
+    const fd = new FormData();
+    fd.append('file', file);
+    return this.http.post<BankCsvPreviewResult>(`${API_BASE}/api/data/import/bank-csv/preview`, fd);
+  }
+
+  importBankCsv(file: File, mapping: BankCsvImportRequest) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('mappingJson', JSON.stringify(mapping));
+    return this.http.post<BankCsvImportResult>(`${API_BASE}/api/data/import/bank-csv`, fd);
   }
 }

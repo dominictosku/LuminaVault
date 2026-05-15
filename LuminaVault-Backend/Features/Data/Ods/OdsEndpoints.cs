@@ -10,6 +10,7 @@ namespace LuminaVault.Endpoints;
 public record OdsImportResult(
     int Accounts,
     int Transactions,
+    int Holdings,
     int MonthlySummaries,
     int Subscriptions,
     int FinanceCategories,
@@ -38,6 +39,10 @@ public static class OdsEndpoints
                 .Include(t => t.Account).Include(t => t.TransferAccount)
                 .OrderByDescending(t => t.OccurredOn).ThenByDescending(t => t.Id)
                 .ToListAsync();
+            var holdings = await db.Holdings
+                .Include(h => h.Account)
+                .OrderBy(h => h.Account!.Name).ThenBy(h => h.Symbol)
+                .ToListAsync();
             var monthlySummaries = await db.MonthlyAccountSummaries
                 .Include(s => s.Account)
                 .OrderByDescending(s => s.Month).ThenBy(s => s.Account!.Name)
@@ -65,6 +70,7 @@ public static class OdsEndpoints
             {
                 OdsExport.Accounts(accounts),
                 OdsExport.Transactions(transactions),
+                OdsExport.Holdings(holdings),
                 OdsExport.MonthlySummaries(monthlySummaries),
                 OdsExport.Budgets(budgets),
                 OdsExport.BalanceSnapshots(balanceSnapshots),
@@ -102,9 +108,12 @@ public static class OdsEndpoints
             var transactionCount = await OdsImport.Transactions(tables, db, warnings);
             await db.SaveChangesAsync();
             await OdsBalances.Recalculate(db);
+            await RecalculateImportedHoldings(db);
+            var holdingCount = await OdsImport.Holdings(tables, db, warnings);
+            await db.SaveChangesAsync();
 
             return Results.Ok(new OdsImportResult(
-                accountCount, transactionCount, monthlySummaryCount, subscriptionCount,
+                accountCount, transactionCount, holdingCount, monthlySummaryCount, subscriptionCount,
                 financeCategoryCount, assetCategoryCount, assetCount, warnings.ToArray()));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
@@ -158,6 +167,9 @@ public static class OdsEndpoints
                 case "transactions":
                     counts.Transactions = await OdsImport.Transactions(targetTables, db, warnings);
                     break;
+                case "holdings":
+                    counts.Holdings = await OdsImport.Holdings(targetTables, db, warnings);
+                    break;
                 case "monthlysummaries":
                     counts.MonthlySummaries = await OdsImport.MonthlySummaries(targetTables, db, warnings);
                     break;
@@ -179,8 +191,10 @@ public static class OdsEndpoints
 
             await db.SaveChangesAsync();
             await OdsBalances.Recalculate(db);
+            if (counts.Transactions > 0)
+                await RecalculateImportedHoldings(db);
             return Results.Ok(new OdsImportResult(
-                counts.Accounts, counts.Transactions, counts.MonthlySummaries, counts.Subscriptions,
+                counts.Accounts, counts.Transactions, counts.Holdings, counts.MonthlySummaries, counts.Subscriptions,
                 counts.FinanceCategories, counts.AssetCategories, counts.Assets, warnings.ToArray()));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
@@ -191,7 +205,19 @@ public static class OdsEndpoints
     /// each branch only writes one field, leaving the others zeroed.
     struct ImportCounts
     {
-        public int Accounts, Transactions, MonthlySummaries, Subscriptions,
+        public int Accounts, Transactions, Holdings, MonthlySummaries, Subscriptions,
             FinanceCategories, AssetCategories, Assets;
+    }
+
+    static async Task RecalculateImportedHoldings(AppDbContext db)
+    {
+        var accountIds = await db.FinanceTransactions
+            .Where(t => t.Kind == LuminaVault.Domain.FinanceTransactionKind.Buy ||
+                        t.Kind == LuminaVault.Domain.FinanceTransactionKind.Sell)
+            .Select(t => t.AccountId)
+            .Distinct()
+            .ToListAsync();
+        foreach (var accountId in accountIds)
+            await FinanceHelpers.RecalculateHoldings(db, accountId);
     }
 }

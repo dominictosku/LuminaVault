@@ -4,7 +4,7 @@
     <p class="text-slate-400 text-sm mt-1">Move LuminaVault data through OpenDocument spreadsheets.</p>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
     <section class="surface p-5">
       <div class="flex items-start gap-3">
         <div class="w-10 h-10 rounded-xl bg-violet-500/15 grid place-items-center shrink-0">
@@ -48,7 +48,104 @@
         Preview & map
       </button>
     </section>
+
+    <section class="surface p-5">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 grid place-items-center shrink-0">
+          <i class="pi pi-receipt text-emerald-300"></i>
+        </div>
+        <div>
+          <h2 class="font-medium">Import bank CSV</h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Preview a bank statement, map columns, and skip transactions that already exist.
+          </p>
+        </div>
+      </div>
+      <input #csvFileInput type="file" class="hidden" accept=".csv,text/csv"
+             (change)="previewBankCsv(csvFileInput)" />
+      <button class="btn btn-primary mt-5" (click)="csvFileInput.click()" [disabled]="previewing() || importing()">
+        @if (previewing()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-file-import"></i> }
+        Preview CSV
+      </button>
+    </section>
   </div>
+
+  @if (csvPreview()) {
+    <section class="surface p-5 mt-4">
+      <div class="flex items-center justify-between gap-4 mb-4">
+        <div>
+          <h2 class="font-medium flex items-center gap-2">
+            <i class="pi pi-receipt text-emerald-300"></i> Bank CSV mapping
+          </h2>
+          <p class="text-sm text-slate-400 mt-1">Choose the destination account and map bank columns to transaction fields.</p>
+        </div>
+        <button class="btn btn-primary" (click)="importBankCsv()" [disabled]="importing() || !csvAccountId">
+          @if (importing()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+          Import CSV
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <label>
+          <span class="label">Account</span>
+          <select class="select" [(ngModel)]="csvAccountId">
+            @for (account of accounts(); track account.id) {
+              <option [ngValue]="account.id">{{ account.name }} · {{ account.currency }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span class="label">Default category</span>
+          <input class="input" [(ngModel)]="csvDefaultCategory" placeholder="Imported" />
+        </label>
+        <label>
+          <span class="label">Default status</span>
+          <select class="select" [(ngModel)]="csvStatus">
+            @for (status of csvStatuses; track status) {
+              <option [ngValue]="status">{{ status }}</option>
+            }
+          </select>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        @for (field of csvFields; track field) {
+          <label class="surface-muted p-3">
+            <span class="label">{{ field }}</span>
+            <select class="select" [(ngModel)]="csvColumns[field]">
+              <option value="">Do not import</option>
+              @for (header of csvPreview()!.headers; track header) {
+                <option [ngValue]="header">{{ header }}</option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+
+      @if (csvPreview()!.sampleRows.length) {
+        <div class="overflow-auto surface-muted mt-4">
+          <table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                @for (header of csvPreview()!.headers; track header) {
+                  <th class="text-left px-3 py-2">{{ header }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              @for (row of csvPreview()!.sampleRows; track $index) {
+                <tr>
+                  @for (cell of row; track $index) {
+                    <td class="px-3 py-2 text-slate-300 whitespace-nowrap">{{ cell }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
 
   @if (preview()) {
     <section class="surface p-5 mt-4">
@@ -141,7 +238,7 @@
       <h2 class="font-medium flex items-center gap-2">
         <i class="pi pi-check-circle text-violet-300"></i> Import complete
       </h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3 mt-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mt-4">
         <div class="surface-muted p-3">
           <div class="text-xs text-slate-400 uppercase tracking-wide">Accounts</div>
           <div class="text-2xl font-semibold mt-1">{{ result()!.accounts }}</div>
@@ -149,6 +246,10 @@
         <div class="surface-muted p-3">
           <div class="text-xs text-slate-400 uppercase tracking-wide">Transactions</div>
           <div class="text-2xl font-semibold mt-1">{{ result()!.transactions }}</div>
+        </div>
+        <div class="surface-muted p-3">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Holdings</div>
+          <div class="text-2xl font-semibold mt-1">{{ result()!.holdings }}</div>
         </div>
         <div class="surface-muted p-3">
           <div class="text-xs text-slate-400 uppercase tracking-wide">Monthly sums</div>
@@ -176,6 +277,42 @@
           <div class="text-sm text-slate-300 mb-2">Warnings</div>
           <ul class="text-sm text-amber-200/90 space-y-1">
             @for (warning of result()!.warnings; track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        </div>
+      }
+    </section>
+  }
+
+  @if (csvResult()) {
+    <section class="surface p-5 mt-4">
+      <h2 class="font-medium flex items-center gap-2">
+        <i class="pi pi-check-circle text-emerald-300"></i> CSV import complete
+      </h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div class="surface-muted p-3">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Imported</div>
+          <div class="text-2xl font-semibold mt-1">{{ csvResult()!.transactions }}</div>
+        </div>
+        <div class="surface-muted p-3">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Duplicates</div>
+          <div class="text-2xl font-semibold mt-1">{{ csvResult()!.duplicates }}</div>
+        </div>
+        <div class="surface-muted p-3">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Skipped</div>
+          <div class="text-2xl font-semibold mt-1">{{ csvResult()!.skipped }}</div>
+        </div>
+        <div class="surface-muted p-3">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Warnings</div>
+          <div class="text-2xl font-semibold mt-1">{{ csvResult()!.warnings.length }}</div>
+        </div>
+      </div>
+      @if (csvResult()!.warnings.length) {
+        <div class="mt-4">
+          <div class="text-sm text-slate-300 mb-2">Warnings</div>
+          <ul class="text-sm text-amber-200/90 space-y-1">
+            @for (warning of csvResult()!.warnings; track warning) {
               <li>{{ warning }}</li>
             }
           </ul>

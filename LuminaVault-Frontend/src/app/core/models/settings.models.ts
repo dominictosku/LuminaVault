@@ -25,3 +25,36 @@ export interface FinanceCategoryInput {
   color: string;
   sortOrder: number;
 }
+
+export interface FinanceCategoryRule {
+  id: number;
+  pattern: string;
+  category: string;
+  matchPayee: boolean;
+  matchDescription: boolean;
+  isActive: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinanceCategoryRuleInput {
+  pattern: string;
+  category: string;
+  matchPayee: boolean;
+  matchDescription: boolean;
+  isActive: boolean;
+  priority: number;
+}
+
+export interface ExchangeRate {
+  id: number;
+  currency: string;
+  rateToBase: number;
+  updatedAt: string;
+}
+
+export interface ExchangeRateInput {
+  currency: string;
+  rateToBase: number;
+}

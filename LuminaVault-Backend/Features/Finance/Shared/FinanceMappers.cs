@@ -22,7 +22,7 @@ internal static class FinanceMappers
             transaction.Symbol, transaction.Quantity, transaction.PricePerUnit,
             transaction.CreatedAt, transaction.UpdatedAt);
 
-    public static HoldingDto MapHolding(Holding holding)
+    public static HoldingDto MapHolding(Holding holding, HoldingPerformance? performance = null)
     {
         var costBasis = holding.Quantity * holding.AverageCost;
         decimal? marketValue = holding.LastPrice.HasValue ? holding.Quantity * holding.LastPrice.Value : null;
@@ -30,6 +30,10 @@ internal static class FinanceMappers
         decimal? pnlPercent = pnl.HasValue && costBasis > 0
             ? Math.Round(pnl.Value / costBasis * 100m, 2)
             : null;
+        var realized = performance?.RealizedPnL ?? 0m;
+        var dividends = performance?.Dividends ?? 0m;
+        var fees = performance?.Fees ?? 0m;
+        var totalReturn = realized + dividends - fees + (pnl ?? 0m);
         return new HoldingDto(
             holding.Id, holding.AccountId, holding.Account?.Name,
             holding.Account?.Currency ?? "CHF",
@@ -37,6 +41,7 @@ internal static class FinanceMappers
             holding.Quantity, holding.AverageCost,
             holding.LastPrice, holding.LastPriceAt,
             holding.ProviderId, costBasis, marketValue, pnl, pnlPercent,
+            realized, dividends, fees, totalReturn,
             holding.Notes, holding.CreatedAt, holding.UpdatedAt);
     }
 
@@ -68,6 +73,16 @@ internal static class FinanceMappers
         var used = budget.LimitAmount <= 0 ? 0 : Math.Round(spent / budget.LimitAmount * 100, 1);
         return new FinanceBudgetDto(budget.Id, budget.Category, budget.Month, budget.LimitAmount,
             spent, remaining, used, budget.Notes, budget.CreatedAt, budget.UpdatedAt);
+    }
+
+    public static SavingsGoalDto MapGoal(SavingsGoal goal)
+    {
+        var remaining = Math.Max(0, goal.TargetAmount - goal.CurrentAmount);
+        var progress = goal.TargetAmount <= 0 ? 0 : Math.Round(goal.CurrentAmount / goal.TargetAmount * 100m, 1);
+        return new SavingsGoalDto(
+            goal.Id, goal.Name, goal.AccountId, goal.Account?.Name, goal.Currency,
+            goal.TargetAmount, goal.CurrentAmount, remaining, progress,
+            goal.TargetDate, goal.Status, goal.Notes, goal.CreatedAt, goal.UpdatedAt);
     }
 
     public static AccountBalanceSnapshotDto MapBalanceSnapshot(AccountBalanceSnapshot snapshot) =>

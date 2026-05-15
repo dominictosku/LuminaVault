@@ -10,6 +10,7 @@ public static class FinanceEndpoints
         TransactionEndpoints.Map(app);
         HoldingEndpoints.Map(app);
         BudgetEndpoints.Map(app);
+        GoalEndpoints.Map(app);
         SubscriptionEndpoints.Map(app);
         MonthlySummaryEndpoints.Map(app);
         BalanceSnapshotEndpoints.Map(app);

@@ -23,6 +23,7 @@ public class OdsRoundTripTests : IClassFixture<LuminaVaultFactory>
     private record OdsImportResult(
         [property: JsonPropertyName("accounts")] int Accounts,
         [property: JsonPropertyName("transactions")] int Transactions,
+        [property: JsonPropertyName("holdings")] int Holdings,
         [property: JsonPropertyName("monthlySummaries")] int MonthlySummaries,
         [property: JsonPropertyName("subscriptions")] int Subscriptions,
         [property: JsonPropertyName("financeCategories")] int FinanceCategories,

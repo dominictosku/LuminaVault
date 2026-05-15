@@ -15,6 +15,12 @@ public class SettingsTests : IClassFixture<LuminaVaultFactory>
     }
 
     private record CategoryDto(int Id, string Name, string Color, int SortOrder, DateTime CreatedAt);
+    private record RuleDto(
+        int Id, string Pattern, string Category, bool MatchPayee,
+        bool MatchDescription, bool IsActive, int Priority);
+    private record ExchangeRateDto(int Id, string Currency, decimal RateToBase, DateTime UpdatedAt);
+    private record AccountDto(int Id, string Name);
+    private record TransactionDto(int Id, string Payee, string Category);
 
     [Fact]
     public async Task Asset_categories_seed_with_expected_defaults()
@@ -56,5 +62,75 @@ public class SettingsTests : IClassFixture<LuminaVaultFactory>
         Assert.Contains("Salary", names);
         Assert.Contains("Subscriptions", names);
         Assert.Contains("Investments", names);
+    }
+
+    [Fact]
+    public async Task Finance_category_rule_auto_categorizes_placeholder_transactions()
+    {
+        var ruleResp = await _api.PostAsync("/api/settings/finance-category-rules", new
+        {
+            pattern = "Migros",
+            category = "Groceries",
+            matchPayee = true,
+            matchDescription = false,
+            isActive = true,
+            priority = 0,
+        });
+        ruleResp.EnsureSuccessStatusCode();
+        var rule = await ruleResp.Content.ReadFromJsonAsync<RuleDto>();
+        Assert.Equal("Groceries", rule!.Category);
+
+        var accountResp = await _api.PostAsync("/api/finance/accounts/", new
+        {
+            name = "Rules account",
+            institution = (string?)null,
+            type = "Checking",
+            currency = "CHF",
+            startingBalance = 100m,
+            balance = 100m,
+            color = "#14b8a6",
+            notes = (string?)null,
+            isArchived = false,
+        });
+        accountResp.EnsureSuccessStatusCode();
+        var account = await accountResp.Content.ReadFromJsonAsync<AccountDto>();
+
+        var txResp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account!.Id,
+            transferAccountId = (int?)null,
+            kind = "Expense",
+            status = "Cleared",
+            occurredOn = DateTime.UtcNow.Date,
+            payee = "Migros Zürich",
+            category = "General",
+            amount = 12.30m,
+            description = "",
+            notes = "",
+            tags = Array.Empty<string>(),
+            symbol = (string?)null,
+            quantity = (decimal?)null,
+            pricePerUnit = (decimal?)null,
+        });
+        txResp.EnsureSuccessStatusCode();
+        var transaction = await txResp.Content.ReadFromJsonAsync<TransactionDto>();
+        Assert.Equal("Groceries", transaction!.Category);
+    }
+
+    [Fact]
+    public async Task Exchange_rates_can_be_created_for_non_base_currencies()
+    {
+        var resp = await _api.PostAsync("/api/settings/exchange-rates", new
+        {
+            currency = "usd",
+            rateToBase = 0.91m,
+        });
+        resp.EnsureSuccessStatusCode();
+        var created = await resp.Content.ReadFromJsonAsync<ExchangeRateDto>();
+        Assert.Equal("USD", created!.Currency);
+        Assert.Equal(0.91m, created.RateToBase);
+
+        var list = await _api.GetAsync<ExchangeRateDto[]>("/api/settings/exchange-rates");
+        Assert.Contains(list!, r => r.Currency == "USD");
     }
 }

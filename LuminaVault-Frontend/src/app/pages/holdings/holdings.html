@@ -71,7 +71,7 @@
     </div>
   }
 
-  <div class="surface p-5 mb-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+  <div class="surface p-5 mb-4 grid grid-cols-2 md:grid-cols-5 gap-4">
     <div>
       <div class="text-xs uppercase tracking-wide text-slate-400">Market value</div>
       <div class="text-xl font-semibold mt-1">{{ totals().marketValue | currency:'CHF':'symbol-narrow' }}</div>
@@ -90,6 +90,12 @@
       <div class="text-xs uppercase tracking-wide text-slate-400">P&amp;L %</div>
       <div class="text-xl font-semibold mt-1" [ngClass]="toneClass(totals().pnl)">
         {{ totals().pnlPercent | number:'1.0-2' }}%
+      </div>
+    </div>
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-400">Total return</div>
+      <div class="text-xl font-semibold mt-1" [ngClass]="toneClass(totals().totalReturn)">
+        {{ totals().totalReturn | currency:'CHF':'symbol-narrow' }}
       </div>
     </div>
   </div>
@@ -125,8 +131,8 @@
             </div>
             <div class="text-right">
               <div class="font-medium">{{ g.marketValue | currency:g.currency:'symbol-narrow' }}</div>
-              <div class="text-xs" [ngClass]="toneClass(g.unrealizedPnL)">
-                {{ g.unrealizedPnL >= 0 ? '+' : '' }}{{ g.unrealizedPnL | currency:g.currency:'symbol-narrow' }}
+              <div class="text-xs" [ngClass]="toneClass(g.totalReturn)">
+                total {{ g.totalReturn >= 0 ? '+' : '' }}{{ g.totalReturn | currency:g.currency:'symbol-narrow' }}
               </div>
             </div>
           </header>
@@ -172,8 +178,14 @@
                     @if (h.unrealizedPnL != null) {
                       {{ h.unrealizedPnL >= 0 ? '+' : '' }}{{ h.unrealizedPnL | currency:h.currency:'symbol-narrow' }}
                       <div class="text-[11px]">{{ h.unrealizedPnLPercent | number:'1.0-2' }}%</div>
+                      <div class="text-[11px]" [ngClass]="toneClass(h.totalReturn)">
+                        total {{ h.totalReturn >= 0 ? '+' : '' }}{{ h.totalReturn | currency:h.currency:'symbol-narrow' }}
+                      </div>
                     } @else {
                       <span class="text-slate-500">—</span>
+                      <div class="text-[11px]" [ngClass]="toneClass(h.totalReturn)">
+                        total {{ h.totalReturn >= 0 ? '+' : '' }}{{ h.totalReturn | currency:h.currency:'symbol-narrow' }}
+                      </div>
                     }
                   </div>
                   <div class="text-right">

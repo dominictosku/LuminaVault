@@ -158,15 +158,26 @@ builder.Services.AddRateLimiter(o =>
             QueueLimit = 0,
         });
     });
+    o.AddPolicy("auth", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 100,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
 });
 
 // --- Scheduled backups ---
-// Bind Backup section; service no-ops unless Enabled=true.
-// Todo: Missing BackupOptions
-// var backupOptions = new BackupOptions();
-// builder.Configuration.GetSection("Backup").Bind(backupOptions);
-// builder.Services.AddSingleton(backupOptions);
-// builder.Services.AddHostedService<BackupBackgroundService>();
+// The manual /api/data/backup endpoint is always available. The hosted service
+// no-ops unless Backup:Enabled=true.
+var backupOptions = new BackupOptions();
+builder.Configuration.GetSection("Backup").Bind(backupOptions);
+builder.Services.AddSingleton(backupOptions);
+builder.Services.AddSingleton<BackupService>();
+builder.Services.AddHostedService<BackupBackgroundService>();
 
 builder.Services.AddOpenApi();
 
@@ -273,7 +284,8 @@ app.MapPhotos();
 app.MapAttachments();
 app.MapFinance();
 app.MapOdsData();
-// app.MapBackup();
+app.MapBankCsvData();
+app.MapBackup();
 app.MapSettings();
 
 try

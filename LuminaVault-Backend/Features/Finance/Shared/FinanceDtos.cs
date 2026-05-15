@@ -31,7 +31,10 @@ public record HoldingDto(
     int Id, int AccountId, string? AccountName, string Currency, string Symbol, string? Name,
     decimal Quantity, decimal AverageCost, decimal? LastPrice, DateTime? LastPriceAt,
     string? ProviderId, decimal CostBasis, decimal? MarketValue, decimal? UnrealizedPnL,
-    decimal? UnrealizedPnLPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+    decimal? UnrealizedPnLPercent, decimal RealizedPnL, decimal Dividends, decimal Fees,
+    decimal TotalReturn, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record HoldingPerformance(decimal RealizedPnL, decimal Dividends, decimal Fees);
 
 public record HoldingPriceInput(decimal? LastPrice, string? Name, string? ProviderId, string? Notes);
 
@@ -64,6 +67,16 @@ public record FinanceBudgetDto(
     decimal Remaining, decimal UsedPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
 
 public record FinanceBudgetInput(string Category, DateTime Month, decimal LimitAmount, string? Notes);
+
+public record SavingsGoalDto(
+    int Id, string Name, int? AccountId, string? AccountName, string Currency,
+    decimal TargetAmount, decimal CurrentAmount, decimal Remaining, decimal ProgressPercent,
+    DateTime? TargetDate, SavingsGoalStatus Status, string? Notes,
+    DateTime CreatedAt, DateTime UpdatedAt);
+
+public record SavingsGoalInput(
+    string Name, int? AccountId, string Currency, decimal TargetAmount,
+    decimal CurrentAmount, DateTime? TargetDate, SavingsGoalStatus Status, string? Notes);
 
 public record AccountBalanceSnapshotDto(
     int Id, int AccountId, string? AccountName, string Currency, DateTime SnapshotDate,

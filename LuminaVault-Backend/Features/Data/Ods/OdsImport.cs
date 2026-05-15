@@ -93,9 +93,67 @@ internal static class OdsImport
                 Description = EmptyToNull(Get(row, headers, "Description")),
                 Notes = EmptyToNull(Get(row, headers, "Notes")),
                 TagsCsv = EmptyToNull(Get(row, headers, "Tags")) ?? "",
+                Symbol = EmptyToNull(Get(row, headers, "Symbol"))?.Trim().ToUpperInvariant(),
+                Quantity = ParseNullableDecimal(Get(row, headers, "Quantity")),
+                PricePerUnit = ParseNullableDecimal(Get(row, headers, "Price per unit", "PricePerUnit", "Unit price")),
             });
             count++;
         }
+        return count;
+    }
+
+    public static async Task<int> Holdings(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
+    {
+        if (!TryGetByAlias(tables, "Holdings", out var rows)) return 0;
+
+        var (headers, data) = SplitHeader(rows);
+        var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var existing = await db.Holdings.ToListAsync();
+        var byKey = existing.ToDictionary(
+            h => $"{h.AccountId}:{h.Symbol.ToUpperInvariant()}",
+            StringComparer.OrdinalIgnoreCase);
+        var count = 0;
+
+        foreach (var row in data)
+        {
+            var accountName = Get(row, headers, "Account", "Konto");
+            var symbol = EmptyToNull(Get(row, headers, "Symbol"))?.Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(accountName) || !accounts.TryGetValue(accountName.ToLowerInvariant(), out var account))
+            {
+                warnings.Add($"Skipped holding without a matching account: {symbol ?? "(missing symbol)"}");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(symbol))
+            {
+                warnings.Add($"Skipped holding without a symbol for account: {account.Name}");
+                continue;
+            }
+
+            var key = $"{account.Id}:{symbol}";
+            if (!byKey.TryGetValue(key, out var holding))
+            {
+                holding = new Holding
+                {
+                    AccountId = account.Id,
+                    Symbol = symbol,
+                };
+                db.Holdings.Add(holding);
+                byKey[key] = holding;
+                count++;
+            }
+
+            var quantity = ParseNullableDecimal(Get(row, headers, "Quantity"));
+            var averageCost = ParseNullableDecimal(Get(row, headers, "Average cost", "AverageCost"));
+            if (quantity.HasValue && holding.Quantity == 0) holding.Quantity = quantity.Value;
+            if (averageCost.HasValue && holding.AverageCost == 0) holding.AverageCost = averageCost.Value;
+            holding.Name = EmptyToNull(Get(row, headers, "Name")) ?? holding.Name;
+            holding.LastPrice = ParseNullableDecimal(Get(row, headers, "Last price", "LastPrice")) ?? holding.LastPrice;
+            holding.LastPriceAt = ParseDate(Get(row, headers, "Last price at", "LastPriceAt")) ?? holding.LastPriceAt;
+            holding.ProviderId = EmptyToNull(Get(row, headers, "Provider ID", "ProviderId")) ?? holding.ProviderId;
+            holding.Notes = EmptyToNull(Get(row, headers, "Notes", "Notizen")) ?? holding.Notes;
+            holding.UpdatedAt = DateTime.UtcNow;
+        }
+
         return count;
     }
 

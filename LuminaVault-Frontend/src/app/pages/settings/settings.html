@@ -19,6 +19,27 @@
             (click)="setTab('finance')">
       Transaction & subscription categories
     </button>
+    <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+            [class.bg-white/10]="tab() === 'rules'"
+            [class.text-white]="tab() === 'rules'"
+            [class.text-slate-400]="tab() !== 'rules'"
+            (click)="setTab('rules')">
+      Category rules
+    </button>
+    <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+            [class.bg-white/10]="tab() === 'rates'"
+            [class.text-white]="tab() === 'rates'"
+            [class.text-slate-400]="tab() !== 'rates'"
+            (click)="setTab('rates')">
+      Exchange rates
+    </button>
+    <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+            [class.bg-white/10]="tab() === 'security'"
+            [class.text-white]="tab() === 'security'"
+            [class.text-slate-400]="tab() !== 'security'"
+            (click)="setTab('security')">
+      Security
+    </button>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
@@ -27,8 +48,8 @@
         <h2 class="font-medium flex items-center gap-2">
           <i class="pi pi-tags text-violet-300"></i> {{ title() }}
         </h2>
-        <button class="btn btn-primary" (click)="newCategory()">
-          <i class="pi pi-plus"></i> Category
+        <button class="btn btn-primary" (click)="reset()" [disabled]="tab() === 'security'">
+          <i class="pi pi-plus"></i> {{ tab() === 'rules' ? 'Rule' : tab() === 'rates' ? 'Rate' : 'Category' }}
         </button>
       </div>
 
@@ -36,8 +57,118 @@
         <div class="space-y-2">
           @for (_ of [1,2,3,4]; track _) { <div class="surface-muted h-12 animate-pulse"></div> }
         </div>
+      } @else if (tab() === 'rules') {
+        @if (financeCategoryRules().length === 0) {
+          <div class="text-sm text-slate-500">No rules yet.</div>
+        } @else {
+          <div class="divide-y divide-white/5">
+            @for (rule of financeCategoryRules(); track rule.id) {
+              <button type="button" class="w-full py-3 flex items-center gap-3 text-left hover:bg-white/5 px-2 rounded-lg transition"
+                      (click)="editRule(rule)">
+                <span class="w-2 h-2 rounded-full shrink-0" [class.bg-emerald-300]="rule.isActive" [class.bg-slate-600]="!rule.isActive"></span>
+                <span class="font-medium flex-1">{{ rule.pattern }}</span>
+                <span class="text-sm text-slate-300">{{ rule.category }}</span>
+                <span class="text-xs text-slate-500">#{{ rule.priority }}</span>
+              </button>
+            }
+          </div>
+        }
+      } @else if (tab() === 'rates') {
+        @if (exchangeRates().length === 0) {
+          <div class="text-sm text-slate-500">No exchange rates yet. CHF is the base currency.</div>
+        } @else {
+          <div class="divide-y divide-white/5">
+            @for (rate of exchangeRates(); track rate.id) {
+              <button type="button" class="w-full py-3 flex items-center gap-3 text-left hover:bg-white/5 px-2 rounded-lg transition"
+                      (click)="editRate(rate)">
+                <span class="font-mono font-medium w-16">{{ rate.currency }}</span>
+                <span class="text-sm text-slate-300 flex-1">1 {{ rate.currency }} = {{ rate.rateToBase }} CHF</span>
+                <span class="text-xs text-slate-500">{{ rate.updatedAt | date:'MMM d' }}</span>
+              </button>
+            }
+          </div>
+        }
+      } @else if (tab() === 'security') {
+        <div class="space-y-3">
+          <div class="surface-muted p-4">
+            <div class="font-medium">Password</div>
+            <div class="text-sm text-slate-400 mt-1">Update the single local user password and refresh the session token.</div>
+          </div>
+          <div class="surface-muted p-4">
+            <div class="font-medium">Login throttling</div>
+            <div class="text-sm text-slate-400 mt-1">Register and login endpoints are limited to 100 attempts per minute per client IP.</div>
+          </div>
+        </div>
       } @else if (currentCategories().length === 0) {
         <div class="text-sm text-slate-500">No categories yet.</div>
+      } @else if (tab() === 'rates') {
+        <h2 class="font-medium flex items-center gap-2 mb-4">
+          <i class="pi pi-calculator text-violet-300"></i>
+          {{ editingRateId() ? 'Edit rate' : 'New rate' }}
+        </h2>
+
+        <form (ngSubmit)="saveRate()" class="space-y-4">
+          <div>
+            <label class="label">Currency</label>
+            <input class="input" name="currency" [(ngModel)]="rateModel.currency" placeholder="USD" maxlength="8" required />
+          </div>
+          <div>
+            <label class="label">Rate to CHF</label>
+            <input class="input" type="number" step="0.00000001" min="0" name="rateToBase" [(ngModel)]="rateModel.rateToBase" required />
+            <div class="text-xs text-slate-500 mt-1">Example: if 1 USD equals 0.91 CHF, enter 0.91.</div>
+          </div>
+          @if (error()) {
+            <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              {{ error() }}
+            </div>
+          }
+          <div class="flex gap-2">
+            @if (editingRateId()) {
+              <button type="button" class="btn btn-danger" (click)="removeRate()" [disabled]="saving()">
+                <i class="pi pi-trash"></i>
+              </button>
+            }
+            <button type="button" class="btn btn-ghost flex-1 justify-center" (click)="reset()">Cancel</button>
+            <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving()">
+              @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+              Save
+            </button>
+          </div>
+        </form>
+      } @else if (tab() === 'security') {
+        <h2 class="font-medium flex items-center gap-2 mb-4">
+          <i class="pi pi-lock text-violet-300"></i>
+          Change password
+        </h2>
+
+        <form (ngSubmit)="changePassword()" class="space-y-4">
+          <div>
+            <label class="label">Current password</label>
+            <input class="input" type="password" name="currentPassword" [(ngModel)]="passwordModel.currentPassword" required />
+          </div>
+          <div>
+            <label class="label">New password</label>
+            <input class="input" type="password" name="newPassword" [(ngModel)]="passwordModel.newPassword" required />
+          </div>
+          <div>
+            <label class="label">Confirm new password</label>
+            <input class="input" type="password" name="confirmPassword" [(ngModel)]="passwordModel.confirmPassword" required />
+          </div>
+          @if (passwordChanged()) {
+            <div class="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2">
+              Password updated.
+            </div>
+          }
+          @if (error()) {
+            <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              {{ error() }}
+            </div>
+          }
+          <button class="btn btn-primary w-full justify-center" type="submit" [disabled]="saving()">
+            @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+            Update password
+          </button>
+        </form>
       } @else {
         <div class="divide-y divide-white/5">
           @for (category of currentCategories(); track category.id) {
@@ -53,6 +184,65 @@
     </section>
 
     <aside class="surface p-5 h-fit">
+      @if (tab() === 'rules') {
+        <h2 class="font-medium flex items-center gap-2 mb-4">
+          <i class="pi pi-sparkles text-violet-300"></i>
+          {{ editingRuleId() ? 'Edit rule' : 'New rule' }}
+        </h2>
+
+        <form (ngSubmit)="saveRule()" class="space-y-4">
+          <div>
+            <label class="label">Contains</label>
+            <input class="input" name="pattern" [(ngModel)]="ruleModel.pattern" required />
+          </div>
+          <div>
+            <label class="label">Category</label>
+            <input class="input" name="ruleCategory" list="financeCategoryNames" [(ngModel)]="ruleModel.category" required />
+            <datalist id="financeCategoryNames">
+              @for (category of financeCategories(); track category.id) {
+                <option [value]="category.name"></option>
+              }
+            </datalist>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="surface-muted p-3 flex items-center gap-2">
+              <input type="checkbox" name="matchPayee" [(ngModel)]="ruleModel.matchPayee" />
+              <span class="text-sm">Payee</span>
+            </label>
+            <label class="surface-muted p-3 flex items-center gap-2">
+              <input type="checkbox" name="matchDescription" [(ngModel)]="ruleModel.matchDescription" />
+              <span class="text-sm">Description</span>
+            </label>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <label>
+              <span class="label">Priority</span>
+              <input class="input" type="number" name="rulePriority" [(ngModel)]="ruleModel.priority" />
+            </label>
+            <label class="surface-muted p-3 flex items-center gap-2 mt-6">
+              <input type="checkbox" name="isActive" [(ngModel)]="ruleModel.isActive" />
+              <span class="text-sm">Active</span>
+            </label>
+          </div>
+          @if (error()) {
+            <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+              {{ error() }}
+            </div>
+          }
+          <div class="flex gap-2">
+            @if (editingRuleId()) {
+              <button type="button" class="btn btn-danger" (click)="removeRule()" [disabled]="saving()">
+                <i class="pi pi-trash"></i>
+              </button>
+            }
+            <button type="button" class="btn btn-ghost flex-1 justify-center" (click)="reset()">Cancel</button>
+            <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving()">
+              @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+              Save
+            </button>
+          </div>
+        </form>
+      } @else {
       <h2 class="font-medium flex items-center gap-2 mb-4">
         <i class="pi pi-pen-to-square text-violet-300"></i>
         {{ editingId() ? 'Edit category' : 'New category' }}
@@ -101,6 +291,7 @@
           </button>
         </div>
       </form>
+      }
     </aside>
   </div>
 </div>

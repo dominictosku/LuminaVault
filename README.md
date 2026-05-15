@@ -55,17 +55,22 @@
 
 ### 💰 Personal finance
 - **Multi-account ledger** — checking, savings, cash, credit cards, investments, crypto, loans; per-account currency (default CHF) and starting balance
+- **Manual exchange rates** — convert multi-currency accounts, subscriptions and transaction analytics into CHF aggregate totals
 - **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled), plus trade kinds (buy / sell / dividend / fee) with symbol, quantity and price-per-unit for investment & crypto accounts
+- **Category rules** — auto-categorize uncategorized/manual imports by matching payee, description or notes
 - **Holdings & live prices** — symbol-level positions per investment/crypto account with average cost, last price and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
 - **Budgets** — per-category monthly limits with spend tracking
+- **Savings goals** — target amount, current amount, status and due-date tracking for funds or payoff plans
 - **Recurring subscriptions** — billing interval, next-due date, auto-renew, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
 - **Statistics** — charts and breakdowns for spend, income and category trends
 - **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import)
+- **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
 
 ### 🔐 Platform
 - **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage
+- **Security controls** — login/register throttling and in-app password change
 - **Glassmorphism UI** — dark, frosted-glass design with smooth transitions, built on PrimeNG + Tailwind v4
 - **Self-hosted, single-file SQLite** — your data never leaves your machine
 - **Zoneless Angular + Signals** — fast, modern change detection
@@ -146,6 +151,36 @@ curl -sH "Authorization: Bearer $LUMINA_TOKEN" \
   http://localhost:5256/api/data/backup \
   -o "backup-$(date +%Y%m%d).zip"
 ```
+
+Or enable built-in scheduled backups:
+
+```jsonc
+{
+  "Backup": {
+    "Enabled": true,
+    "Directory": "backups",
+    "IntervalHours": 24,
+    "RetainedFiles": 14
+  }
+}
+```
+
+### Category rules
+
+Use **Settings → Category rules** to create simple auto-categorization rules. Rules run in priority order and only fill placeholder categories such as `General`, `Imported`, blank or `Uncategorized`; explicit categories are left alone. They apply to manual transaction saves and bank CSV imports.
+
+### Exchange rates
+
+Use **Settings → Exchange rates** to add manual conversion rates into CHF. Aggregate dashboard and statistics totals convert account balances, subscriptions, monthly summaries and transaction analytics into CHF. Individual account and transaction rows still display in their original currency.
+
+### Bank CSV import
+
+Use **Import & export → Import bank CSV** for bank statement files. The importer supports either:
+
+- a signed `Amount` column, where negative rows become expenses and positive rows become income
+- separate `Debit` and `Credit` columns
+
+During import, LuminaVault checks existing transactions in the destination account by date, kind, payee and rounded amount, then skips likely duplicates. It accepts common date formats such as `yyyy-MM-dd`, `dd.MM.yyyy`, `dd/MM/yyyy`, and common decimal styles such as `42.50`, `42,50`, and `1'234.50`.
 
 <br>
 

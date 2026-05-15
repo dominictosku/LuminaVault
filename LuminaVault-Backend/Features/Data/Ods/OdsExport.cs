@@ -15,10 +15,19 @@ internal static class OdsExport
 
     public static OdsSheet Transactions(IEnumerable<FinanceTransaction> transactions) =>
         Sheet("Transactions",
-            new[] { Row("Date", "Kind", "Account", "Transfer account", "Payee", "Category", "Amount", "Status", "Description", "Notes", "Tags") }
+            new[] { Row("Date", "Kind", "Account", "Transfer account", "Payee", "Category", "Amount", "Status", "Description", "Notes", "Tags", "Symbol", "Quantity", "Price per unit") }
                 .Concat(transactions.Select(t => Row(
                     DateOnly.FromDateTime(t.OccurredOn), t.Kind, t.Account?.Name, t.TransferAccount?.Name,
-                    t.Payee, t.Category, t.Amount, t.Status, t.Description, t.Notes, t.TagsCsv))));
+                    t.Payee, t.Category, t.Amount, t.Status, t.Description, t.Notes, t.TagsCsv,
+                    t.Symbol, t.Quantity, t.PricePerUnit))));
+
+    public static OdsSheet Holdings(IEnumerable<Holding> holdings) =>
+        Sheet("Holdings",
+            new[] { Row("Account", "Symbol", "Name", "Quantity", "Average cost", "Last price", "Last price at", "Provider ID", "Notes") }
+                .Concat(holdings.Select(h => Row(
+                    h.Account?.Name, h.Symbol, h.Name, h.Quantity, h.AverageCost, h.LastPrice,
+                    h.LastPriceAt.HasValue ? DateOnly.FromDateTime(h.LastPriceAt.Value) : null,
+                    h.ProviderId, h.Notes))));
 
     public static OdsSheet MonthlySummaries(IEnumerable<MonthlyAccountSummary> summaries) =>
         Sheet("Monthly summaries",

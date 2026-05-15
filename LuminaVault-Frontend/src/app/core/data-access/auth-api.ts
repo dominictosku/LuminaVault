@@ -18,4 +18,11 @@ export class AuthApi {
   register(username: string, password: string) {
     return this.http.post<AuthResponse>(`${API_BASE}/api/auth/register`, { username, password });
   }
+
+  changePassword(currentPassword: string, newPassword: string) {
+    return this.http.post<AuthResponse>(`${API_BASE}/api/auth/change-password`, {
+      currentPassword,
+      newPassword,
+    });
+  }
 }

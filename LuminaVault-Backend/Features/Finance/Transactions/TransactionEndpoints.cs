@@ -56,6 +56,11 @@ internal static class TransactionEndpoints
         {
             var validation = await ValidateTransaction(input, db);
             if (validation is not null) return validation;
+            input = input with
+            {
+                Category = await FinanceCategoryRules.ResolveCategory(
+                    db, input.Category, input.Payee, input.Description, input.Notes) ?? input.Category
+            };
 
             var transaction = new FinanceTransaction();
             ApplyTransaction(transaction, input);
@@ -83,6 +88,11 @@ internal static class TransactionEndpoints
             if (transaction is null) return Results.NotFound();
             var validation = await ValidateTransaction(input, db);
             if (validation is not null) return validation;
+            input = input with
+            {
+                Category = await FinanceCategoryRules.ResolveCategory(
+                    db, input.Category, input.Payee, input.Description, input.Notes) ?? input.Category
+            };
 
             var previousAccountId = transaction.AccountId;
             ApplyTransaction(transaction, input);

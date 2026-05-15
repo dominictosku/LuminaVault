@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 namespace LuminaVault.Tests;
@@ -40,5 +41,32 @@ public class AuthTests
         var http = factory.CreateClient();
         var resp = await http.GetAsync("/api/finance/accounts");
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Change_password_rotates_password_and_returns_new_token()
+    {
+        using var factory = new LuminaVaultFactory();
+        var http = factory.CreateClient();
+        var register = await http.PostAsJsonAsync("/api/auth/register",
+            new { username = "changer", password = "password123" });
+        register.EnsureSuccessStatusCode();
+        var firstToken = await register.Content.ReadFromJsonAsync<ApiClient.AuthResponse>();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", firstToken!.Token);
+
+        var change = await http.PostAsJsonAsync("/api/auth/change-password",
+            new { currentPassword = "password123", newPassword = "better-password" });
+        change.EnsureSuccessStatusCode();
+        var changed = await change.Content.ReadFromJsonAsync<ApiClient.AuthResponse>();
+        Assert.False(string.IsNullOrWhiteSpace(changed!.Token));
+
+        http.DefaultRequestHeaders.Authorization = null;
+        var oldLogin = await http.PostAsJsonAsync("/api/auth/login",
+            new { username = "changer", password = "password123" });
+        Assert.Equal(HttpStatusCode.Unauthorized, oldLogin.StatusCode);
+
+        var newLogin = await http.PostAsJsonAsync("/api/auth/login",
+            new { username = "changer", password = "better-password" });
+        newLogin.EnsureSuccessStatusCode();
     }
 }

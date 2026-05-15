@@ -23,11 +23,17 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         int Id, int AccountId, string? AccountName, string Currency, string Symbol, string? Name,
         decimal Quantity, decimal AverageCost, decimal? LastPrice, DateTime? LastPriceAt,
         string? ProviderId, decimal CostBasis, decimal? MarketValue, decimal? UnrealizedPnL,
-        decimal? UnrealizedPnLPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+        decimal? UnrealizedPnLPercent, decimal RealizedPnL, decimal Dividends, decimal Fees,
+        decimal TotalReturn, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
 
     private record BudgetDto(
         int Id, string Category, DateTime Month, decimal LimitAmount, decimal Spent,
         decimal Remaining, decimal UsedPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
+    private record SummaryDto(decimal AccountNetWorth, string BaseCurrency, string[] FxMissingCurrencies);
+    private record GoalDto(
+        int Id, string Name, int? AccountId, string? AccountName, string Currency,
+        decimal TargetAmount, decimal CurrentAmount, decimal Remaining, decimal ProgressPercent,
+        string Status);
 
     private async Task<AccountDto> CreateAccount(string name = "Main", decimal balance = 1000m, string type = "Checking")
     {
@@ -263,6 +269,81 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         var aapl = holdings.Single(h => h.Symbol == "AAPL");
         Assert.Equal(0m, aapl.Quantity);
         Assert.Equal(0m, aapl.AverageCost);
+        Assert.Equal(100m, aapl.RealizedPnL);
+        Assert.Equal(100m, aapl.TotalReturn);
+    }
+
+    [Fact]
+    public async Task Holdings_include_realized_dividend_fee_and_total_return()
+    {
+        var account = await CreateAccount("Performance", balance: 10000m, type: "Investment");
+
+        foreach (var tx in new[]
+        {
+            new { Kind = "Buy", Amount = 1000m, Symbol = "MSFT", Quantity = 10m, Price = 100m },
+            new { Kind = "Sell", Amount = 600m, Symbol = "MSFT", Quantity = 5m, Price = 120m },
+            new { Kind = "Dividend", Amount = 20m, Symbol = "MSFT", Quantity = 0m, Price = 0m },
+            new { Kind = "Fee", Amount = 2m, Symbol = "MSFT", Quantity = 0m, Price = 0m },
+        })
+        {
+            var resp = await _api.PostAsync("/api/finance/transactions/", new
+            {
+                accountId = account.Id,
+                transferAccountId = (int?)null,
+                kind = tx.Kind,
+                status = "Cleared",
+                occurredOn = DateTime.UtcNow.Date,
+                payee = tx.Kind,
+                category = "Investments",
+                amount = tx.Amount,
+                description = "",
+                notes = "",
+                tags = Array.Empty<string>(),
+                symbol = tx.Symbol,
+                quantity = tx.Quantity == 0 ? (decimal?)null : tx.Quantity,
+                pricePerUnit = tx.Price == 0 ? (decimal?)null : tx.Price,
+            });
+            resp.EnsureSuccessStatusCode();
+        }
+
+        var holdings = (await _api.GetAsync<HoldingDto[]>("/api/finance/holdings/"))!;
+        var msft = holdings.Single(h => h.Symbol == "MSFT");
+        Assert.Equal(100m, msft.RealizedPnL);
+        Assert.Equal(20m, msft.Dividends);
+        Assert.Equal(2m, msft.Fees);
+        Assert.Equal(118m, msft.TotalReturn);
+    }
+
+    [Fact]
+    public async Task Summary_converts_account_balances_to_base_currency()
+    {
+        var before = await _api.GetAsync<SummaryDto>("/api/finance/summary");
+        await _api.PostAsync("/api/settings/exchange-rates", new
+        {
+            currency = "GBP",
+            rateToBase = 1.10m,
+        });
+        await CreateAccount("GBP account", balance: 100m, type: "Checking");
+        var accounts = await _api.GetAsync<AccountDto[]>("/api/finance/accounts/");
+        var gbpAccount = accounts!.Single(a => a.Name == "GBP account");
+
+        await _api.PutAsync($"/api/finance/accounts/{gbpAccount.Id}", new
+        {
+            name = "GBP account",
+            institution = (string?)null,
+            type = "Checking",
+            currency = "GBP",
+            startingBalance = 100m,
+            balance = 100m,
+            color = "#14b8a6",
+            notes = (string?)null,
+            isArchived = false,
+        });
+
+        var summary = await _api.GetAsync<SummaryDto>("/api/finance/summary");
+        Assert.Equal("CHF", summary!.BaseCurrency);
+        Assert.Equal((before?.AccountNetWorth ?? 0m) + 110m, summary.AccountNetWorth);
+        Assert.Empty(summary.FxMissingCurrencies);
     }
 
     [Fact]
@@ -305,6 +386,31 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         var food = budgets!.Single(b => b.Category == "Food");
         Assert.Equal(95m, food.Spent);
         Assert.Equal(305m, food.Remaining);
+    }
+
+    [Fact]
+    public async Task Savings_goal_reports_progress_and_remaining()
+    {
+        var account = await CreateAccount("Goal account", balance: 500m, type: "Savings");
+        var resp = await _api.PostAsync("/api/finance/goals/", new
+        {
+            name = "Emergency fund",
+            accountId = account.Id,
+            currency = "CHF",
+            targetAmount = 1000m,
+            currentAmount = 250m,
+            targetDate = DateTime.UtcNow.Date.AddMonths(6),
+            status = "Active",
+            notes = "Three months runway",
+        });
+        resp.EnsureSuccessStatusCode();
+        var created = await resp.Content.ReadFromJsonAsync<GoalDto>();
+        Assert.Equal(750m, created!.Remaining);
+        Assert.Equal(25m, created.ProgressPercent);
+
+        var list = await _api.GetAsync<GoalDto[]>("/api/finance/goals/");
+        var goal = list!.Single(g => g.Name == "Emergency fund");
+        Assert.Equal("Goal account", goal.AccountName);
     }
 
     private record TransactionDto(int Id, int AccountId, decimal Amount, string Kind);

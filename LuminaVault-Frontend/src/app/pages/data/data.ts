@@ -1,7 +1,16 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataTransferApi } from '../../core/data-access/data-transfer-api';
-import { OdsImportResult, OdsPreviewResult, OdsPreviewSheet } from '../../core/models';
+import { FinanceApi } from '../../core/data-access/finance-api';
+import {
+  BankCsvImportResult,
+  BankCsvPreviewResult,
+  FinanceAccount,
+  FinanceTransactionStatus,
+  OdsImportResult,
+  OdsPreviewResult,
+  OdsPreviewSheet,
+} from '../../core/models';
 
 @Component({
   selector: 'app-data',
@@ -11,27 +20,48 @@ import { OdsImportResult, OdsPreviewResult, OdsPreviewSheet } from '../../core/m
 })
 export class DataComponent {
   private api = inject(DataTransferApi);
+  private financeApi = inject(FinanceApi);
   exporting = signal(false);
   importing = signal(false);
   previewing = signal(false);
   error = signal<string | null>(null);
   result = signal<OdsImportResult | null>(null);
+  csvResult = signal<BankCsvImportResult | null>(null);
   preview = signal<OdsPreviewResult | null>(null);
+  csvPreview = signal<BankCsvPreviewResult | null>(null);
   selectedFile = signal<File | null>(null);
+  selectedCsvFile = signal<File | null>(null);
+  accounts = signal<FinanceAccount[]>([]);
   selectedSheetName = '';
   target = '';
   columns: Record<string, string> = {};
+  csvColumns: Record<string, string> = {};
+  csvAccountId: number | null = null;
+  csvDefaultCategory = 'Imported';
+  csvStatus: FinanceTransactionStatus = 'Cleared';
 
-  targets = ['Accounts', 'Transactions', 'Monthly summaries', 'Subscriptions', 'Assets', 'Finance categories', 'Asset categories'];
+  targets = ['Accounts', 'Transactions', 'Holdings', 'Monthly summaries', 'Subscriptions', 'Assets', 'Finance categories', 'Asset categories'];
   targetFields: Record<string, string[]> = {
     Accounts: ['Name', 'Institution', 'Type', 'Currency', 'Starting balance', 'Balance', 'Color', 'Notes', 'Archived'],
-    Transactions: ['Date', 'Kind', 'Account', 'Transfer account', 'Payee', 'Category', 'Amount', 'Status', 'Description', 'Notes', 'Tags'],
+    Transactions: ['Date', 'Kind', 'Account', 'Transfer account', 'Payee', 'Category', 'Amount', 'Status', 'Description', 'Notes', 'Tags', 'Symbol', 'Quantity', 'Price per unit'],
+    Holdings: ['Account', 'Symbol', 'Name', 'Quantity', 'Average cost', 'Last price', 'Last price at', 'Provider ID', 'Notes'],
     'Monthly summaries': ['Month', 'Account', 'Income', 'Expenses', 'Opening balance', 'Closing balance', 'Notes'],
     Subscriptions: ['Name', 'Category', 'Provider', 'Account', 'Amount', 'Currency', 'Interval days', 'Started on', 'Next due', 'Auto renew', 'Status', 'Notes'],
     Assets: ['Name', 'Category', 'Description', 'Brand', 'Model', 'Serial number', 'Value', 'Purchase date', 'Warranty until', 'Quantity', 'Notes', 'Tags'],
     'Finance categories': ['Name', 'Color', 'Sort order'],
     'Asset categories': ['Name', 'Color', 'Sort order'],
   };
+  csvFields = ['Date', 'Payee', 'Amount', 'Debit', 'Credit', 'Category', 'Description', 'Notes', 'Tags', 'Status'];
+  csvStatuses: FinanceTransactionStatus[] = ['Pending', 'Cleared', 'Reconciled'];
+
+  constructor() {
+    this.financeApi.listFinanceAccounts().subscribe({
+      next: accounts => {
+        this.accounts.set(accounts);
+        this.csvAccountId = accounts[0]?.id ?? null;
+      },
+    });
+  }
 
   export() {
     this.exporting.set(true);
@@ -63,6 +93,7 @@ export class DataComponent {
     this.importing.set(true);
     this.error.set(null);
     this.result.set(null);
+    this.csvResult.set(null);
     this.api.importOds(file).subscribe({
       next: result => {
         this.importing.set(false);
@@ -84,6 +115,7 @@ export class DataComponent {
     this.previewing.set(true);
     this.error.set(null);
     this.result.set(null);
+    this.csvResult.set(null);
     this.preview.set(null);
     this.api.previewOds(file).subscribe({
       next: result => {
@@ -130,6 +162,7 @@ export class DataComponent {
     if (!file || !this.selectedSheetName || !this.target) return;
     this.importing.set(true);
     this.error.set(null);
+    this.csvResult.set(null);
     this.api.importMappedOds(file, {
       sheetName: this.selectedSheetName,
       target: this.target,
@@ -142,6 +175,55 @@ export class DataComponent {
       error: e => {
         this.importing.set(false);
         this.error.set(e?.error?.error ?? 'Mapped import failed.');
+      },
+    });
+  }
+
+  previewBankCsv(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    this.selectedCsvFile.set(file);
+    this.previewing.set(true);
+    this.error.set(null);
+    this.result.set(null);
+    this.csvResult.set(null);
+    this.csvPreview.set(null);
+    this.api.previewBankCsv(file).subscribe({
+      next: result => {
+        this.previewing.set(false);
+        this.csvPreview.set(result);
+        this.csvColumns = { ...result.suggestedColumns };
+        input.value = '';
+      },
+      error: e => {
+        this.previewing.set(false);
+        input.value = '';
+        this.error.set(e?.error?.error ?? 'CSV preview failed.');
+      },
+    });
+  }
+
+  importBankCsv() {
+    const file = this.selectedCsvFile();
+    if (!file || !this.csvAccountId) {
+      this.error.set('Choose a CSV file and destination account.');
+      return;
+    }
+    this.importing.set(true);
+    this.error.set(null);
+    this.api.importBankCsv(file, {
+      accountId: this.csvAccountId,
+      columns: this.csvColumns,
+      defaultCategory: this.csvDefaultCategory || null,
+      status: this.csvStatus,
+    }).subscribe({
+      next: result => {
+        this.importing.set(false);
+        this.csvResult.set(result);
+      },
+      error: e => {
+        this.importing.set(false);
+        this.error.set(e?.error?.error ?? 'CSV import failed.');
       },
     });
   }

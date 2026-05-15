@@ -17,10 +17,13 @@ public class AppDbContext : DbContext
     public DbSet<DocumentAttachment> DocumentAttachments => Set<DocumentAttachment>();
     public DbSet<AssetCategory> AssetCategories => Set<AssetCategory>();
     public DbSet<FinanceCategory> FinanceCategories => Set<FinanceCategory>();
+    public DbSet<FinanceCategoryRule> FinanceCategoryRules => Set<FinanceCategoryRule>();
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
     public DbSet<FinanceAccount> FinanceAccounts => Set<FinanceAccount>();
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
     public DbSet<MonthlyAccountSummary> MonthlyAccountSummaries => Set<MonthlyAccountSummary>();
     public DbSet<FinanceBudget> FinanceBudgets => Set<FinanceBudget>();
+    public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
     public DbSet<AccountBalanceSnapshot> AccountBalanceSnapshots => Set<AccountBalanceSnapshot>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Holding> Holdings => Set<Holding>();
@@ -86,6 +89,10 @@ public class AppDbContext : DbContext
         b.Entity<Item>().Property(i => i.Value).HasColumnType("decimal(18,2)");
         b.Entity<AssetCategory>().HasIndex(c => c.Name).IsUnique();
         b.Entity<FinanceCategory>().HasIndex(c => c.Name).IsUnique();
+        b.Entity<FinanceCategoryRule>().HasIndex(r => r.Pattern);
+        b.Entity<FinanceCategoryRule>().HasIndex(r => r.Priority);
+        b.Entity<ExchangeRate>().HasIndex(r => r.Currency).IsUnique();
+        b.Entity<ExchangeRate>().Property(r => r.RateToBase).HasColumnType("decimal(18,8)");
 
         b.Entity<FinanceAccount>().Property(a => a.StartingBalance).HasColumnType("decimal(18,2)");
         b.Entity<FinanceAccount>().Property(a => a.Balance).HasColumnType("decimal(18,2)");
@@ -134,6 +141,15 @@ public class AppDbContext : DbContext
 
         b.Entity<FinanceBudget>().Property(x => x.LimitAmount).HasColumnType("decimal(18,2)");
         b.Entity<FinanceBudget>().HasIndex(x => new { x.Category, x.Month }).IsUnique();
+
+        b.Entity<SavingsGoal>()
+            .HasOne(g => g.Account)
+            .WithMany()
+            .HasForeignKey(g => g.AccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+        b.Entity<SavingsGoal>().Property(g => g.TargetAmount).HasColumnType("decimal(18,2)");
+        b.Entity<SavingsGoal>().Property(g => g.CurrentAmount).HasColumnType("decimal(18,2)");
+        b.Entity<SavingsGoal>().HasIndex(g => g.Status);
 
         b.Entity<AccountBalanceSnapshot>()
             .HasOne(s => s.Account)

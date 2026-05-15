@@ -13,6 +13,7 @@ internal static class OdsTargets
     {
         ["Accounts"] = new[] { "Accounts", "Konten" },
         ["Transactions"] = new[] { "Transactions" },
+        ["Holdings"] = new[] { "Holdings", "Positionen" },
         ["Monthly summaries"] = new[] { "Monthly summaries", "MonthlySummaries", "Monatssummen" },
         ["Subscriptions"] = new[] { "Subscriptions", "Abos" },
         ["Finance categories"] = new[] { "Finance categories", "FinanceCategories", "Finanzkategorien" },
@@ -26,6 +27,7 @@ internal static class OdsTargets
     {
         "accounts" => "Accounts",
         "transactions" => "Transactions",
+        "holdings" => "Holdings",
         "monthlysummaries" => "Monthly summaries",
         "subscriptions" => "Subscriptions",
         "financecategories" => "Finance categories",
@@ -41,6 +43,7 @@ internal static class OdsTargets
         var name = Normalize(sheetName);
         var normalizedHeaders = headers.Select(Normalize).ToHashSet();
         if (name.Contains("transaction") || normalizedHeaders.Contains("payee")) return "Transactions";
+        if (name.Contains("holding") || name.Contains("position") || normalizedHeaders.Contains("symbol")) return "Holdings";
         if (name.Contains("monthly") || name.Contains("monatssummen")) return "Monthly summaries";
         if (name.Contains("subscription") || name.Contains("abos")) return "Subscriptions";
         if (name.Contains("account") || name.Contains("konten")) return "Accounts";

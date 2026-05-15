@@ -22,7 +22,10 @@ internal static class HoldingEndpoints
                 .OrderBy(h => h.Account!.Name)
                 .ThenBy(h => h.Symbol)
                 .ToListAsync();
-            return Results.Ok(result.Select(MapHolding));
+            var performance = await ComputePerformance(db, accountId);
+            return Results.Ok(result.Select(h => MapHolding(
+                h,
+                performance.GetValueOrDefault(PerformanceKey(h.AccountId, h.Symbol)))));
         });
 
         holdings.MapPut("/{id:int}", async (int id, [FromBody] HoldingPriceInput input, AppDbContext db) =>
@@ -36,7 +39,8 @@ internal static class HoldingEndpoints
             holding.Notes = Clean(input.Notes);
             holding.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
-            return Results.Ok(MapHolding(holding));
+            var performance = await ComputePerformance(db, holding.AccountId);
+            return Results.Ok(MapHolding(holding, performance.GetValueOrDefault(PerformanceKey(holding.AccountId, holding.Symbol))));
         });
 
         holdings.MapPost("/refresh-prices", async (
@@ -73,5 +77,80 @@ internal static class HoldingEndpoints
                 await RecalculateHoldings(db, accountId);
             return Results.NoContent();
         });
+    }
+
+    private static async Task<Dictionary<string, HoldingPerformance>> ComputePerformance(AppDbContext db, int? accountId)
+    {
+        var query = db.FinanceTransactions
+            .Where(t => t.Status != LuminaVault.Domain.FinanceTransactionStatus.Pending)
+            .Where(t => t.Symbol != null && t.Symbol != "")
+            .Where(t => t.Kind == LuminaVault.Domain.FinanceTransactionKind.Buy ||
+                        t.Kind == LuminaVault.Domain.FinanceTransactionKind.Sell ||
+                        t.Kind == LuminaVault.Domain.FinanceTransactionKind.Dividend ||
+                        t.Kind == LuminaVault.Domain.FinanceTransactionKind.Fee);
+        if (accountId.HasValue) query = query.Where(t => t.AccountId == accountId.Value);
+
+        var transactions = await query
+            .OrderBy(t => t.OccurredOn)
+            .ThenBy(t => t.Id)
+            .ToListAsync();
+        var result = new Dictionary<string, HoldingPerformance>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in transactions.GroupBy(t => PerformanceKey(t.AccountId, t.Symbol!)))
+        {
+            var accumulator = new HoldingPerformanceAccumulator();
+            foreach (var t in group)
+            {
+                var quantity = t.Quantity ?? 0m;
+                var price = t.PricePerUnit ?? (quantity > 0 ? t.Amount / quantity : 0m);
+                switch (t.Kind)
+                {
+                    case LuminaVault.Domain.FinanceTransactionKind.Buy when quantity > 0:
+                    {
+                        var newQuantity = accumulator.Quantity + quantity;
+                        accumulator.AverageCost = newQuantity > 0
+                            ? (accumulator.Quantity * accumulator.AverageCost + quantity * price) / newQuantity
+                            : 0m;
+                        accumulator.Quantity = newQuantity;
+                        break;
+                    }
+                    case LuminaVault.Domain.FinanceTransactionKind.Sell when quantity > 0:
+                    {
+                        var sold = accumulator.Quantity > 0 ? Math.Min(quantity, accumulator.Quantity) : quantity;
+                        accumulator.RealizedPnL += sold * (price - accumulator.AverageCost);
+                        accumulator.Quantity -= sold;
+                        if (accumulator.Quantity <= 0)
+                        {
+                            accumulator.Quantity = 0;
+                            accumulator.AverageCost = 0;
+                        }
+                        break;
+                    }
+                    case LuminaVault.Domain.FinanceTransactionKind.Dividend:
+                        accumulator.Dividends += t.Amount;
+                        break;
+                    case LuminaVault.Domain.FinanceTransactionKind.Fee:
+                        accumulator.Fees += t.Amount;
+                        break;
+                }
+            }
+            result[group.Key] = accumulator.ToPerformance();
+        }
+
+        return result;
+    }
+
+    private static string PerformanceKey(int accountId, string symbol) =>
+        $"{accountId}:{symbol.ToUpperInvariant()}";
+
+    private sealed class HoldingPerformanceAccumulator
+    {
+        public decimal Quantity { get; set; }
+        public decimal AverageCost { get; set; }
+        public decimal RealizedPnL { get; set; }
+        public decimal Dividends { get; set; }
+        public decimal Fees { get; set; }
+
+        public HoldingPerformance ToPerformance() =>
+            new(Math.Round(RealizedPnL, 2), Math.Round(Dividends, 2), Math.Round(Fees, 2));
     }
 }

@@ -30,8 +30,9 @@ export class DashboardComponent {
   }
 
   money(value: number | null | undefined) {
-    if (value == null) return 'CHF 0.00';
-    return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(value);
+    const currency = this.summary()?.baseCurrency ?? 'CHF';
+    if (value == null) return new Intl.NumberFormat('de-CH', { style: 'currency', currency }).format(0);
+    return new Intl.NumberFormat('de-CH', { style: 'currency', currency }).format(value);
   }
 
   barHeight(value: number) {

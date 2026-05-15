@@ -24,6 +24,10 @@ function holding(partial: Partial<Holding>): Holding {
     marketValue: null,
     unrealizedPnL: null,
     unrealizedPnLPercent: null,
+    realizedPnL: 0,
+    dividends: 0,
+    fees: 0,
+    totalReturn: 0,
     notes: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
@@ -58,9 +62,9 @@ function subscription(partial: Partial<Subscription>): Subscription {
 describe('aggregateHoldingsByAccount', () => {
   it('groups holdings by account and sums cost basis / market value', () => {
     const groups = aggregateHoldingsByAccount([
-      holding({ id: 1, accountId: 1, accountName: 'Broker A', costBasis: 1000, marketValue: 1200, unrealizedPnL: 200 }),
-      holding({ id: 2, accountId: 1, accountName: 'Broker A', costBasis: 500, marketValue: 450, unrealizedPnL: -50 }),
-      holding({ id: 3, accountId: 2, accountName: 'Broker B', costBasis: 2000, marketValue: 2500, unrealizedPnL: 500 }),
+      holding({ id: 1, accountId: 1, accountName: 'Broker A', costBasis: 1000, marketValue: 1200, unrealizedPnL: 200, totalReturn: 220 }),
+      holding({ id: 2, accountId: 1, accountName: 'Broker A', costBasis: 500, marketValue: 450, unrealizedPnL: -50, totalReturn: -50 }),
+      holding({ id: 3, accountId: 2, accountName: 'Broker B', costBasis: 2000, marketValue: 2500, unrealizedPnL: 500, totalReturn: 550 }),
     ]);
 
     expect(groups).toHaveLength(2);
@@ -68,6 +72,7 @@ describe('aggregateHoldingsByAccount', () => {
     expect(a.costBasis).toBe(1500);
     expect(a.marketValue).toBe(1650);
     expect(a.unrealizedPnL).toBe(150);
+    expect(a.totalReturn).toBe(170);
     expect(a.holdings).toHaveLength(2);
 
     const b = groups.find(g => g.accountId === 2)!;
@@ -107,13 +112,14 @@ describe('aggregateHoldingsByAccount', () => {
 describe('holdingsTotals', () => {
   it('sums across groups and computes P&L percentage', () => {
     const totals = holdingsTotals([
-      { accountId: 1, accountName: 'A', currency: 'CHF', holdings: [], costBasis: 1000, marketValue: 1200, unrealizedPnL: 200 },
-      { accountId: 2, accountName: 'B', currency: 'CHF', holdings: [], costBasis: 500, marketValue: 600, unrealizedPnL: 100 },
+      { accountId: 1, accountName: 'A', currency: 'CHF', holdings: [], costBasis: 1000, marketValue: 1200, unrealizedPnL: 200, totalReturn: 250 },
+      { accountId: 2, accountName: 'B', currency: 'CHF', holdings: [], costBasis: 500, marketValue: 600, unrealizedPnL: 100, totalReturn: 90 },
     ]);
     expect(totals.costBasis).toBe(1500);
     expect(totals.marketValue).toBe(1800);
     expect(totals.pnl).toBe(300);
     expect(totals.pnlPercent).toBeCloseTo(20, 5);
+    expect(totals.totalReturn).toBe(340);
   });
 
   it('returns zero pnlPercent when cost basis is zero (no positions yet)', () => {

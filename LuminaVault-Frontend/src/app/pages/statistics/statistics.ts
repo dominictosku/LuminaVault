@@ -23,7 +23,7 @@ export class StatisticsComponent {
 
   maxAccount = computed(() => Math.max(
     1,
-    ...(this.stats()?.accountBalances.map(a => Math.abs(a.balance)) ?? [1]),
+    ...(this.stats()?.accountBalances.map(a => Math.abs(a.baseBalance)) ?? [1]),
   ));
 
   constructor() {
@@ -82,6 +82,9 @@ export class StatisticsComponent {
   }
 
   money(value: number) {
-    return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(value);
+    return new Intl.NumberFormat('de-CH', {
+      style: 'currency',
+      currency: this.stats()?.baseCurrency ?? 'CHF',
+    }).format(value);
   }
 }

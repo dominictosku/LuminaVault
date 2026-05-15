@@ -25,6 +25,9 @@ export const FINANCE_TRANSACTION_STATUSES: FinanceTransactionStatus[] = ['Pendin
 export type SubscriptionStatus = 'Active' | 'Paused' | 'Cancelled';
 export const SUBSCRIPTION_STATUSES: SubscriptionStatus[] = ['Active', 'Paused', 'Cancelled'];
 
+export type SavingsGoalStatus = 'Active' | 'Paused' | 'Achieved' | 'Cancelled';
+export const SAVINGS_GOAL_STATUSES: SavingsGoalStatus[] = ['Active', 'Paused', 'Achieved', 'Cancelled'];
+
 export interface FinanceAccount {
   id: number;
   name: string;
@@ -56,6 +59,34 @@ export interface FinanceBudgetInput {
   category: string;
   month: string;
   limitAmount: number;
+  notes?: string | null;
+}
+
+export interface SavingsGoal {
+  id: number;
+  name: string;
+  accountId?: number | null;
+  accountName?: string | null;
+  currency: string;
+  targetAmount: number;
+  currentAmount: number;
+  remaining: number;
+  progressPercent: number;
+  targetDate?: string | null;
+  status: SavingsGoalStatus;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavingsGoalInput {
+  name: string;
+  accountId?: number | null;
+  currency: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string | null;
+  status: SavingsGoalStatus;
   notes?: string | null;
 }
 
@@ -157,6 +188,10 @@ export interface Holding {
   marketValue?: number | null;
   unrealizedPnL?: number | null;
   unrealizedPnLPercent?: number | null;
+  realizedPnL: number;
+  dividends: number;
+  fees: number;
+  totalReturn: number;
   notes?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -278,6 +313,8 @@ export interface SubscriptionGenerateTransactionResult {
 
 export interface FinanceSummary {
   netWorth: number;
+  baseCurrency: string;
+  fxMissingCurrencies: string[];
   accountNetWorth: number;
   inventoryValue: number;
   holdingsMarketValue: number;
@@ -311,6 +348,8 @@ export interface FinanceStatistics {
   generatedAt: string;
   rangeStart: string;
   rangeEnd: string;
+  baseCurrency: string;
+  fxMissingCurrencies: string[];
   totals: {
     netWorth: number;
     accountNetWorth: number;
@@ -330,7 +369,7 @@ export interface FinanceStatistics {
   transactionExpenseBreakdown: { category: string; amount: number; count: number; average: number }[];
   transactionIncomeBreakdown: { category: string; amount: number; count: number; average: number }[];
   monthlySeries: { month: string; income: number; expenses: number; net: number; summaryCount: number; transactionCount: number }[];
-  accountBalances: { account: string; type: string; balance: number; currency: string; color: string }[];
+  accountBalances: { account: string; type: string; balance: number; baseBalance: number; currency: string; color: string }[];
   topExpenses: { id: number; payee: string; category: string; amount: number; occurredOn: string; accountName?: string | null }[];
-  subscriptionRunway: { id: number; name: string; category: string; amount: number; currency: string; monthlyAmount: number; annualAmount: number; nextDueOn: string }[];
+  subscriptionRunway: { id: number; name: string; category: string; amount: number; currency: string; monthlyAmount: number; monthlyAmountBase: number; annualAmount: number; nextDueOn: string }[];
 }

@@ -39,6 +39,11 @@
       <div class="text-xs text-slate-500 mt-1">{{ summary()?.walletCount ?? 0 }} cash/crypto wallets</div>
     </section>
   </div>
+  @if ((summary()?.fxMissingCurrencies?.length ?? 0) > 0) {
+    <div class="mb-4 text-amber-200 text-sm bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+      Missing exchange rates for {{ summary()!.fxMissingCurrencies.join(', ') }}. Aggregate CHF totals currently fall back to 1:1 for those currencies.
+    </div>
+  }
 
   <div class="grid grid-cols-1 xl:grid-cols-[1.35fr_0.85fr] gap-4">
     <section class="surface p-5">

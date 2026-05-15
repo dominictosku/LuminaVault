@@ -3,12 +3,14 @@ using LuminaVault.Data;
 using LuminaVault.Domain;
 using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace LuminaVault.Endpoints;
 
 public record AuthRequest(string Username, string Password);
 public record AuthResponse(string Token, string Username);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
 public static class AuthEndpoints
 {
@@ -37,7 +39,7 @@ public static class AuthEndpoints
             db.Users.Add(user);
             await db.SaveChangesAsync();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
-        });
+        }).RequireRateLimiting("auth");
 
         g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt) =>
         {
@@ -45,7 +47,27 @@ public static class AuthEndpoints
             if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
                 return Results.Unauthorized();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
-        });
+        }).RequireRateLimiting("auth");
+
+        g.MapPost("/change-password", async (
+            HttpContext ctx,
+            [FromBody] ChangePasswordRequest req,
+            AppDbContext db,
+            JwtService jwt) =>
+        {
+            var username = ctx.User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(username)) return Results.Unauthorized();
+            if (req.NewPassword.Length < 8)
+                return Problem.BadRequest("New password must be at least 8 chars.");
+
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+            if (user is null || !BCrypt.Net.BCrypt.Verify(req.CurrentPassword, user.PasswordHash))
+                return Problem.BadRequest("Current password is incorrect.");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+            await db.SaveChangesAsync();
+            return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
+        }).RequireAuthorization();
 
         return app;
     }

@@ -11,6 +11,7 @@ export interface HoldingsAccountGroup {
   costBasis: number;
   marketValue: number;
   unrealizedPnL: number;
+  totalReturn: number;
 }
 
 export interface HoldingsTotals {
@@ -18,6 +19,7 @@ export interface HoldingsTotals {
   marketValue: number;
   pnl: number;
   pnlPercent: number;
+  totalReturn: number;
 }
 
 /// Group holdings by account, summing costBasis / marketValue / unrealizedPnL.
@@ -37,6 +39,7 @@ export function aggregateHoldingsByAccount(holdings: Iterable<Holding>): Holding
         costBasis: 0,
         marketValue: 0,
         unrealizedPnL: 0,
+        totalReturn: 0,
       };
       map.set(h.accountId, group);
     }
@@ -44,6 +47,7 @@ export function aggregateHoldingsByAccount(holdings: Iterable<Holding>): Holding
     group.costBasis += h.costBasis;
     group.marketValue += h.marketValue ?? h.costBasis;
     group.unrealizedPnL += h.unrealizedPnL ?? 0;
+    group.totalReturn += h.totalReturn ?? 0;
   }
   return Array.from(map.values()).sort((a, b) => a.accountName.localeCompare(b.accountName));
 }
@@ -53,13 +57,15 @@ export function aggregateHoldingsByAccount(holdings: Iterable<Holding>): Holding
 export function holdingsTotals(groups: Iterable<HoldingsAccountGroup>): HoldingsTotals {
   let costBasis = 0;
   let marketValue = 0;
+  let totalReturn = 0;
   for (const g of groups) {
     costBasis += g.costBasis;
     marketValue += g.marketValue;
+    totalReturn += g.totalReturn;
   }
   const pnl = marketValue - costBasis;
   const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
-  return { costBasis, marketValue, pnl, pnlPercent };
+  return { costBasis, marketValue, pnl, pnlPercent, totalReturn };
 }
 
 /// Monthly cost of the currently-active subscriptions. Cancelled/Paused are excluded;

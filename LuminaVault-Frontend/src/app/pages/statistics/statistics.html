@@ -22,28 +22,33 @@
       }
     </div>
   } @else {
+    @if (stats()!.fxMissingCurrencies.length) {
+      <div class="mb-4 text-amber-200 text-sm bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+        Missing exchange rates for {{ stats()!.fxMissingCurrencies.join(', ') }}. Aggregate {{ stats()!.baseCurrency }} totals currently fall back to 1:1 for those currencies.
+      </div>
+    }
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
       <section class="surface p-4">
         <div class="text-xs text-slate-400 uppercase tracking-wide">Net worth</div>
-        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.netWorth | currency:'CHF':'symbol-narrow' }}</div>
+        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.netWorth | currency:stats()!.baseCurrency:'symbol-narrow' }}</div>
         <div class="text-xs text-slate-500 mt-1">Accounts plus assets</div>
       </section>
       <section class="surface p-4">
         <div class="text-xs text-slate-400 uppercase tracking-wide">Asset value</div>
-        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.assetValue | currency:'CHF':'symbol-narrow' }}</div>
+        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.assetValue | currency:stats()!.baseCurrency:'symbol-narrow' }}</div>
         <div class="text-xs text-slate-500 mt-1">{{ stats()!.totals.assetCount }} tracked units</div>
       </section>
       <section class="surface p-4">
         <div class="text-xs text-slate-400 uppercase tracking-wide">Subscriptions</div>
-        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.monthlySubscriptionCost | currency:'CHF':'symbol-narrow' }}</div>
-        <div class="text-xs text-slate-500 mt-1">{{ stats()!.totals.annualSubscriptionCost | currency:'CHF':'symbol-narrow' }}/year</div>
+        <div class="text-2xl font-semibold mt-2">{{ stats()!.totals.monthlySubscriptionCost | currency:stats()!.baseCurrency:'symbol-narrow' }}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ stats()!.totals.annualSubscriptionCost | currency:stats()!.baseCurrency:'symbol-narrow' }}/year</div>
       </section>
       <section class="surface p-4">
         <div class="text-xs text-slate-400 uppercase tracking-wide">12 month transaction net</div>
         <div class="text-2xl font-semibold mt-2"
              [class.text-emerald-300]="stats()!.totals.transactionNet >= 0"
              [class.text-red-300]="stats()!.totals.transactionNet < 0">
-          {{ stats()!.totals.transactionNet | currency:'CHF':'symbol-narrow' }}
+          {{ stats()!.totals.transactionNet | currency:stats()!.baseCurrency:'symbol-narrow' }}
         </div>
         <div class="text-xs text-slate-500 mt-1">{{ stats()!.totals.transactionCount }} detailed transactions</div>
       </section>
@@ -98,12 +103,12 @@
                 <span class="text-slate-300">{{ a.balance | currency:a.currency:'symbol-narrow' }}</span>
               </div>
               <div class="h-2 rounded-full bg-white/5 overflow-hidden">
-                <div class="h-full bg-gradient-to-r from-violet-500 to-pink-500" [style.width.%]="accountWidth(a.balance)"></div>
+                <div class="h-full bg-gradient-to-r from-violet-500 to-pink-500" [style.width.%]="accountWidth(a.baseBalance)"></div>
               </div>
               <div class="chart-tooltip right-0 top-7">
-                {{ a.account }} · {{ a.balance | currency:a.currency:'symbol-narrow' }}
+                {{ a.account }} · {{ a.baseBalance | currency:stats()!.baseCurrency:'symbol-narrow' }}
               </div>
-              <div class="text-xs text-slate-500 mt-1">{{ a.type }}</div>
+              <div class="text-xs text-slate-500 mt-1">{{ a.type }} · {{ a.baseBalance | currency:stats()!.baseCurrency:'symbol-narrow' }}</div>
             </div>
           }
         </div>
@@ -123,15 +128,15 @@
             <div class="group relative">
               <div class="flex justify-between text-sm mb-1">
                 <span class="truncate">{{ row.category }}</span>
-                <span class="text-slate-300">{{ row.monthlyAmount | currency:'CHF':'symbol-narrow' }}/mo</span>
+                <span class="text-slate-300">{{ row.monthlyAmount | currency:stats()!.baseCurrency:'symbol-narrow' }}/mo</span>
               </div>
               <div class="h-2 rounded-full bg-white/5 overflow-hidden">
                 <div class="h-full bg-gradient-to-r from-amber-300 to-pink-400" [style.width.%]="subscriptionWidth(row)"></div>
               </div>
               <div class="chart-tooltip right-0 top-7">
-                {{ row.category }} · {{ row.monthlyAmount | currency:'CHF':'symbol-narrow' }}/mo
+                {{ row.category }} · {{ row.monthlyAmount | currency:stats()!.baseCurrency:'symbol-narrow' }}/mo
               </div>
-              <div class="text-xs text-slate-500 mt-1">{{ row.count }} active · {{ row.annualAmount | currency:'CHF':'symbol-narrow' }}/year</div>
+              <div class="text-xs text-slate-500 mt-1">{{ row.count }} active · {{ row.annualAmount | currency:stats()!.baseCurrency:'symbol-narrow' }}/year</div>
             </div>
           }
         </div>
@@ -159,7 +164,7 @@
                 <div class="text-xs text-slate-500 truncate">{{ expense.category }} · {{ expense.accountName || 'Account' }}</div>
               </div>
               <div class="text-right shrink-0">
-                <div class="text-red-300">{{ expense.amount | currency:'CHF':'symbol-narrow' }}</div>
+                <div class="text-red-300">{{ expense.amount | currency:stats()!.baseCurrency:'symbol-narrow' }}</div>
                 <div class="text-xs text-slate-500">{{ expense.occurredOn | date:'MMM d' }}</div>
               </div>
             </div>
@@ -195,7 +200,7 @@
             <div class="group relative">
               <div class="flex justify-between text-sm mb-1">
                 <span class="truncate">{{ row.category }}</span>
-                <span class="text-slate-300">{{ row.amount | currency:'CHF':'symbol-narrow' }}</span>
+                <span class="text-slate-300">{{ row.amount | currency:stats()!.baseCurrency:'symbol-narrow' }}</span>
               </div>
               <div class="h-2 rounded-full bg-white/5 overflow-hidden">
                 <div class="h-full" [class.bg-violet-400]="mode === 'asset'"
@@ -204,7 +209,7 @@
                      [style.width.%]="share(row.amount, total)"></div>
               </div>
               <div class="chart-tooltip right-0 top-7">
-                {{ row.category }} · {{ row.amount | currency:'CHF':'symbol-narrow' }}
+                {{ row.category }} · {{ row.amount | currency:stats()!.baseCurrency:'symbol-narrow' }}
               </div>
               <div class="flex justify-between text-xs text-slate-500 mt-1">
                 <span>{{ row.count }} entries</span>
