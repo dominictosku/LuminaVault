@@ -10,10 +10,33 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Events;
+// `Log` from Serilog is no longer referenced after dropping the bootstrap logger pattern,
+// but Serilog (the namespace) is still needed for UseSerilog and UseSerilogRequestLogging.
 
 const string DevFallbackJwtKey = "dev-only-key-change-me-please-this-must-be-32+chars-long!!";
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Replace the default ILogger pipeline with Serilog reading from configuration.
+// Hosts can override sinks/levels via appsettings.json without code changes.
+//
+// We deliberately don't use Serilog's CreateBootstrapLogger pattern here: it sets a
+// global frozen-once logger, which breaks WebApplicationFactory<Program> tests that
+// boot the host multiple times in a single process ("The logger is already frozen").
+builder.Host.UseSerilog((ctx, services, cfg) => cfg
+    .ReadFrom.Configuration(ctx.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: Path.Combine(ctx.HostingEnvironment.ContentRootPath, "logs", "luminavault-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}"));
 
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 52_428_800); // 50 MB
 
@@ -153,6 +176,10 @@ using (var scope = app.Services.CreateScope())
     Seeder.Seed(db);
 }
 
+// Single request-completed log line per HTTP request with method/path/status/elapsed.
+// Cheaper and tidier than the default per-stage AspNetCore logger.
+app.UseSerilogRequestLogging();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -173,9 +200,21 @@ app.MapPhotos();
 app.MapAttachments();
 app.MapFinance();
 app.MapOdsData();
+app.MapBackup();
 app.MapSettings();
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex) when (ex is not HostAbortedException)
+{
+    // Without the bootstrap logger we don't have a global Log.Logger to call into,
+    // but the host's ILoggerFactory is still alive at this point.
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup")
+        .LogCritical(ex, "LuminaVault terminated unexpectedly");
+    throw;
+}
 
 // Expose the implicit Program class so WebApplicationFactory<Program> in the test project
 // can boot the same composition root.

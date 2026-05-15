@@ -16,7 +16,11 @@
       "Bash(echo \"exit=$?\")",
       "Read(//c/Users/domin/MyDocuments/Projects/**)",
       "Bash(rmdir LuminaVault-Frontend/src/app/pages/skills)",
-      "Bash(timeout 14 dotnet run --no-build --no-launch-profile --urls http://localhost:5259)"
+      "Bash(timeout 14 dotnet run --no-build --no-launch-profile --urls http://localhost:5259)",
+      "Bash(cd /c/Users/domin/MyDocuments/Projects/LuminaVault/LuminaVault-Frontend && grep -n \"from 'three\" src/app/pages/planner/*.ts | head -20)",
+      "Bash(dotnet add *)",
+      "Bash(cd /c/Users/domin/MyDocuments/Projects/LuminaVault/LuminaVault-Frontend && grep -nE \"export \\(interface|type\\) \\(Holding|Subscription\\)\\\\b\" src/app/core/models/*.ts | head)",
+      "Bash(grep -lE \"grid-cols-[3-9]|w-\\\\\\\\[?[5-9][0-9]+|min-w-\\\\\\\\[[0-9]+px\\\\\\\\]\" src/app/pages/*/*.html)"
     ]
   }
 }

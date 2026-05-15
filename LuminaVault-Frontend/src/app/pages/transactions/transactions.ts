@@ -19,6 +19,7 @@ import {
   isInvestmentAccount,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { tradeAmount } from '../../core/finance-math';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
@@ -242,11 +243,9 @@ export class TransactionsComponent {
   }
 
   recomputeAmountFromTrade() {
-    const qty = Number(this.model.quantity) || 0;
-    const price = Number(this.model.pricePerUnit) || 0;
-    if (qty > 0 && price > 0 && this.needsTradeDetails(this.model.kind)) {
-      this.model.amount = Number((qty * price).toFixed(2));
-    }
+    if (!this.needsTradeDetails(this.model.kind)) return;
+    const computed = tradeAmount(this.model.quantity, this.model.pricePerUnit);
+    if (computed > 0) this.model.amount = computed;
   }
 
   save() {

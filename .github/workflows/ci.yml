@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs on the same ref so a fast pushlanding before slow tests
+# finish doesn't waste a runner.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore LuminaVault-Backend/LuminaVault-Backend.csproj LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj
+
+      - name: Build
+        run: dotnet build LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj --no-build --configuration Release --logger "console;verbosity=normal"
+
+  frontend:
+    name: Frontend (build + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: LuminaVault-Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: LuminaVault-Frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint type-check
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+      - name: Test
+        run: npm test -- --watch=false
+
+      - name: Build
+        run: npm run build -- --configuration development

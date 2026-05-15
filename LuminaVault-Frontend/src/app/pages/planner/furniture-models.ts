@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// GLTFLoader is dynamic-imported on first use (see ensureGltfLoader below).
+// It's only needed when a furniture kind has a custom .glb in /models/ or when
+// an item has a per-instance model URL — most users have neither, so the
+// procedural-geometry fallback path stays a smaller initial chunk for the
+// planner route.
+import type { GLTFLoader as GLTFLoaderType } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FurnitureKind } from '../../core/models';
 
 export interface OpenTransform {
@@ -451,31 +456,38 @@ export function buildFurnitureMesh(kind: FurnitureKind, w: number, h: number, d:
 
 // ───── glTF loader with cache + 404 fallback ─────
 
-const gltfLoader = new GLTFLoader();
+// Lazy-instantiated to defer the GLTFLoader import. Memoised so we pay
+// the dynamic import + parse cost only once per page session.
+let loaderPromise: Promise<GLTFLoaderType> | null = null;
+function ensureGltfLoader(): Promise<GLTFLoaderType> {
+  loaderPromise ??= import('three/examples/jsm/loaders/GLTFLoader.js')
+    .then(mod => new mod.GLTFLoader());
+  return loaderPromise;
+}
+
 const cache = new Map<FurnitureKind, Promise<THREE.Object3D | null>>();
 
 export function loadModelForKind(kind: FurnitureKind): Promise<THREE.Object3D | null> {
   if (cache.has(kind)) return cache.get(kind)!;
   const url = `/models/${kind}.glb`;
   const p = fetch(url, { method: 'HEAD' })
-    .then(r => r.ok ? new Promise<THREE.Object3D | null>((resolve) => {
-      gltfLoader.load(url,
-        gltf => resolve(gltf.scene),
-        undefined,
-        () => resolve(null));
-    }) : null)
+    .then(async r => {
+      if (!r.ok) return null;
+      const loader = await ensureGltfLoader();
+      return new Promise<THREE.Object3D | null>((resolve) => {
+        loader.load(url, gltf => resolve(gltf.scene), undefined, () => resolve(null));
+      });
+    })
     .catch(() => null);
   cache.set(kind, p);
   return p;
 }
 
 /** Load a glTF/glb from an arbitrary URL (no caching — caller decides). */
-export function loadModelFromUrl(url: string): Promise<THREE.Object3D | null> {
+export async function loadModelFromUrl(url: string): Promise<THREE.Object3D | null> {
+  const loader = await ensureGltfLoader();
   return new Promise(resolve => {
-    gltfLoader.load(url,
-      gltf => resolve(gltf.scene),
-      undefined,
-      () => resolve(null));
+    loader.load(url, gltf => resolve(gltf.scene), undefined, () => resolve(null));
   });
 }
 

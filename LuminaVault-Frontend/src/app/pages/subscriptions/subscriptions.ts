@@ -14,6 +14,7 @@ import {
   SubscriptionStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { activeSubscriptionsMonthlyTotal } from '../../core/finance-math';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
@@ -70,9 +71,7 @@ export class SubscriptionsComponent {
   model: SubscriptionInput = this.defaultModel();
 
   activeCount = computed(() => this.subscriptions().filter(s => s.status === 'Active').length);
-  monthlyTotal = computed(() => this.subscriptions()
-    .filter(s => s.status === 'Active')
-    .reduce((sum, s) => sum + s.monthlyAmount, 0));
+  monthlyTotal = computed(() => activeSubscriptionsMonthlyTotal(this.subscriptions()));
   categories = computed(() => {
     return Array.from(new Set([
       ...this.financeCategories().map(c => c.name),

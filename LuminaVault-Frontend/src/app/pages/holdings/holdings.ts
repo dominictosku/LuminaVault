@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
+import { aggregateHoldingsByAccount, holdingsTotals } from '../../core/finance-math';
 import {
   FinanceAccount,
   Holding,
@@ -11,16 +12,6 @@ import {
   PriceProviderStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
-
-interface AccountGroup {
-  accountId: number;
-  accountName: string;
-  currency: string;
-  holdings: Holding[];
-  costBasis: number;
-  marketValue: number;
-  unrealizedPnL: number;
-}
 
 @Component({
   selector: 'app-holdings',
@@ -52,38 +43,9 @@ export class HoldingsComponent {
     return accountId == null ? list : list.filter(h => h.accountId === accountId);
   });
 
-  groups = computed<AccountGroup[]>(() => {
-    const map = new Map<number, AccountGroup>();
-    for (const h of this.filteredHoldings()) {
-      let group = map.get(h.accountId);
-      if (!group) {
-        group = {
-          accountId: h.accountId,
-          accountName: h.accountName ?? 'Account',
-          currency: h.currency,
-          holdings: [],
-          costBasis: 0,
-          marketValue: 0,
-          unrealizedPnL: 0,
-        };
-        map.set(h.accountId, group);
-      }
-      group.holdings.push(h);
-      group.costBasis += h.costBasis;
-      group.marketValue += h.marketValue ?? h.costBasis;
-      group.unrealizedPnL += h.unrealizedPnL ?? 0;
-    }
-    return Array.from(map.values()).sort((a, b) => a.accountName.localeCompare(b.accountName));
-  });
+  groups = computed(() => aggregateHoldingsByAccount(this.filteredHoldings()));
 
-  totals = computed(() => {
-    const groups = this.groups();
-    const costBasis = groups.reduce((sum, g) => sum + g.costBasis, 0);
-    const marketValue = groups.reduce((sum, g) => sum + g.marketValue, 0);
-    const pnl = marketValue - costBasis;
-    const pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
-    return { costBasis, marketValue, pnl, pnlPercent };
-  });
+  totals = computed(() => holdingsTotals(this.groups()));
 
   constructor() {
     this.fetch();

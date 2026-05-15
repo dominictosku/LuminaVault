@@ -124,6 +124,21 @@ dotnet test
 
 The test project boots the real API via `WebApplicationFactory<Program>` against a per-test SQLite file under the system temp dir, so tests don't share state. Coverage focuses on the load-bearing finance math (balance recompute after writes, transfers debiting both sides, weighted-average holdings, budget spend tracking) and the `{ error: "..." }` validation envelope shape the frontend depends on.
 
+### Backups
+
+LuminaVault is self-hosted, so backup is your responsibility — but the app helps. Hit `GET /api/data/backup` (authenticated) to download a zip containing a consistent snapshot of `luminavault.db` plus the entire `uploads/` folder (item photos, glTF models, document attachments). The endpoint runs a `PRAGMA wal_checkpoint(TRUNCATE)` first so the snapshot is point-in-time consistent even under writes.
+
+To restore: stop the backend, delete the existing `luminavault.db` and `uploads/`, unzip the backup into `LuminaVault-Backend/`, and restart.
+
+For routine backups, point your favourite scheduler at this endpoint:
+
+```bash
+# Daily backup with auth header
+curl -sH "Authorization: Bearer $LUMINA_TOKEN" \
+  http://localhost:5256/api/data/backup \
+  -o "backup-$(date +%Y%m%d).zip"
+```
+
 <br>
 
 ## Project structure
