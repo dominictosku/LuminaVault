@@ -1,6 +1,7 @@
 using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,9 +25,9 @@ public static class AuthEndpoints
         g.MapPost("/register", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt) =>
         {
             if (await db.Users.AnyAsync())
-                return Results.Conflict(new { error = "A user already exists. This is a single-user app." });
+                return Problem.Conflict("A user already exists. This is a single-user app.");
             if (string.IsNullOrWhiteSpace(req.Username) || req.Password.Length < 6)
-                return Results.BadRequest(new { error = "Username required and password must be at least 6 chars." });
+                return Problem.BadRequest("Username required and password must be at least 6 chars.");
 
             var user = new User
             {

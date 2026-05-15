@@ -55,7 +55,8 @@
 
 ### 💰 Personal finance
 - **Multi-account ledger** — checking, savings, cash, credit cards, investments, crypto, loans; per-account currency (default CHF) and starting balance
-- **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled)
+- **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled), plus trade kinds (buy / sell / dividend / fee) with symbol, quantity and price-per-unit for investment & crypto accounts
+- **Holdings & live prices** — symbol-level positions per investment/crypto account with average cost, last price and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
 - **Budgets** — per-category monthly limits with spend tracking
 - **Recurring subscriptions** — billing interval, next-due date, auto-renew, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
@@ -99,7 +100,11 @@ dotnet run
 # API available at http://localhost:5256
 ```
 
-The SQLite database (`luminavault.db`) and an `uploads/` folder are created automatically on first run. Schema migrations run idempotently at startup — no CLI commands needed. Default asset and finance categories are seeded the first time the app starts.
+The SQLite database (`luminavault.db`) and an `uploads/` folder are created automatically on first run. The backend uses **EF Core Migrations** — `db.Database.Migrate()` runs on startup and applies any pending migrations idempotently. Default asset and finance categories are seeded the first time the app starts.
+
+> **Upgrading from a pre-migrations build?** This branch switches from `EnsureCreated` + hand-rolled `ALTER TABLE` patches to real EF migrations. The first migration is `Initial`, which models the full current schema. Existing dev databases were created without an `__EFMigrationsHistory` row, so EF won't recognise them. **Move your old `luminavault.db` aside** (e.g. `mv luminavault.db luminavault.db.old`) and let the app create a fresh schema on next start. Open an issue if you need a data-preserving upgrade path.
+
+To add a schema change later: `cd LuminaVault-Backend && dotnet ef migrations add YourChangeName`. The new migration is applied automatically on the next `dotnet run`.
 
 ### Frontend
 
@@ -110,6 +115,15 @@ npm start
 # App available at http://localhost:4200
 ```
 
+### Tests
+
+```bash
+cd LuminaVault-Backend.Tests
+dotnet test
+```
+
+The test project boots the real API via `WebApplicationFactory<Program>` against a per-test SQLite file under the system temp dir, so tests don't share state. Coverage focuses on the load-bearing finance math (balance recompute after writes, transfers debiting both sides, weighted-average holdings, budget spend tracking) and the `{ error: "..." }` validation envelope shape the frontend depends on.
+
 <br>
 
 ## Project structure
@@ -118,8 +132,11 @@ npm start
 LuminaVault/
 ├── LuminaVault-Backend/
 │   ├── Auth/               # JWT service
-│   ├── Data/               # EF Core DbContext
+│   ├── Data/               # EF Core DbContext + first-run Seeder
+│   ├── Migrations/         # EF Core migrations
 │   ├── Domain/             # Entity classes (inventory + finance)
+│   ├── Pricing/            # Price provider abstraction + Finnhub & CoinGecko adapters
+│   ├── Validation/         # Problem / Validate helpers — consistent error envelopes
 │   ├── Endpoints/          # Minimal API route groups
 │   │   ├── HouseEndpoints.cs
 │   │   ├── FurnitureEndpoints.cs
@@ -132,6 +149,8 @@ LuminaVault/
 │   │   └── AuthEndpoints.cs
 │   ├── uploads/            # Photos, glTF models and documents (gitignored)
 │   └── Program.cs          # App bootstrap, migrations & middleware
+│
+├── LuminaVault-Backend.Tests/  # xUnit + WebApplicationFactory integration tests
 │
 └── LuminaVault-Frontend/   # Angular app
     └── src/app/
@@ -146,6 +165,7 @@ LuminaVault/
             ├── planner/            # Three.js scene + furniture models
             ├── accounts/           # Finance accounts
             ├── transactions/
+            ├── holdings/           # Investment & crypto positions, price refresh
             ├── budgets/
             ├── subscriptions/
             ├── monthly-summaries/  # Reconciliation
@@ -172,6 +192,26 @@ The backend reads JWT settings from `appsettings.json`. For development the key 
 ```
 
 Maximum request body size is 50 MB (configured in `Program.cs`) to accommodate larger glTF models and document uploads.
+
+### Price providers (optional)
+
+The Holdings page can pull live quotes from external providers. Both are optional — if a key is missing, the provider is reported as "not configured" and refreshes for that asset class are skipped with a clear message.
+
+```jsonc
+// LuminaVault-Backend/appsettings.json
+{
+  "PriceProviders": {
+    "Finnhub": { "ApiKey": "your-finnhub-key" }
+  }
+}
+```
+
+Or via environment variable: `LUMINA_FINNHUB_KEY`.
+
+- **Finnhub** (stocks / ETFs) — free tier allows ~60 calls/min. For non-US tickers, set each holding's *Provider ID* with the exchange suffix (e.g. `NESN.SW` for Swiss, `SAP.DE` for German).
+- **CoinGecko** (crypto) — no API key required. For ambiguous tickers, set *Provider ID* to the exact CoinGecko coin id (e.g. `bitcoin`, `ethereum`).
+
+The `POST /api/finance/holdings/refresh-prices` endpoint is rate-limited per JWT subject (6 calls/minute, fixed window) to prevent burning through Finnhub's free quota with rapid clicks; the 7th call within a minute returns `429 Too Many Requests`.
 
 <br>
 

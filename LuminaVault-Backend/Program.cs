@@ -1,13 +1,17 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Endpoints;
 using LuminaVault.Pricing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+
+const string DevFallbackJwtKey = "dev-only-key-change-me-please-this-must-be-32+chars-long!!";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,9 +20,20 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 52_428_800);
 // --- Config ---
 var jwtOpt = new JwtOptions();
 builder.Configuration.GetSection("Jwt").Bind(jwtOpt);
+var jwtKeyFromEnv = false;
 if (string.IsNullOrWhiteSpace(jwtOpt.Key))
-    jwtOpt.Key = Environment.GetEnvironmentVariable("LUMINA_JWT_KEY")
-                 ?? "dev-only-key-change-me-please-this-must-be-32+chars-long!!";
+{
+    var envKey = Environment.GetEnvironmentVariable("LUMINA_JWT_KEY");
+    if (!string.IsNullOrWhiteSpace(envKey))
+    {
+        jwtOpt.Key = envKey;
+        jwtKeyFromEnv = true;
+    }
+    else
+    {
+        jwtOpt.Key = DevFallbackJwtKey;
+    }
+}
 builder.Services.AddSingleton(jwtOpt);
 builder.Services.AddSingleton<JwtService>();
 
@@ -84,227 +99,58 @@ builder.Services.AddTransient<IPriceProvider>(sp => sp.GetRequiredService<Finnhu
 
 builder.Services.AddScoped<PriceProviderService>();
 
+// --- Rate limiting ---
+// Holdings refresh fans out to Finnhub (60/min free tier) and CoinGecko (no key needed
+// but courteous limits). A clicky user can drain the day's quota in seconds — cap per JWT subject.
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy("price-refresh", httpContext =>
+    {
+        var key = httpContext.User.Identity?.Name
+                  ?? httpContext.Connection.RemoteIpAddress?.ToString()
+                  ?? "anonymous";
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+});
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-// --- Migrate DB on start ---
+// Loud warning if the dev fallback JWT key slipped into a non-dev environment.
+if (jwtOpt.Key == DevFallbackJwtKey)
+{
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    if (!app.Environment.IsDevelopment())
+    {
+        startupLogger.LogError(
+            "LuminaVault is running with the built-in dev JWT key in a non-Development environment. " +
+            "Set Jwt:Key in appsettings.json or the LUMINA_JWT_KEY env var before exposing this instance.");
+    }
+    else
+    {
+        startupLogger.LogWarning(
+            "Using built-in dev JWT key. Set Jwt:Key or LUMINA_JWT_KEY for any non-local use.");
+    }
+}
+else if (jwtKeyFromEnv)
+{
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup")
+        .LogInformation("JWT signing key loaded from LUMINA_JWT_KEY env var.");
+}
+
+// --- Migrate & seed DB on start ---
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-
-    // Idempotent column adds for evolving schema (dev-friendly migrations).
-    void AddColumnIfMissing(string table, string column, string definition)
-    {
-        var exists = db.Database
-            .SqlQuery<int>($"SELECT COUNT(*) AS Value FROM pragma_table_info({table}) WHERE name = {column}")
-            .AsEnumerable().FirstOrDefault();
-        if (exists == 0)
-        {
-#pragma warning disable EF1002 // table/column/definition are hardcoded literals from the caller, not user input
-            db.Database.ExecuteSqlRaw($"ALTER TABLE {table} ADD COLUMN {column} {definition}");
-#pragma warning restore EF1002
-        }
-    }
-    AddColumnIfMissing("Items", "RoomId", "INTEGER NULL REFERENCES Rooms(Id) ON DELETE SET NULL");
-    AddColumnIfMissing("Items", "Category", "TEXT NULL");
-    AddColumnIfMissing("Items", "ModelFileName", "TEXT NULL");
-    AddColumnIfMissing("Items", "ModelContentType", "TEXT NULL");
-    AddColumnIfMissing("MonthlyAccountSummaries", "IsReconciled", "INTEGER NOT NULL DEFAULT 0");
-    AddColumnIfMissing("MonthlyAccountSummaries", "ReconciledAt", "TEXT NULL");
-    AddColumnIfMissing("MonthlyAccountSummaries", "ReconciliationNotes", "TEXT NULL");
-    AddColumnIfMissing("FinanceTransactions", "Symbol", "TEXT NULL");
-    AddColumnIfMissing("FinanceTransactions", "Quantity", "TEXT NULL");
-    AddColumnIfMissing("FinanceTransactions", "PricePerUnit", "TEXT NULL");
-    AddColumnIfMissing("Holdings", "ProviderId", "TEXT NULL");
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS DocumentAttachments (
-            Id INTEGER NOT NULL CONSTRAINT PK_DocumentAttachments PRIMARY KEY AUTOINCREMENT,
-            ItemId INTEGER NULL,
-            SubscriptionId INTEGER NULL,
-            OriginalFileName TEXT NOT NULL,
-            FileName TEXT NOT NULL,
-            ContentType TEXT NOT NULL,
-            Size INTEGER NOT NULL,
-            UploadedAt TEXT NOT NULL,
-            CONSTRAINT FK_DocumentAttachments_Items_ItemId FOREIGN KEY (ItemId) REFERENCES Items (Id) ON DELETE CASCADE,
-            CONSTRAINT FK_DocumentAttachments_Subscriptions_SubscriptionId FOREIGN KEY (SubscriptionId) REFERENCES Subscriptions (Id) ON DELETE CASCADE
-        );
-        """);
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_DocumentAttachments_ItemId ON DocumentAttachments (ItemId)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_DocumentAttachments_SubscriptionId ON DocumentAttachments (SubscriptionId)");
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS AssetCategories (
-            Id INTEGER NOT NULL CONSTRAINT PK_AssetCategories PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL,
-            Color TEXT NOT NULL,
-            SortOrder INTEGER NOT NULL,
-            CreatedAt TEXT NOT NULL
-        );
-        """);
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AssetCategories_Name ON AssetCategories (Name)");
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS FinanceCategories (
-            Id INTEGER NOT NULL CONSTRAINT PK_FinanceCategories PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL,
-            Color TEXT NOT NULL,
-            SortOrder INTEGER NOT NULL,
-            CreatedAt TEXT NOT NULL
-        );
-        """);
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_FinanceCategories_Name ON FinanceCategories (Name)");
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS FinanceAccounts (
-            Id INTEGER NOT NULL CONSTRAINT PK_FinanceAccounts PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL,
-            Institution TEXT NULL,
-            Type INTEGER NOT NULL,
-            Currency TEXT NOT NULL,
-            StartingBalance TEXT NOT NULL,
-            Balance TEXT NOT NULL,
-            Color TEXT NOT NULL,
-            Notes TEXT NULL,
-            IsArchived INTEGER NOT NULL,
-            CreatedAt TEXT NOT NULL
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS FinanceTransactions (
-            Id INTEGER NOT NULL CONSTRAINT PK_FinanceTransactions PRIMARY KEY AUTOINCREMENT,
-            AccountId INTEGER NOT NULL,
-            TransferAccountId INTEGER NULL,
-            Kind INTEGER NOT NULL,
-            Status INTEGER NOT NULL,
-            OccurredOn TEXT NOT NULL,
-            Payee TEXT NOT NULL,
-            Category TEXT NOT NULL,
-            Amount TEXT NOT NULL,
-            Description TEXT NULL,
-            Notes TEXT NULL,
-            TagsCsv TEXT NOT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL,
-            CONSTRAINT FK_FinanceTransactions_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE,
-            CONSTRAINT FK_FinanceTransactions_FinanceAccounts_TransferAccountId FOREIGN KEY (TransferAccountId) REFERENCES FinanceAccounts (Id) ON DELETE SET NULL
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS Subscriptions (
-            Id INTEGER NOT NULL CONSTRAINT PK_Subscriptions PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL,
-            Category TEXT NOT NULL,
-            Provider TEXT NULL,
-            AccountId INTEGER NULL,
-            Amount TEXT NOT NULL,
-            Currency TEXT NOT NULL,
-            BillingIntervalDays INTEGER NOT NULL,
-            StartedOn TEXT NOT NULL,
-            NextDueOn TEXT NOT NULL,
-            AutoRenew INTEGER NOT NULL,
-            Status INTEGER NOT NULL,
-            Notes TEXT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL,
-            CONSTRAINT FK_Subscriptions_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE SET NULL
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS MonthlyAccountSummaries (
-            Id INTEGER NOT NULL CONSTRAINT PK_MonthlyAccountSummaries PRIMARY KEY AUTOINCREMENT,
-            AccountId INTEGER NOT NULL,
-            Month TEXT NOT NULL,
-            Income TEXT NOT NULL,
-            Expenses TEXT NOT NULL,
-            OpeningBalance TEXT NULL,
-            ClosingBalance TEXT NULL,
-            Notes TEXT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL,
-            CONSTRAINT FK_MonthlyAccountSummaries_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS FinanceBudgets (
-            Id INTEGER NOT NULL CONSTRAINT PK_FinanceBudgets PRIMARY KEY AUTOINCREMENT,
-            Category TEXT NOT NULL,
-            Month TEXT NOT NULL,
-            LimitAmount TEXT NOT NULL,
-            Notes TEXT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS AccountBalanceSnapshots (
-            Id INTEGER NOT NULL CONSTRAINT PK_AccountBalanceSnapshots PRIMARY KEY AUTOINCREMENT,
-            AccountId INTEGER NOT NULL,
-            SnapshotDate TEXT NOT NULL,
-            ActualBalance TEXT NOT NULL,
-            ExpectedBalance TEXT NOT NULL,
-            Difference TEXT NOT NULL,
-            IsReconciled INTEGER NOT NULL,
-            Notes TEXT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL,
-            CONSTRAINT FK_AccountBalanceSnapshots_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
-        );
-        """);
-
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_OccurredOn ON FinanceTransactions (OccurredOn)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Category ON FinanceTransactions (Category)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_AccountId ON FinanceTransactions (AccountId)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_TransferAccountId ON FinanceTransactions (TransferAccountId)");
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_MonthlyAccountSummaries_AccountId_Month ON MonthlyAccountSummaries (AccountId, Month)");
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_FinanceBudgets_Category_Month ON FinanceBudgets (Category, Month)");
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_AccountBalanceSnapshots_AccountId_SnapshotDate ON AccountBalanceSnapshots (AccountId, SnapshotDate)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_NextDueOn ON Subscriptions (NextDueOn)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_Subscriptions_AccountId ON Subscriptions (AccountId)");
-    db.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_FinanceTransactions_Symbol ON FinanceTransactions (Symbol)");
-
-    db.Database.ExecuteSqlRaw("""
-        CREATE TABLE IF NOT EXISTS Holdings (
-            Id INTEGER NOT NULL CONSTRAINT PK_Holdings PRIMARY KEY AUTOINCREMENT,
-            AccountId INTEGER NOT NULL,
-            Symbol TEXT NOT NULL,
-            Name TEXT NULL,
-            Quantity TEXT NOT NULL,
-            AverageCost TEXT NOT NULL,
-            LastPrice TEXT NULL,
-            LastPriceAt TEXT NULL,
-            ProviderId TEXT NULL,
-            Notes TEXT NULL,
-            CreatedAt TEXT NOT NULL,
-            UpdatedAt TEXT NOT NULL,
-            CONSTRAINT FK_Holdings_FinanceAccounts_AccountId FOREIGN KEY (AccountId) REFERENCES FinanceAccounts (Id) ON DELETE CASCADE
-        );
-        """);
-    db.Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_Holdings_AccountId_Symbol ON Holdings (AccountId, Symbol)");
-
-    if (!db.AssetCategories.Any())
-    {
-        var defaults = new[] { "IT", "Hobby", "Möbel", "Werkzeug", "Fahrzeug", "Bürobedarf", "Kleidung", "Schule", "Reinigung", "Homelab", "Sonstiges" };
-        for (var i = 0; i < defaults.Length; i++)
-            db.AssetCategories.Add(new LuminaVault.Domain.AssetCategory { Name = defaults[i], SortOrder = i, Color = "#7c3aed" });
-        db.SaveChanges();
-    }
-
-    if (!db.FinanceCategories.Any())
-    {
-        var defaults = new[] { "Salary", "Food", "Housing", "Transport", "Health", "Career", "Hobby", "Savings", "Investments", "Subscriptions", "Insurance", "Utilities", "Obligatorisch", "Körper" };
-        for (var i = 0; i < defaults.Length; i++)
-            db.FinanceCategories.Add(new LuminaVault.Domain.FinanceCategory { Name = defaults[i], SortOrder = i, Color = "#7c3aed" });
-        db.SaveChanges();
-    }
+    db.Database.Migrate();
+    Seeder.Seed(db);
 }
 
 if (app.Environment.IsDevelopment())
@@ -315,6 +161,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapGet("/", () => Results.Ok(new { app = "LuminaVault", version = "1.0" }));
 
@@ -329,3 +176,7 @@ app.MapOdsData();
 app.MapSettings();
 
 app.Run();
+
+// Expose the implicit Program class so WebApplicationFactory<Program> in the test project
+// can boot the same composition root.
+public partial class Program;

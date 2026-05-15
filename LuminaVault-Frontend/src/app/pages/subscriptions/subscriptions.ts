@@ -14,7 +14,8 @@ import {
   SubscriptionStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
-import { FilterPreset, FilterPresetsService } from '../../shared/filters/filter-presets.service';
+import { FilterPreset } from '../../shared/filters/filter-presets.service';
+import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
 type SubscriptionFilters = {
   q: string;
@@ -24,11 +25,20 @@ type SubscriptionFilters = {
   sort: SubscriptionSort;
 };
 
+const DEFAULT_FILTERS: SubscriptionFilters = {
+  q: '',
+  status: null,
+  category: null,
+  account: null,
+  sort: 'dueAsc',
+};
+
 @Component({
   selector: 'app-subscriptions',
   imports: [FormsModule, CurrencyPipe, DatePipe],
   templateUrl: './subscriptions.html',
-  styleUrl: './subscriptions.scss'
+  styleUrl: './subscriptions.scss',
+  providers: [FilterStateController],
 })
 export class SubscriptionsComponent {
   protected api = inject(FinanceApi);
@@ -36,7 +46,7 @@ export class SubscriptionsComponent {
   private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private filterPresetsService = inject(FilterPresetsService);
+  protected filters = inject<FilterStateController<SubscriptionFilters>>(FilterStateController);
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
@@ -54,7 +64,7 @@ export class SubscriptionsComponent {
   accountFilter = signal<number | null>(null);
   sortBy = signal<SubscriptionSort>('dueAsc');
   presetName = '';
-  filterPresets = signal<FilterPreset<SubscriptionFilters>[]>([]);
+  filterPresets = this.filters.presets;
   startedOn = new Date().toISOString().substring(0, 10);
   nextDueOn = new Date().toISOString().substring(0, 10);
   model: SubscriptionInput = this.defaultModel();
@@ -113,7 +123,13 @@ export class SubscriptionsComponent {
   });
 
   constructor() {
-    this.filterPresets.set(this.filterPresetsService.load<SubscriptionFilters>('subscriptions'));
+    this.filters.configure({
+      storageKey: 'subscriptions',
+      defaults: DEFAULT_FILTERS,
+      read: () => this.currentFilters(),
+      write: values => this.applyFilters(values),
+      onChange: () => this.syncFiltersToUrl(),
+    });
     const params = this.route.snapshot.queryParamMap;
     this.query.set(params.get('q') ?? '');
     this.statusFilter.set((params.get('status') as SubscriptionStatus | null) || null);
@@ -251,52 +267,16 @@ export class SubscriptionsComponent {
     });
   }
 
-  clearFilters() {
-    this.query.set('');
-    this.statusFilter.set(null);
-    this.categoryFilter.set(null);
-    this.accountFilter.set(null);
-    this.sortBy.set('dueAsc');
-    this.syncFiltersToUrl();
-  }
-
   filterChanged() {
     this.syncFiltersToUrl();
   }
 
-  saveFilterPreset() {
-    const name = this.presetName.trim();
-    if (!name) return;
-    this.filterPresets.set(this.filterPresetsService.save('subscriptions', {
-      name,
-      values: this.currentFilters(),
-    }));
-    this.presetName = '';
-  }
-
-  applyFilterPreset(preset?: FilterPreset<SubscriptionFilters>) {
-    if (!preset) return;
-    this.query.set(preset.values.q);
-    this.statusFilter.set(preset.values.status);
-    this.categoryFilter.set(preset.values.category);
-    this.accountFilter.set(preset.values.account);
-    this.sortBy.set(preset.values.sort);
-    this.syncFiltersToUrl();
-  }
-
-  hasActiveFilters() {
-    const f = this.currentFilters();
-    return !!f.q || !!f.status || !!f.category || f.account != null || f.sort !== 'dueAsc';
-  }
-
-  clearFilter(name: keyof SubscriptionFilters) {
-    if (name === 'q') this.query.set('');
-    if (name === 'status') this.statusFilter.set(null);
-    if (name === 'category') this.categoryFilter.set(null);
-    if (name === 'account') this.accountFilter.set(null);
-    if (name === 'sort') this.sortBy.set('dueAsc');
-    this.syncFiltersToUrl();
-  }
+  // Template-facing wrappers around FilterStateController.
+  hasActiveFilters() { return this.filters.hasActive(); }
+  clearFilters() { this.filters.clearAll(); }
+  clearFilter(name: keyof SubscriptionFilters) { this.filters.clearOne(name); }
+  saveFilterPreset() { this.filters.savePreset(this.presetName); this.presetName = ''; }
+  applyFilterPreset(preset?: FilterPreset<SubscriptionFilters>) { this.filters.applyPreset(preset); }
 
   currentFilters(): SubscriptionFilters {
     return {
@@ -306,6 +286,14 @@ export class SubscriptionsComponent {
       account: this.accountFilter(),
       sort: this.sortBy(),
     };
+  }
+
+  private applyFilters(values: SubscriptionFilters) {
+    this.query.set(values.q);
+    this.statusFilter.set(values.status);
+    this.categoryFilter.set(values.category);
+    this.accountFilter.set(values.account);
+    this.sortBy.set(values.sort);
   }
 
   private syncFiltersToUrl() {

@@ -4,11 +4,14 @@ LuminaVault-Backend/obj/
 LuminaVault-Backend/*.db
 LuminaVault-Backend/*.db-shm
 LuminaVault-Backend/*.db-wal
+LuminaVault-Backend/*.db.backup*
 LuminaVault-Backend/uploads/
 LuminaVault-Backend/appsettings.*.json
 !LuminaVault-Backend/appsettings.json
 LuminaVault-Backend/*.user
 LuminaVault-Backend/Properties/launchSettings.json
+LuminaVault-Backend.Tests/bin/
+LuminaVault-Backend.Tests/obj/
 
 # ── Angular / Frontend ────────────────────────────────────────────────────────
 mobile/node_modules/

@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,9 +30,9 @@ public static class PhotoEndpoints
         auth.MapPost("/{itemId:int}/photos", async (int itemId, IFormFile file,
             AppDbContext db, IWebHostEnvironment env) =>
         {
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "No file." });
-            if (file.Length > 10 * 1024 * 1024) return Results.BadRequest(new { error = "Max 10MB." });
-            if (!Allowed.Contains(file.ContentType)) return Results.BadRequest(new { error = "Unsupported type." });
+            if (file is null || file.Length == 0) return Problem.BadRequest("No file.");
+            if (file.Length > 10 * 1024 * 1024) return Problem.BadRequest("Max 10MB.");
+            if (!Allowed.Contains(file.ContentType)) return Problem.BadRequest("Unsupported type.");
 
             var item = await db.Items.FindAsync(itemId);
             if (item is null) return Results.NotFound();

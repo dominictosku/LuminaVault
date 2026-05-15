@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,9 +28,9 @@ public static class SettingsEndpoints
         {
             var name = input.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                return Results.BadRequest(new { error = "Category name is required." });
+                return Problem.BadRequest("Category name is required.");
             if (await db.AssetCategories.AnyAsync(c => c.Name.ToLower() == name.ToLower()))
-                return Results.Conflict(new { error = "Category already exists." });
+                return Problem.Conflict("Category already exists.");
 
             var category = new AssetCategory
             {
@@ -49,9 +50,9 @@ public static class SettingsEndpoints
             if (category is null) return Results.NotFound();
             var name = input.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                return Results.BadRequest(new { error = "Category name is required." });
+                return Problem.BadRequest("Category name is required.");
             if (await db.AssetCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
-                return Results.Conflict(new { error = "Category already exists." });
+                return Problem.Conflict("Category already exists.");
 
             category.Name = name;
             category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();
@@ -80,9 +81,9 @@ public static class SettingsEndpoints
         {
             var name = input.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                return Results.BadRequest(new { error = "Category name is required." });
+                return Problem.BadRequest("Category name is required.");
             if (await db.FinanceCategories.AnyAsync(c => c.Name.ToLower() == name.ToLower()))
-                return Results.Conflict(new { error = "Category already exists." });
+                return Problem.Conflict("Category already exists.");
 
             var category = new FinanceCategory
             {
@@ -102,9 +103,9 @@ public static class SettingsEndpoints
             if (category is null) return Results.NotFound();
             var name = input.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
-                return Results.BadRequest(new { error = "Category name is required." });
+                return Problem.BadRequest("Category name is required.");
             if (await db.FinanceCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
-                return Results.Conflict(new { error = "Category already exists." });
+                return Problem.Conflict("Category already exists.");
 
             category.Name = name;
             category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();

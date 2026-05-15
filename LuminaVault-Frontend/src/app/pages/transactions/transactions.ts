@@ -19,7 +19,8 @@ import {
   isInvestmentAccount,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
-import { FilterPreset, FilterPresetsService } from '../../shared/filters/filter-presets.service';
+import { FilterPreset } from '../../shared/filters/filter-presets.service';
+import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
 type TransactionFilters = {
   q: string;
@@ -28,11 +29,14 @@ type TransactionFilters = {
   month: string;
 };
 
+const DEFAULT_FILTERS: TransactionFilters = { q: '', account: null, kind: null, month: '' };
+
 @Component({
   selector: 'app-transactions',
   imports: [FormsModule, CurrencyPipe, DatePipe, NgClass],
   templateUrl: './transactions.html',
-  styleUrl: './transactions.scss'
+  styleUrl: './transactions.scss',
+  providers: [FilterStateController],
 })
 export class TransactionsComponent {
   private api = inject(FinanceApi);
@@ -40,7 +44,8 @@ export class TransactionsComponent {
   private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
-  private filterPresetsService = inject(FilterPresetsService);
+  protected filters = inject<FilterStateController<TransactionFilters>>(FilterStateController);
+
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   transactions = signal<FinanceTransaction[]>([]);
@@ -57,7 +62,6 @@ export class TransactionsComponent {
   tagsRaw = '';
   private debounce: any = null;
   presetName = '';
-  filterPresets = signal<FilterPreset<TransactionFilters>[]>([]);
 
   kinds = FINANCE_TRANSACTION_KINDS;
   statuses = FINANCE_TRANSACTION_STATUSES;
@@ -87,6 +91,7 @@ export class TransactionsComponent {
   needsTradeDetails(kind: FinanceTransactionKind): boolean {
     return kind === 'Buy' || kind === 'Sell';
   }
+
   filteredTransactions = computed(() => {
     const month = this.monthFilter();
     if (!month) return this.transactions();
@@ -96,7 +101,14 @@ export class TransactionsComponent {
   model: FinanceTransactionInput = this.defaultModel();
 
   constructor() {
-    this.filterPresets.set(this.filterPresetsService.load<TransactionFilters>('transactions'));
+    this.filters.configure({
+      storageKey: 'transactions',
+      defaults: DEFAULT_FILTERS,
+      read: () => this.currentFilters(),
+      write: values => this.applyFilters(values),
+      onChange: () => this.fetch(),
+    });
+
     const params = this.route.snapshot.queryParamMap;
     this.query = params.get('q') ?? '';
     this.accountFilter = params.has('account') ? Number(params.get('account')) : null;
@@ -148,46 +160,6 @@ export class TransactionsComponent {
     this.fetch();
   }
 
-  clearFilters() {
-    this.query = '';
-    this.accountFilter = null;
-    this.kindFilter = null;
-    this.monthFilter.set('');
-    this.fetch();
-  }
-
-  saveFilterPreset() {
-    const name = this.presetName.trim();
-    if (!name) return;
-    this.filterPresets.set(this.filterPresetsService.save('transactions', {
-      name,
-      values: this.currentFilters(),
-    }));
-    this.presetName = '';
-  }
-
-  applyFilterPreset(preset?: FilterPreset<TransactionFilters>) {
-    if (!preset) return;
-    this.query = preset.values.q;
-    this.accountFilter = preset.values.account;
-    this.kindFilter = preset.values.kind;
-    this.monthFilter.set(preset.values.month);
-    this.fetch();
-  }
-
-  hasActiveFilters() {
-    const f = this.currentFilters();
-    return !!f.q || f.account != null || !!f.kind || !!f.month;
-  }
-
-  clearFilter(name: keyof TransactionFilters) {
-    if (name === 'q') this.query = '';
-    if (name === 'account') this.accountFilter = null;
-    if (name === 'kind') this.kindFilter = null;
-    if (name === 'month') this.monthFilter.set('');
-    this.fetch();
-  }
-
   currentFilters(): TransactionFilters {
     return {
       q: this.query,
@@ -196,6 +168,22 @@ export class TransactionsComponent {
       month: this.monthFilter(),
     };
   }
+
+  private applyFilters(values: TransactionFilters) {
+    this.query = values.q;
+    this.accountFilter = values.account;
+    this.kindFilter = values.kind;
+    this.monthFilter.set(values.month);
+  }
+
+  // Template-facing wrappers around the shared controller — keep the existing
+  // template API while implementations live in FilterStateController.
+  filterPresets = this.filters.presets;
+  hasActiveFilters() { return this.filters.hasActive(); }
+  clearFilters() { this.filters.clearAll(); }
+  clearFilter(name: keyof TransactionFilters) { this.filters.clearOne(name); }
+  saveFilterPreset() { this.filters.savePreset(this.presetName); this.presetName = ''; }
+  applyFilterPreset(preset?: FilterPreset<TransactionFilters>) { this.filters.applyPreset(preset); }
 
   private syncFiltersToUrl() {
     const f = this.currentFilters();

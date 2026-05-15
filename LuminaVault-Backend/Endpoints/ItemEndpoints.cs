@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -123,11 +124,11 @@ public static class ItemEndpoints
         g.MapPost("/{id:int}/model", async (int id, IFormFile file,
             AppDbContext db, IWebHostEnvironment env) =>
         {
-            if (file is null || file.Length == 0) return Results.BadRequest(new { error = "No file." });
-            if (file.Length > 50 * 1024 * 1024) return Results.BadRequest(new { error = "Max 50MB." });
+            if (file is null || file.Length == 0) return Problem.BadRequest("No file.");
+            if (file.Length > 50 * 1024 * 1024) return Problem.BadRequest("Max 50MB.");
             var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant();
             if (ext != ".glb" && ext != ".gltf")
-                return Results.BadRequest(new { error = "Only .glb or .gltf files are allowed." });
+                return Problem.BadRequest("Only .glb or .gltf files are allowed.");
 
             var item = await db.Items.FindAsync(id);
             if (item is null) return Results.NotFound();

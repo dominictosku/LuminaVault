@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace LuminaVault.Endpoints;
@@ -31,7 +32,7 @@ public static class AttachmentEndpoints
         {
             if (!await db.Items.AnyAsync(i => i.Id == itemId)) return Results.NotFound();
             var result = await SaveAttachment(file, env);
-            if (result.Error is not null) return Results.BadRequest(new { error = result.Error });
+            if (result.Error is not null) return Problem.BadRequest(result.Error);
             var attachment = result.Attachment!;
             attachment.ItemId = itemId;
             db.DocumentAttachments.Add(attachment);
@@ -44,7 +45,7 @@ public static class AttachmentEndpoints
         {
             if (!await db.Subscriptions.AnyAsync(s => s.Id == subscriptionId)) return Results.NotFound();
             var result = await SaveAttachment(file, env);
-            if (result.Error is not null) return Results.BadRequest(new { error = result.Error });
+            if (result.Error is not null) return Problem.BadRequest(result.Error);
             var attachment = result.Attachment!;
             attachment.SubscriptionId = subscriptionId;
             db.DocumentAttachments.Add(attachment);
