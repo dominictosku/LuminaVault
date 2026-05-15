@@ -162,10 +162,11 @@ builder.Services.AddRateLimiter(o =>
 
 // --- Scheduled backups ---
 // Bind Backup section; service no-ops unless Enabled=true.
-var backupOptions = new BackupOptions();
-builder.Configuration.GetSection("Backup").Bind(backupOptions);
-builder.Services.AddSingleton(backupOptions);
-builder.Services.AddHostedService<BackupBackgroundService>();
+// Todo: Missing BackupOptions
+// var backupOptions = new BackupOptions();
+// builder.Configuration.GetSection("Backup").Bind(backupOptions);
+// builder.Services.AddSingleton(backupOptions);
+// builder.Services.AddHostedService<BackupBackgroundService>();
 
 builder.Services.AddOpenApi();
 
@@ -272,7 +273,7 @@ app.MapPhotos();
 app.MapAttachments();
 app.MapFinance();
 app.MapOdsData();
-app.MapBackup();
+// app.MapBackup();
 app.MapSettings();
 
 try
