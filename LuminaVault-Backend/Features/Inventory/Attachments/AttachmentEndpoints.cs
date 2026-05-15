@@ -38,7 +38,7 @@ public static class AttachmentEndpoints
             db.DocumentAttachments.Add(attachment);
             await db.SaveChangesAsync();
             return Results.Ok(MapAttachment(attachment));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         var subscriptions = app.MapGroup("/api/finance/subscriptions").RequireAuthorization().WithTags("Attachments");
         subscriptions.MapPost("/{subscriptionId:int}/attachments", async (int subscriptionId, IFormFile file, AppDbContext db, IWebHostEnvironment env) =>
@@ -51,7 +51,7 @@ public static class AttachmentEndpoints
             db.DocumentAttachments.Add(attachment);
             await db.SaveChangesAsync();
             return Results.Ok(MapAttachment(attachment));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         app.MapDelete("/api/attachments/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
         {

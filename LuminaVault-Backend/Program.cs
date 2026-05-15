@@ -63,7 +63,8 @@ builder.Services.AddSingleton<JwtService>();
 // --- DB ---
 var dbPath = Path.Combine(builder.Environment.ContentRootPath, "luminavault.db");
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite($"Data Source={dbPath}"));
+    opt.UseSqlite($"Data Source={dbPath}")
+       .AddInterceptors(new SqlitePragmaInterceptor()));
 
 // --- Auth ---
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -122,6 +123,23 @@ builder.Services.AddTransient<IPriceProvider>(sp => sp.GetRequiredService<Finnhu
 
 builder.Services.AddScoped<PriceProviderService>();
 
+// --- Request timeouts ---
+// Caps how long an individual request can run before we cancel it. Upload-heavy paths
+// (ODS import, glTF model upload, backup zip stream) get explicit policies; everything
+// else uses the default 30s. Without this, a malformed 49 MB ODS could pin a Kestrel
+// thread for minutes parsing XML.
+builder.Services.AddRequestTimeouts(o =>
+{
+    o.DefaultPolicy = new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy
+    {
+        Timeout = TimeSpan.FromSeconds(30),
+    };
+    o.AddPolicy("upload", TimeSpan.FromSeconds(60));
+    // Backup zips the entire uploads/ folder + DB; can be hundreds of MB on a well-used
+    // instance, and the user is actively waiting on it. Give it room to breathe.
+    o.AddPolicy("backup", TimeSpan.FromMinutes(5));
+});
+
 // --- Rate limiting ---
 // Holdings refresh fans out to Finnhub (60/min free tier) and CoinGecko (no key needed
 // but courteous limits). A clicky user can drain the day's quota in seconds — cap per JWT subject.
@@ -141,6 +159,13 @@ builder.Services.AddRateLimiter(o =>
         });
     });
 });
+
+// --- Scheduled backups ---
+// Bind Backup section; service no-ops unless Enabled=true.
+var backupOptions = new BackupOptions();
+builder.Configuration.GetSection("Backup").Bind(backupOptions);
+builder.Services.AddSingleton(backupOptions);
+builder.Services.AddHostedService<BackupBackgroundService>();
 
 builder.Services.AddOpenApi();
 
@@ -176,6 +201,32 @@ using (var scope = app.Services.CreateScope())
     Seeder.Seed(db);
 }
 
+// Catch unhandled exceptions and return the same `{ error: "msg" }` envelope used
+// by validation failures, so the Angular client's `e?.error?.error` handling works
+// uniformly. The real exception is already logged by UseSerilogRequestLogging below
+// (and re-logged here at Error level with the full stack).
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async ctx =>
+    {
+        var feature = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var ex = feature?.Error;
+        if (ex is not null)
+        {
+            var logger = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("UnhandledException");
+            logger.LogError(ex, "Unhandled exception while processing {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
+        }
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        ctx.Response.ContentType = "application/json";
+        // Production callers see a generic message; Development gets the exception text
+        // to make debugging from the network panel cheap.
+        var message = app.Environment.IsDevelopment() && ex is not null
+            ? ex.Message
+            : "Something went wrong. Check the server logs.";
+        await ctx.Response.WriteAsJsonAsync(new { error = message });
+    });
+});
+
 // Single request-completed log line per HTTP request with method/path/status/elapsed.
 // Cheaper and tidier than the default per-stage AspNetCore logger.
 app.UseSerilogRequestLogging();
@@ -189,8 +240,29 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+app.UseRequestTimeouts();
 
 app.MapGet("/", () => Results.Ok(new { app = "LuminaVault", version = "1.0" }));
+
+// Healthcheck for reverse proxies, uptime monitors, and `docker healthcheck`.
+// Verifies the DB is reachable so a stale-NFS / locked-file scenario is reported as unhealthy
+// rather than as "we're up, but every request returns 500".
+app.MapGet("/api/health", async (AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
+        return Results.Ok(new { status = "ok", database = "ok" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(
+            new { status = "degraded", database = "error", message = ex.Message },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+})
+.WithTags("Health")
+.AllowAnonymous();
 
 app.MapAuth();
 app.MapHouses();

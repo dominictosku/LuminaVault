@@ -122,7 +122,15 @@ cd LuminaVault-Backend.Tests
 dotnet test
 ```
 
-The test project boots the real API via `WebApplicationFactory<Program>` against a per-test SQLite file under the system temp dir, so tests don't share state. Coverage focuses on the load-bearing finance math (balance recompute after writes, transfers debiting both sides, weighted-average holdings, budget spend tracking) and the `{ error: "..." }` validation envelope shape the frontend depends on.
+The test project boots the real API via `WebApplicationFactory<Program>` against a per-test SQLite file under the system temp dir, so tests don't share state. Coverage spans the load-bearing finance math (balance recompute after writes, transfers debiting both sides, weighted-average holdings, budget spend tracking), the inventory CRUD plumbing, the ODS export/import round-trip, the health endpoint, settings, auth, and the `{ error: "..." }` validation envelope shape the frontend depends on.
+
+### Git hooks
+
+A tracked `pre-commit` hook in `.githooks/` runs the test suite(s) that match your staged changes — backend tests fire if any file under `LuminaVault-Backend*/` is staged, frontend tests fire if any file under `LuminaVault-Frontend/` is staged. Enable once after cloning:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ### Backups
 

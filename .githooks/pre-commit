@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Tracked pre-commit hook. Enable once after cloning:
+#   git config core.hooksPath .githooks
+#
+# Runs the test suites that match the staged changes. Skipping unrelated suites
+# keeps the commit-time cost proportional — a frontend-only change doesn't pay
+# for a backend test run.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMRTUXB)
+
+run_backend=false
+run_frontend=false
+case "$staged" in
+  *LuminaVault-Backend*) run_backend=true ;;
+esac
+case "$staged" in
+  *LuminaVault-Frontend*) run_frontend=true ;;
+esac
+
+if $run_backend; then
+  echo "→ Backend changes staged — running dotnet test"
+  (cd LuminaVault-Backend.Tests && dotnet test --nologo --verbosity quiet) || {
+    echo "✘ Backend tests failed. Fix or stage the fix, then re-commit."
+    exit 1
+  }
+fi
+
+if $run_frontend; then
+  echo "→ Frontend changes staged — running ng test"
+  (cd LuminaVault-Frontend && npx ng test --watch=false) || {
+    echo "✘ Frontend tests failed. Fix or stage the fix, then re-commit."
+    exit 1
+  }
+fi
+
+exit 0

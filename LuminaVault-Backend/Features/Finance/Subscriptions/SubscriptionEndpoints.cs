@@ -123,8 +123,15 @@ internal static class SubscriptionEndpoints
                 subscription.UpdatedAt = DateTime.UtcNow;
             }
 
+            // generate-transaction writes a FinanceTransaction (new or status-updated),
+            // bumps Subscription.NextDueOn, and then recomputes balances. Wrap in a
+            // transaction so a crash can't leave a transaction inserted but the
+            // subscription's NextDueOn not advanced (or vice versa).
+            await using var tx = await db.Database.BeginTransactionAsync();
             await db.SaveChangesAsync();
             await RecalculateBalances(db);
+            await tx.CommitAsync();
+
             await LoadTransactionRefs(db, transaction);
             await db.Entry(subscription).Reference(s => s.Account).LoadAsync();
             return Results.Ok(new

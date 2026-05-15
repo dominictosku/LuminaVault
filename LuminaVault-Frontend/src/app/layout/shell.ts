@@ -3,10 +3,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Event as RouterEvent, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { AuthService } from '../core/auth.service';
+import { ToastOutletComponent } from '../shared/toast/toast.component';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastOutletComponent],
   template: `
     <div class="min-h-screen flex flex-col lg:flex-row">
       <!-- Mobile top bar: hamburger + branding. Hidden on lg+ where the sidebar is always visible. -->
@@ -119,6 +120,7 @@ import { AuthService } from '../core/auth.service';
         </div>
       </main>
     </div>
+    <app-toast-outlet />
   `,
 })
 export class ShellComponent {

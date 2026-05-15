@@ -78,6 +78,7 @@ public static class OdsEndpoints
             return Results.File(bytes, "application/vnd.oasis.opendocument.spreadsheet", fileName);
         });
 
+        // Big sheets can take a real moment to parse + insert; bump from the 30s default.
         g.MapPost("/import/ods", async ([FromForm] IFormFile file, AppDbContext db) =>
         {
             if (file.Length == 0) return Problem.BadRequest("Choose an ODS file.");
@@ -105,7 +106,7 @@ public static class OdsEndpoints
             return Results.Ok(new OdsImportResult(
                 accountCount, transactionCount, monthlySummaryCount, subscriptionCount,
                 financeCategoryCount, assetCategoryCount, assetCount, warnings.ToArray()));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         g.MapPost("/import/ods/preview", ([FromForm] IFormFile file) =>
         {
@@ -126,7 +127,7 @@ public static class OdsEndpoints
                     SuggestedTarget(kv.Key, orderedHeaders));
             }).ToArray();
             return Results.Ok(new OdsPreviewResult(sheets));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         g.MapPost("/import/ods/mapped", async ([FromForm] IFormFile file, [FromForm] string mappingJson, AppDbContext db) =>
         {
@@ -181,7 +182,7 @@ public static class OdsEndpoints
             return Results.Ok(new OdsImportResult(
                 counts.Accounts, counts.Transactions, counts.MonthlySummaries, counts.Subscriptions,
                 counts.FinanceCategories, counts.AssetCategories, counts.Assets, warnings.ToArray()));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         return app;
     }

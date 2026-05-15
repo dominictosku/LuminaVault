@@ -147,7 +147,7 @@ public static class ItemEndpoints
             item.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             return Results.Ok(new { modelUrl = $"/api/items/{item.Id}/model" });
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, IWebHostEnvironment env) =>
         {

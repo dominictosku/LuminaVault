@@ -20,7 +20,13 @@
       "Bash(cd /c/Users/domin/MyDocuments/Projects/LuminaVault/LuminaVault-Frontend && grep -n \"from 'three\" src/app/pages/planner/*.ts | head -20)",
       "Bash(dotnet add *)",
       "Bash(cd /c/Users/domin/MyDocuments/Projects/LuminaVault/LuminaVault-Frontend && grep -nE \"export \\(interface|type\\) \\(Holding|Subscription\\)\\\\b\" src/app/core/models/*.ts | head)",
-      "Bash(grep -lE \"grid-cols-[3-9]|w-\\\\\\\\[?[5-9][0-9]+|min-w-\\\\\\\\[[0-9]+px\\\\\\\\]\" src/app/pages/*/*.html)"
+      "Bash(grep -lE \"grid-cols-[3-9]|w-\\\\\\\\[?[5-9][0-9]+|min-w-\\\\\\\\[[0-9]+px\\\\\\\\]\" src/app/pages/*/*.html)",
+      "Bash(tasklist)",
+      "Bash(taskkill /F /PID 35284)",
+      "Bash(powershell -Command \"Stop-Process -Id 35284 -Force\")",
+      "Bash(mkdir -p .githooks)",
+      "Read(//c/c/Users/domin/MyDocuments/Projects/LuminaVault/**)",
+      "Bash(chmod +x .githooks/pre-commit)"
     ]
   }
 }

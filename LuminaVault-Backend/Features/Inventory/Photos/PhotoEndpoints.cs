@@ -48,7 +48,7 @@ public static class PhotoEndpoints
             db.ItemPhotos.Add(photo);
             await db.SaveChangesAsync();
             return Results.Ok(new ItemPhotoDto(photo.Id, $"/api/photos/{photo.Id}", photo.ContentType));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().WithRequestTimeout("upload");
 
         var del = app.MapGroup("/api/photos").RequireAuthorization();
         del.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>

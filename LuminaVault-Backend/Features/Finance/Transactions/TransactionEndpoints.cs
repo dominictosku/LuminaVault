@@ -60,9 +60,16 @@ internal static class TransactionEndpoints
             var transaction = new FinanceTransaction();
             ApplyTransaction(transaction, input);
             db.FinanceTransactions.Add(transaction);
+
+            // Insert + RecalculateHoldings + RecalculateBalances each call SaveChanges.
+            // Wrap all three in a single transaction so a crash mid-flow can't leave
+            // a transaction inserted but holdings/balances stale.
+            await using var tx = await db.Database.BeginTransactionAsync();
             await db.SaveChangesAsync();
             await RecalculateHoldings(db, transaction.AccountId);
             await RecalculateBalances(db);
+            await tx.CommitAsync();
+
             await LoadTransactionRefs(db, transaction);
             return Results.Created($"/api/finance/transactions/{transaction.Id}", MapTransaction(transaction));
         });
@@ -80,11 +87,15 @@ internal static class TransactionEndpoints
             var previousAccountId = transaction.AccountId;
             ApplyTransaction(transaction, input);
             transaction.UpdatedAt = DateTime.UtcNow;
+
+            await using var tx = await db.Database.BeginTransactionAsync();
             await db.SaveChangesAsync();
             if (previousAccountId != transaction.AccountId)
                 await RecalculateHoldings(db, previousAccountId);
             await RecalculateHoldings(db, transaction.AccountId);
             await RecalculateBalances(db);
+            await tx.CommitAsync();
+
             await LoadTransactionRefs(db, transaction);
             return Results.Ok(MapTransaction(transaction));
         });
@@ -95,9 +106,13 @@ internal static class TransactionEndpoints
             if (transaction is null) return Results.NotFound();
             var accountId = transaction.AccountId;
             db.FinanceTransactions.Remove(transaction);
+
+            await using var tx = await db.Database.BeginTransactionAsync();
             await db.SaveChangesAsync();
             await RecalculateHoldings(db, accountId);
             await RecalculateBalances(db);
+            await tx.CommitAsync();
+
             return Results.NoContent();
         });
     }
