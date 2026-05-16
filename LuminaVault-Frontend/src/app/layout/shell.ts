@@ -5,6 +5,9 @@ import { filter } from 'rxjs/operators';
 import { AuthService } from '../core/auth.service';
 import { ToastOutletComponent } from '../shared/toast/toast.component';
 
+type NavItem = { path: string; icon: string; label: string; badge?: string };
+type NavGroup = { id: string; label: string; icon: string; items: NavItem[] };
+
 @Component({
   selector: 'app-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, ToastOutletComponent],
@@ -51,38 +54,36 @@ import { ToastOutletComponent } from '../shared/toast/toast.component';
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-chart-line text-violet-300"></i> Overview
           </a>
-          <a routerLink="/transactions" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-arrow-right-arrow-left text-violet-300"></i> Transactions
-          </a>
-          <a routerLink="/monthly-summaries" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-calendar-plus text-violet-300"></i> Monthly sums
-          </a>
-          <a routerLink="/statistics" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-chart-bar text-violet-300"></i> Statistics
-          </a>
-          <a routerLink="/budgets" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-chart-pie text-violet-300"></i> Budgets
-          </a>
-          <a routerLink="/goals" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-flag text-violet-300"></i> Goals
-          </a>
-          <a routerLink="/accounts" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-wallet text-violet-300"></i> Accounts
-          </a>
-          <a routerLink="/holdings" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-chart-line text-violet-300"></i> Holdings
-          </a>
-          <a routerLink="/subscriptions" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-calendar-clock text-violet-300"></i> Subscriptions
-          </a>
+
+          @for (group of groups; track group.id) {
+            <div class="pt-1">
+              <button type="button" (click)="toggleGroup(group.id)"
+                      [attr.aria-expanded]="isExpanded(group.id)"
+                      [class.text-white]="isGroupActive(group)"
+                      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
+                <i class="pi {{ group.icon }} text-violet-300"></i>
+                <span class="flex-1 text-left text-sm font-medium">{{ group.label }}</span>
+                <i class="pi pi-chevron-right text-[10px] text-slate-400 transition-transform duration-200"
+                   [class.rotate-90]="isExpanded(group.id)"></i>
+              </button>
+              @if (isExpanded(group.id)) {
+                <div class="mt-1 ml-4 pl-3 border-l border-white/5 space-y-1">
+                  @for (item of group.items; track item.path) {
+                    <a [routerLink]="item.path" routerLinkActive="bg-white/8 text-white"
+                       class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-white/5 transition">
+                      <i class="pi {{ item.icon }} text-violet-300"></i>
+                      <span class="flex-1">{{ item.label }}</span>
+                      @if (item.badge) {
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30">{{ item.badge }}</span>
+                      }
+                    </a>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          <div class="my-3 border-t border-white/5"></div>
           <a routerLink="/data" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-file-import text-violet-300"></i> Data
@@ -90,21 +91,6 @@ import { ToastOutletComponent } from '../shared/toast/toast.component';
           <a routerLink="/settings" routerLinkActive="bg-white/8 text-white"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-cog text-violet-300"></i> Settings
-          </a>
-          <a routerLink="/items" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-box text-violet-300"></i> Assets
-          </a>
-          <div class="my-3 border-t border-white/5"></div>
-          <a routerLink="/rooms" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-home text-violet-300"></i> Rooms
-          </a>
-          <a routerLink="/planner" routerLinkActive="bg-white/8 text-white"
-             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
-            <i class="pi pi-compass text-violet-300"></i>
-            <span>3D Planner</span>
-            <span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30">3D</span>
           </a>
         </nav>
         <div class="px-3 py-3 border-t border-white/5">
@@ -134,14 +120,76 @@ export class ShellComponent {
   // Closed by default — desktop CSS forces it visible via lg:translate-x-0.
   protected sidebarOpen = signal(false);
 
+  protected readonly groups: NavGroup[] = [
+    {
+      id: 'money', label: 'Money', icon: 'pi-dollar', items: [
+        { path: '/transactions', icon: 'pi-arrow-right-arrow-left', label: 'Transactions' },
+        { path: '/monthly-summaries', icon: 'pi-calendar-plus', label: 'Monthly sums' },
+        { path: '/statistics', icon: 'pi-chart-bar', label: 'Statistics' },
+        { path: '/subscriptions', icon: 'pi-calendar-clock', label: 'Subscriptions' },
+      ],
+    },
+    {
+      id: 'planning', label: 'Planning', icon: 'pi-bullseye', items: [
+        { path: '/budgets', icon: 'pi-chart-pie', label: 'Budgets' },
+        { path: '/goals', icon: 'pi-flag', label: 'Goals' },
+      ],
+    },
+    {
+      id: 'assets', label: 'Assets', icon: 'pi-briefcase', items: [
+        { path: '/accounts', icon: 'pi-wallet', label: 'Accounts' },
+        { path: '/holdings', icon: 'pi-chart-line', label: 'Holdings' },
+        { path: '/items', icon: 'pi-box', label: 'Items' },
+      ],
+    },
+    {
+      id: 'home', label: 'Home', icon: 'pi-home', items: [
+        { path: '/rooms', icon: 'pi-th-large', label: 'Rooms' },
+        { path: '/planner', icon: 'pi-compass', label: '3D Planner', badge: '3D' },
+      ],
+    },
+  ];
+
+  // Groups start collapsed; the group containing the active route auto-expands.
+  protected expandedGroups = signal<ReadonlySet<string>>(new Set());
+
   constructor() {
-    // Auto-close the drawer when navigating, so tapping a link on mobile
-    // doesn't leave the menu open over the new page.
     this.router.events
       .pipe(filter((e: RouterEvent) => e instanceof NavigationEnd), takeUntilDestroyed())
-      .subscribe(() => this.sidebarOpen.set(false));
+      .subscribe(() => {
+        this.sidebarOpen.set(false);
+        this.autoExpandActiveGroup();
+      });
+    this.autoExpandActiveGroup();
   }
 
   toggleSidebar() { this.sidebarOpen.update(v => !v); }
   closeSidebar() { this.sidebarOpen.set(false); }
+
+  toggleGroup(id: string) {
+    this.expandedGroups.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  isExpanded(id: string): boolean { return this.expandedGroups().has(id); }
+
+  isGroupActive(group: NavGroup): boolean {
+    const url = this.router.url;
+    return group.items.some(i => url === i.path || url.startsWith(i.path + '/'));
+  }
+
+  private autoExpandActiveGroup() {
+    const active = this.groups.find(g => this.isGroupActive(g));
+    if (!active) return;
+    this.expandedGroups.update(s => {
+      if (s.has(active.id)) return s;
+      const next = new Set(s);
+      next.add(active.id);
+      return next;
+    });
+  }
 }
