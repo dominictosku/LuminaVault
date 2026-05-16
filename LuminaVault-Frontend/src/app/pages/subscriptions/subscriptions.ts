@@ -54,8 +54,10 @@ export class SubscriptionsComponent {
   loading = signal(true);
   saving = signal(false);
   generatingTransaction = signal(false);
+  generatingDue = signal(false);
   uploadingAttachment = signal(false);
   error = signal<string | null>(null);
+  automationMessage = signal<string | null>(null);
   editingId = signal<number | null>(null);
 
   statuses = SUBSCRIPTION_STATUSES;
@@ -262,6 +264,27 @@ export class SubscriptionsComponent {
       error: e => {
         this.generatingTransaction.set(false);
         this.error.set(e?.error?.error ?? 'Could not generate transaction.');
+      },
+    });
+  }
+
+  generateDueSubscriptions() {
+    this.generatingDue.set(true);
+    this.error.set(null);
+    this.automationMessage.set(null);
+    this.api.generateDueSubscriptions(7).subscribe({
+      next: result => {
+        this.generatingDue.set(false);
+        this.automationMessage.set(
+          result.created === 0
+            ? 'No upcoming subscription forecasts were needed.'
+            : `Created ${result.created} forecast transaction${result.created === 1 ? '' : 's'} through ${new Date(result.throughDate).toLocaleDateString()}.`,
+        );
+        this.fetchAll();
+      },
+      error: e => {
+        this.generatingDue.set(false);
+        this.error.set(e?.error?.error ?? 'Could not generate upcoming forecasts.');
       },
     });
   }

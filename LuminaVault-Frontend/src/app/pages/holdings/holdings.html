@@ -100,6 +100,68 @@
     </div>
   </div>
 
+  @if (analytics(); as a) {
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
+      <section class="surface p-4">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <h2 class="font-medium flex items-center gap-2"><i class="pi pi-chart-pie text-emerald-300"></i> Allocation</h2>
+          <span class="text-xs text-slate-500">{{ a.totals.positionCount }} positions</span>
+        </div>
+        <div class="space-y-3">
+          @for (row of a.allocationByAccount; track row.name) {
+            <div>
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="truncate">{{ row.name }}</span>
+                <span>{{ row.marketValue | currency:a.baseCurrency:'symbol-narrow' }}</span>
+              </div>
+              <div class="mt-1 h-2 rounded bg-slate-800 overflow-hidden">
+                <div class="h-full bg-emerald-400" [style.width.%]="row.percent"></div>
+              </div>
+              <div class="text-[11px] text-slate-500 mt-1">{{ row.percent | number:'1.0-1' }}%</div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="surface p-4">
+        <h2 class="font-medium flex items-center gap-2 mb-3"><i class="pi pi-sitemap text-sky-300"></i> Largest positions</h2>
+        <div class="space-y-2">
+          @for (row of a.allocationBySymbol.slice(0, 6); track row.name) {
+            <div class="grid grid-cols-[80px_1fr_auto] gap-3 items-center text-sm">
+              <span class="font-mono">{{ row.name }}</span>
+              <div class="h-2 rounded bg-slate-800 overflow-hidden">
+                <div class="h-full bg-sky-400" [style.width.%]="row.percent"></div>
+              </div>
+              <span>{{ row.percent | number:'1.0-1' }}%</span>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section class="surface p-4">
+        <h2 class="font-medium flex items-center gap-2 mb-3"><i class="pi pi-chart-line text-amber-300"></i> Movers</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-3">
+          @for (row of a.topPerformers.slice(0, 3); track 'top-' + row.id) {
+            <div class="flex items-center justify-between gap-3 text-sm">
+              <span class="min-w-0"><span class="font-mono">{{ row.symbol }}</span> <span class="text-slate-500 truncate">{{ row.accountName }}</span></span>
+              <span [ngClass]="toneClass(row.totalReturn)">
+                {{ row.totalReturn >= 0 ? '+' : '' }}{{ row.totalReturn | currency:a.baseCurrency:'symbol-narrow' }}
+              </span>
+            </div>
+          }
+          @for (row of a.worstPerformers.slice(0, 2); track 'worst-' + row.id) {
+            <div class="flex items-center justify-between gap-3 text-sm">
+              <span class="min-w-0"><span class="font-mono">{{ row.symbol }}</span> <span class="text-slate-500 truncate">{{ row.accountName }}</span></span>
+              <span [ngClass]="toneClass(row.totalReturn)">
+                {{ row.totalReturn >= 0 ? '+' : '' }}{{ row.totalReturn | currency:a.baseCurrency:'symbol-narrow' }}
+              </span>
+            </div>
+          }
+        </div>
+      </section>
+    </div>
+  }
+
   <div class="surface p-3 mb-4 flex items-center gap-3">
     <label class="text-xs uppercase tracking-wide text-slate-400">Account</label>
     <select class="select !w-72" [ngModel]="accountFilter()" (ngModelChange)="accountFilter.set($event)">

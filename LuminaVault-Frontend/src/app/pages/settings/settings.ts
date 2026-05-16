@@ -57,6 +57,7 @@ export class SettingsComponent {
   model: CategoryInput = this.defaultModel();
   ruleModel: FinanceCategoryRuleInput = this.defaultRuleModel();
   rateModel: ExchangeRateInput = this.defaultRateModel();
+  rateEffectiveDate = new Date().toISOString().substring(0, 10);
   passwordModel = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
   constructor() {
@@ -164,6 +165,7 @@ export class SettingsComponent {
     this.ruleModel = this.defaultRuleModel();
     this.editingRateId.set(null);
     this.rateModel = this.defaultRateModel();
+    this.rateEffectiveDate = new Date().toISOString().substring(0, 10);
     this.passwordChanged.set(false);
   }
 
@@ -223,7 +225,8 @@ export class SettingsComponent {
   editRate(rate: ExchangeRate) {
     this.editingRateId.set(rate.id);
     this.error.set(null);
-    this.rateModel = { currency: rate.currency, rateToBase: rate.rateToBase };
+    this.rateEffectiveDate = rate.effectiveDate.substring(0, 10);
+    this.rateModel = { currency: rate.currency, effectiveDate: rate.effectiveDate, rateToBase: rate.rateToBase };
   }
 
   saveRate() {
@@ -235,6 +238,7 @@ export class SettingsComponent {
     this.error.set(null);
     const input: ExchangeRateInput = {
       currency: this.rateModel.currency.trim().toUpperCase(),
+      effectiveDate: new Date(this.rateEffectiveDate).toISOString(),
       rateToBase: Number(this.rateModel.rateToBase),
     };
     const op = this.editingRateId()
@@ -305,6 +309,6 @@ export class SettingsComponent {
   }
 
   private defaultRateModel(): ExchangeRateInput {
-    return { currency: '', rateToBase: 1 };
+    return { currency: '', effectiveDate: new Date().toISOString(), rateToBase: 1 };
   }
 }

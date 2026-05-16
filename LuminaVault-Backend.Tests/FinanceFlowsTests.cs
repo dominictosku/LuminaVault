@@ -30,6 +30,25 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         int Id, string Category, DateTime Month, decimal LimitAmount, decimal Spent,
         decimal Remaining, decimal UsedPercent, string? Notes, DateTime CreatedAt, DateTime UpdatedAt);
     private record SummaryDto(decimal AccountNetWorth, string BaseCurrency, string[] FxMissingCurrencies);
+    private record HoldingAnalyticsDto(
+        string BaseCurrency,
+        HoldingAnalyticsTotals Totals,
+        HoldingAllocationDto[] AllocationBySymbol,
+        HoldingPerformerDto[] TopPerformers);
+    private record HoldingAnalyticsTotals(
+        decimal MarketValue,
+        decimal CostBasis,
+        decimal UnrealizedPnL,
+        decimal RealizedPnL,
+        decimal Dividends,
+        decimal Fees,
+        decimal TotalReturn,
+        decimal? TotalReturnPercent,
+        int PositionCount);
+    private record HoldingAllocationDto(string Name, decimal MarketValue, decimal CostBasis, decimal TotalReturn, decimal Percent);
+    private record HoldingPerformerDto(string Symbol, decimal MarketValue, decimal CostBasis, decimal TotalReturn);
+    private record SubscriptionDto(int Id, string Name, DateTime NextDueOn, string Status);
+    private record GenerateDueDto(int Created, int Skipped, DateTime ThroughDate, TransactionDto[] Transactions, SubscriptionDto[] Subscriptions);
     private record GoalDto(
         int Id, string Name, int? AccountId, string? AccountName, string Currency,
         decimal TargetAmount, decimal CurrentAmount, decimal Remaining, decimal ProgressPercent,
@@ -312,6 +331,49 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         Assert.Equal(20m, msft.Dividends);
         Assert.Equal(2m, msft.Fees);
         Assert.Equal(118m, msft.TotalReturn);
+
+        var analytics = await _api.GetAsync<HoldingAnalyticsDto>($"/api/finance/holdings/analytics?accountId={account.Id}");
+        Assert.Equal("CHF", analytics!.BaseCurrency);
+        Assert.Equal(1, analytics.Totals.PositionCount);
+        Assert.Equal(500m, analytics.Totals.CostBasis);
+        Assert.Equal(118m, analytics.Totals.TotalReturn);
+        Assert.Contains(analytics.AllocationBySymbol, r => r.Name == "MSFT");
+        Assert.Equal("MSFT", analytics.TopPerformers.Single().Symbol);
+    }
+
+    [Fact]
+    public async Task Generate_due_subscriptions_creates_pending_forecasts_and_advances_due_date()
+    {
+        var account = await CreateAccount("Subscription account", balance: 500m);
+        var dueDate = DateTime.UtcNow.Date.AddDays(2);
+        var create = await _api.PostAsync("/api/finance/subscriptions/", new
+        {
+            name = "Streaming",
+            category = "Subscriptions",
+            provider = "StreamCo",
+            accountId = account.Id,
+            amount = 12.99m,
+            currency = "CHF",
+            billingIntervalDays = 30,
+            startedOn = dueDate.AddMonths(-1),
+            nextDueOn = dueDate,
+            autoRenew = true,
+            status = "Active",
+            notes = "Family plan",
+        });
+        create.EnsureSuccessStatusCode();
+
+        var generated = await _api.PostAsync("/api/finance/subscriptions/generate-due?lookAheadDays=7", new { });
+        generated.EnsureSuccessStatusCode();
+        var result = await generated.Content.ReadFromJsonAsync<GenerateDueDto>();
+
+        Assert.Equal(1, result!.Created);
+        Assert.Equal(12.99m, result.Transactions.Single().Amount);
+        Assert.Equal("Expense", result.Transactions.Single().Kind);
+        Assert.Equal(dueDate.AddDays(30), result.Subscriptions.Single().NextDueOn.Date);
+
+        var tx = await _api.GetAsync<TransactionDto[]>("/api/finance/transactions/?q=subscription");
+        Assert.Single(tx!);
     }
 
     [Fact]

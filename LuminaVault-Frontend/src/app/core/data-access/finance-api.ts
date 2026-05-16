@@ -15,6 +15,7 @@ import {
   FinanceTransactionInput,
   FinanceTransactionKind,
   Holding,
+  HoldingAnalytics,
   HoldingPriceInput,
   HoldingRefreshResult,
   PriceProviderStatus,
@@ -24,6 +25,7 @@ import {
   MonthlyAccountSummaryInput,
   MonthlyReconciliationInput,
   Subscription,
+  SubscriptionGenerateDueResult,
   SubscriptionGenerateTransactionInput,
   SubscriptionGenerateTransactionResult,
   SubscriptionInput,
@@ -103,6 +105,11 @@ export class FinanceApi {
   listHoldings(accountId?: number) {
     const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
     return this.http.get<Holding[]>(`${API_BASE}/api/finance/holdings`, { params });
+  }
+
+  holdingAnalytics(accountId?: number) {
+    const params = accountId ? new HttpParams().set('accountId', accountId) : undefined;
+    return this.http.get<HoldingAnalytics>(`${API_BASE}/api/finance/holdings/analytics`, { params });
   }
 
   updateHolding(id: number, input: HoldingPriceInput) {
@@ -226,6 +233,15 @@ export class FinanceApi {
     return this.http.post<SubscriptionGenerateTransactionResult>(
       `${API_BASE}/api/finance/subscriptions/${id}/generate-transaction`,
       input,
+    );
+  }
+
+  generateDueSubscriptions(lookAheadDays?: number) {
+    const params = lookAheadDays != null ? new HttpParams().set('lookAheadDays', lookAheadDays) : undefined;
+    return this.http.post<SubscriptionGenerateDueResult>(
+      `${API_BASE}/api/finance/subscriptions/generate-due`,
+      {},
+      { params },
     );
   }
 

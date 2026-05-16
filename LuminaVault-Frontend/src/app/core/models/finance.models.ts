@@ -204,6 +204,48 @@ export interface HoldingPriceInput {
   notes?: string | null;
 }
 
+export interface HoldingAnalyticsTotals {
+  marketValue: number;
+  costBasis: number;
+  unrealizedPnL: number;
+  realizedPnL: number;
+  dividends: number;
+  fees: number;
+  totalReturn: number;
+  totalReturnPercent?: number | null;
+  positionCount: number;
+}
+
+export interface HoldingAllocation {
+  name: string;
+  marketValue: number;
+  costBasis: number;
+  totalReturn: number;
+  percent: number;
+}
+
+export interface HoldingPerformer {
+  id: number;
+  symbol: string;
+  name?: string | null;
+  accountName: string;
+  marketValue: number;
+  costBasis: number;
+  unrealizedPnL: number;
+  totalReturn: number;
+  returnPercent?: number | null;
+}
+
+export interface HoldingAnalytics {
+  generatedAt: string;
+  baseCurrency: string;
+  totals: HoldingAnalyticsTotals;
+  allocationByAccount: HoldingAllocation[];
+  allocationBySymbol: HoldingAllocation[];
+  topPerformers: HoldingPerformer[];
+  worstPerformers: HoldingPerformer[];
+}
+
 export interface HoldingRefreshError {
   holdingId: number;
   symbol: string;
@@ -309,6 +351,15 @@ export interface SubscriptionGenerateTransactionInput {
 export interface SubscriptionGenerateTransactionResult {
   transaction: FinanceTransaction;
   subscription: Subscription;
+}
+
+export interface SubscriptionGenerateDueResult {
+  generatedAt: string;
+  throughDate: string;
+  created: number;
+  skipped: number;
+  transactions: FinanceTransaction[];
+  subscriptions: Subscription[];
 }
 
 export interface FinanceSummary {

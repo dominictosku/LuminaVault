@@ -18,7 +18,7 @@ public class SettingsTests : IClassFixture<LuminaVaultFactory>
     private record RuleDto(
         int Id, string Pattern, string Category, bool MatchPayee,
         bool MatchDescription, bool IsActive, int Priority);
-    private record ExchangeRateDto(int Id, string Currency, decimal RateToBase, DateTime UpdatedAt);
+    private record ExchangeRateDto(int Id, string Currency, DateTime EffectiveDate, decimal RateToBase, DateTime UpdatedAt);
     private record AccountDto(int Id, string Name);
     private record TransactionDto(int Id, string Payee, string Category);
 
@@ -123,14 +123,25 @@ public class SettingsTests : IClassFixture<LuminaVaultFactory>
         var resp = await _api.PostAsync("/api/settings/exchange-rates", new
         {
             currency = "usd",
+            effectiveDate = new DateTime(2026, 1, 1),
             rateToBase = 0.91m,
         });
         resp.EnsureSuccessStatusCode();
         var created = await resp.Content.ReadFromJsonAsync<ExchangeRateDto>();
         Assert.Equal("USD", created!.Currency);
+        Assert.Equal(new DateTime(2026, 1, 1), created.EffectiveDate.Date);
         Assert.Equal(0.91m, created.RateToBase);
 
+        var nextRate = await _api.PostAsync("/api/settings/exchange-rates", new
+        {
+            currency = "usd",
+            effectiveDate = new DateTime(2026, 2, 1),
+            rateToBase = 0.92m,
+        });
+        nextRate.EnsureSuccessStatusCode();
+
         var list = await _api.GetAsync<ExchangeRateDto[]>("/api/settings/exchange-rates");
-        Assert.Contains(list!, r => r.Currency == "USD");
+        Assert.Contains(list!, r => r.Currency == "USD" && r.EffectiveDate.Date == new DateTime(2026, 1, 1));
+        Assert.Contains(list!, r => r.Currency == "USD" && r.EffectiveDate.Date == new DateTime(2026, 2, 1));
     }
 }

@@ -179,6 +179,15 @@ builder.Services.AddSingleton(backupOptions);
 builder.Services.AddSingleton<BackupService>();
 builder.Services.AddHostedService<BackupBackgroundService>();
 
+// --- Subscription automation ---
+// Manual generation is available through /api/finance/subscriptions/generate-due.
+// The hosted service only runs when SubscriptionAutomation:Enabled=true.
+var subscriptionAutomationOptions = new SubscriptionAutomationOptions();
+builder.Configuration.GetSection("SubscriptionAutomation").Bind(subscriptionAutomationOptions);
+builder.Services.AddSingleton(subscriptionAutomationOptions);
+builder.Services.AddScoped<SubscriptionAutomationService>();
+builder.Services.AddHostedService<SubscriptionAutomationBackgroundService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

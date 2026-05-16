@@ -50,11 +50,13 @@ export interface FinanceCategoryRuleInput {
 export interface ExchangeRate {
   id: number;
   currency: string;
+  effectiveDate: string;
   rateToBase: number;
   updatedAt: string;
 }
 
 export interface ExchangeRateInput {
   currency: string;
+  effectiveDate?: string | null;
   rateToBase: number;
 }

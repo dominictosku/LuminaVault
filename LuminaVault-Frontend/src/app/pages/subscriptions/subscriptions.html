@@ -4,13 +4,26 @@
       <h1 class="text-2xl font-semibold tracking-tight">Subscriptions</h1>
       <p class="text-slate-400 text-sm mt-1">{{ activeCount() }} active · {{ monthlyTotal() | currency:'CHF':'symbol-narrow' }}/mo</p>
     </div>
-    <button class="btn btn-primary" (click)="newSubscription()">
-      <i class="pi pi-plus"></i> Subscription
-    </button>
+    <div class="flex gap-2">
+      <button class="btn btn-ghost" type="button" (click)="generateDueSubscriptions()" [disabled]="generatingDue()">
+        @if (generatingDue()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-bell"></i> }
+        Forecast due
+      </button>
+      <button class="btn btn-primary" (click)="newSubscription()">
+        <i class="pi pi-plus"></i> Subscription
+      </button>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
     <section class="space-y-3">
+      @if (automationMessage()) {
+        <div class="surface p-3 border border-emerald-500/30 bg-emerald-500/5 text-sm text-emerald-200 flex items-center gap-2">
+          <i class="pi pi-check-circle"></i>
+          <span>{{ automationMessage() }}</span>
+        </div>
+      }
+
       <div class="surface p-3 grid grid-cols-1 md:grid-cols-[1fr_150px_180px] xl:grid-cols-[1fr_135px_150px_160px_170px] gap-3">
         <div class="relative">
           <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>

@@ -91,7 +91,7 @@ public class AppDbContext : DbContext
         b.Entity<FinanceCategory>().HasIndex(c => c.Name).IsUnique();
         b.Entity<FinanceCategoryRule>().HasIndex(r => r.Pattern);
         b.Entity<FinanceCategoryRule>().HasIndex(r => r.Priority);
-        b.Entity<ExchangeRate>().HasIndex(r => r.Currency).IsUnique();
+        b.Entity<ExchangeRate>().HasIndex(r => new { r.Currency, r.EffectiveDate }).IsUnique();
         b.Entity<ExchangeRate>().Property(r => r.RateToBase).HasColumnType("decimal(18,8)");
 
         b.Entity<FinanceAccount>().Property(a => a.StartingBalance).HasColumnType("decimal(18,2)");

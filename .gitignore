@@ -26,3 +26,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Miscellaneous
+*.lscache

@@ -7,6 +7,7 @@ import { aggregateHoldingsByAccount, holdingsTotals } from '../../core/finance-m
 import {
   FinanceAccount,
   Holding,
+  HoldingAnalytics,
   HoldingPriceInput,
   HoldingRefreshResult,
   PriceProviderStatus,
@@ -23,6 +24,7 @@ export class HoldingsComponent {
   private confirmDialog = inject(ConfirmDialogService);
 
   holdings = signal<Holding[]>([]);
+  analytics = signal<HoldingAnalytics | null>(null);
   accounts = signal<FinanceAccount[]>([]);
   providers = signal<PriceProviderStatus[]>([]);
   loading = signal(true);
@@ -55,11 +57,13 @@ export class HoldingsComponent {
     this.loading.set(true);
     forkJoin({
       holdings: this.api.listHoldings(),
+      analytics: this.api.holdingAnalytics(),
       accounts: this.api.listFinanceAccounts(),
       providers: this.api.listPriceProviders(),
     }).subscribe({
       next: r => {
         this.holdings.set(r.holdings);
+        this.analytics.set(r.analytics);
         this.accounts.set(r.accounts.filter(a =>
           a.type === 'Investment' || a.type === 'Crypto' || r.holdings.some(h => h.accountId === a.id)
         ));
@@ -104,6 +108,7 @@ export class HoldingsComponent {
       next: updated => {
         this.saving.set(null);
         this.holdings.update(list => list.map(h => h.id === updated.id ? updated : h));
+        this.refreshAnalytics();
         this.cancelEdit();
       },
       error: e => {
@@ -121,7 +126,13 @@ export class HoldingsComponent {
       next: result => {
         this.lastRefresh.set(result);
         this.refreshing.set(false);
-        this.api.listHoldings().subscribe(list => this.holdings.set(list));
+        forkJoin({
+          holdings: this.api.listHoldings(),
+          analytics: this.api.holdingAnalytics(),
+        }).subscribe(r => {
+          this.holdings.set(r.holdings);
+          this.analytics.set(r.analytics);
+        });
       },
       error: e => {
         this.refreshing.set(false);
@@ -143,6 +154,7 @@ export class HoldingsComponent {
     if (!confirmed) return;
     this.api.deleteHolding(holding.id).subscribe(() => {
       this.holdings.update(list => list.filter(h => h.id !== holding.id));
+      this.refreshAnalytics();
       if (this.editingId() === holding.id) this.cancelEdit();
     });
   }
@@ -161,5 +173,9 @@ export class HoldingsComponent {
       'text-red-300': value != null && value < 0,
       'text-slate-400': value == null || value === 0,
     };
+  }
+
+  private refreshAnalytics() {
+    this.api.holdingAnalytics().subscribe(analytics => this.analytics.set(analytics));
   }
 }

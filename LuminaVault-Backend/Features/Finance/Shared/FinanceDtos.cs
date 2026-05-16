@@ -38,6 +38,44 @@ public record HoldingPerformance(decimal RealizedPnL, decimal Dividends, decimal
 
 public record HoldingPriceInput(decimal? LastPrice, string? Name, string? ProviderId, string? Notes);
 
+public record HoldingAnalyticsDto(
+    DateTime GeneratedAt,
+    string BaseCurrency,
+    HoldingAnalyticsTotals Totals,
+    HoldingAllocationDto[] AllocationByAccount,
+    HoldingAllocationDto[] AllocationBySymbol,
+    HoldingPerformerDto[] TopPerformers,
+    HoldingPerformerDto[] WorstPerformers);
+
+public record HoldingAnalyticsTotals(
+    decimal MarketValue,
+    decimal CostBasis,
+    decimal UnrealizedPnL,
+    decimal RealizedPnL,
+    decimal Dividends,
+    decimal Fees,
+    decimal TotalReturn,
+    decimal? TotalReturnPercent,
+    int PositionCount);
+
+public record HoldingAllocationDto(
+    string Name,
+    decimal MarketValue,
+    decimal CostBasis,
+    decimal TotalReturn,
+    decimal Percent);
+
+public record HoldingPerformerDto(
+    int Id,
+    string Symbol,
+    string? Name,
+    string AccountName,
+    decimal MarketValue,
+    decimal CostBasis,
+    decimal UnrealizedPnL,
+    decimal TotalReturn,
+    decimal? ReturnPercent);
+
 public record MonthlyAccountSummaryDto(
     int Id, int AccountId, string? AccountName, string Currency, DateTime Month,
     decimal Income, decimal Expenses, decimal Net, decimal? OpeningBalance,
@@ -87,3 +125,11 @@ public record AccountBalanceSnapshotInput(
     int AccountId, DateTime SnapshotDate, decimal ActualBalance, bool IsReconciled, string? Notes);
 
 public record SubscriptionGenerateTransactionInput(FinanceTransactionStatus Status, bool AdvanceNextDueOn);
+
+public record SubscriptionGenerateDueResult(
+    DateTime GeneratedAt,
+    DateTime ThroughDate,
+    int Created,
+    int Skipped,
+    FinanceTransactionDto[] Transactions,
+    SubscriptionDto[] Subscriptions);

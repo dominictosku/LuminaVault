@@ -61,6 +61,16 @@ internal static class SubscriptionEndpoints
             return Results.NoContent();
         });
 
+        subscriptions.MapPost("/generate-due", async (
+            SubscriptionAutomationService automation,
+            AppDbContext db,
+            int? lookAheadDays,
+            CancellationToken ct) =>
+        {
+            var result = await automation.GenerateDueAsync(db, lookAheadDays, ct);
+            return Results.Ok(result);
+        });
+
         subscriptions.MapPost("/{id:int}/generate-transaction", async (
             int id,
             [FromBody] SubscriptionGenerateTransactionInput input,

@@ -27,8 +27,8 @@ public record FinanceCategoryRuleInput(
     bool MatchDescription,
     bool IsActive,
     int Priority);
-public record ExchangeRateDto(int Id, string Currency, decimal RateToBase, DateTime UpdatedAt);
-public record ExchangeRateInput(string Currency, decimal RateToBase);
+public record ExchangeRateDto(int Id, string Currency, DateTime EffectiveDate, decimal RateToBase, DateTime UpdatedAt);
+public record ExchangeRateInput(string Currency, DateTime? EffectiveDate, decimal RateToBase);
 
 public static class SettingsEndpoints
 {
@@ -190,7 +190,8 @@ public static class SettingsEndpoints
         g.MapGet("/exchange-rates", async (AppDbContext db) =>
             await db.ExchangeRates
                 .OrderBy(r => r.Currency)
-                .Select(r => new ExchangeRateDto(r.Id, r.Currency, r.RateToBase, r.UpdatedAt))
+                .ThenByDescending(r => r.EffectiveDate)
+                .Select(r => new ExchangeRateDto(r.Id, r.Currency, r.EffectiveDate, r.RateToBase, r.UpdatedAt))
                 .ToListAsync());
 
         g.MapPost("/exchange-rates", async ([FromBody] ExchangeRateInput input, AppDbContext db) =>
@@ -200,12 +201,14 @@ public static class SettingsEndpoints
             var currency = input.Currency.Trim().ToUpperInvariant();
             if (currency == CurrencyConversion.BaseCurrency)
                 return Problem.BadRequest($"{CurrencyConversion.BaseCurrency} is the base currency and always has rate 1.");
-            if (await db.ExchangeRates.AnyAsync(r => r.Currency == currency))
+            var effectiveDate = (input.EffectiveDate ?? DateTime.UtcNow.Date).Date;
+            if (await db.ExchangeRates.AnyAsync(r => r.Currency == currency && r.EffectiveDate == effectiveDate))
                 return Problem.Conflict("Exchange rate already exists.");
 
             var rate = new ExchangeRate
             {
                 Currency = currency,
+                EffectiveDate = effectiveDate,
                 RateToBase = input.RateToBase,
                 UpdatedAt = DateTime.UtcNow,
             };
@@ -223,10 +226,12 @@ public static class SettingsEndpoints
             var currency = input.Currency.Trim().ToUpperInvariant();
             if (currency == CurrencyConversion.BaseCurrency)
                 return Problem.BadRequest($"{CurrencyConversion.BaseCurrency} is the base currency and always has rate 1.");
-            if (await db.ExchangeRates.AnyAsync(r => r.Id != id && r.Currency == currency))
+            var effectiveDate = (input.EffectiveDate ?? DateTime.UtcNow.Date).Date;
+            if (await db.ExchangeRates.AnyAsync(r => r.Id != id && r.Currency == currency && r.EffectiveDate == effectiveDate))
                 return Problem.Conflict("Exchange rate already exists.");
 
             rate.Currency = currency;
+            rate.EffectiveDate = effectiveDate;
             rate.RateToBase = input.RateToBase;
             rate.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
@@ -246,7 +251,7 @@ public static class SettingsEndpoints
     }
 
     static ExchangeRateDto MapRate(ExchangeRate rate) =>
-        new(rate.Id, rate.Currency, rate.RateToBase, rate.UpdatedAt);
+        new(rate.Id, rate.Currency, rate.EffectiveDate, rate.RateToBase, rate.UpdatedAt);
 
     static FinanceCategoryRuleDto MapRule(FinanceCategoryRule rule) =>
         new(rule.Id, rule.Pattern, rule.Category, rule.MatchPayee, rule.MatchDescription,

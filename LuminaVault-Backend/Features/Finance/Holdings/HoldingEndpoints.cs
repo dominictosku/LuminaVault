@@ -28,6 +28,99 @@ internal static class HoldingEndpoints
                 performance.GetValueOrDefault(PerformanceKey(h.AccountId, h.Symbol)))));
         });
 
+        holdings.MapGet("/analytics", async (AppDbContext db, int? accountId) =>
+        {
+            var query = db.Holdings.Include(h => h.Account).AsQueryable();
+            if (accountId.HasValue) query = query.Where(h => h.AccountId == accountId.Value);
+            var holdingsResult = await query
+                .OrderBy(h => h.Account!.Name)
+                .ThenBy(h => h.Symbol)
+                .ToListAsync();
+            var rates = await CurrencyConversion.LoadRates(db);
+            var performance = await ComputePerformance(db, accountId);
+
+            var rows = holdingsResult.Select(h =>
+            {
+                var dto = MapHolding(h, performance.GetValueOrDefault(PerformanceKey(h.AccountId, h.Symbol)));
+                var marketValue = dto.MarketValue ?? dto.CostBasis;
+                var marketValueBase = CurrencyConversion.ToBase(marketValue, dto.Currency, rates);
+                var costBasisBase = CurrencyConversion.ToBase(dto.CostBasis, dto.Currency, rates);
+                var realizedBase = CurrencyConversion.ToBase(dto.RealizedPnL, dto.Currency, rates);
+                var dividendsBase = CurrencyConversion.ToBase(dto.Dividends, dto.Currency, rates);
+                var feesBase = CurrencyConversion.ToBase(dto.Fees, dto.Currency, rates);
+                var totalReturnBase = CurrencyConversion.ToBase(dto.TotalReturn, dto.Currency, rates);
+                return new
+                {
+                    dto.Id,
+                    dto.Symbol,
+                    dto.Name,
+                    AccountName = dto.AccountName ?? "Unknown account",
+                    MarketValue = Math.Round(marketValueBase, 2),
+                    CostBasis = Math.Round(costBasisBase, 2),
+                    UnrealizedPnL = Math.Round(marketValueBase - costBasisBase, 2),
+                    RealizedPnL = Math.Round(realizedBase, 2),
+                    Dividends = Math.Round(dividendsBase, 2),
+                    Fees = Math.Round(feesBase, 2),
+                    TotalReturn = Math.Round(totalReturnBase, 2),
+                };
+            }).ToList();
+
+            var totalMarketValue = rows.Sum(r => r.MarketValue);
+            var totalCostBasis = rows.Sum(r => r.CostBasis);
+            var totalReturn = rows.Sum(r => r.TotalReturn);
+            var allocationByAccount = rows
+                .GroupBy(r => r.AccountName)
+                .Select(g => Allocation(
+                    g.Key,
+                    g.Sum(r => r.MarketValue),
+                    g.Sum(r => r.CostBasis),
+                    g.Sum(r => r.TotalReturn),
+                    totalMarketValue))
+                .OrderByDescending(r => r.MarketValue)
+                .ToArray();
+            var allocationBySymbol = rows
+                .GroupBy(r => r.Symbol)
+                .Select(g => Allocation(
+                    g.Key,
+                    g.Sum(r => r.MarketValue),
+                    g.Sum(r => r.CostBasis),
+                    g.Sum(r => r.TotalReturn),
+                    totalMarketValue))
+                .OrderByDescending(r => r.MarketValue)
+                .Take(10)
+                .ToArray();
+            var performers = rows
+                .Select(r => new HoldingPerformerDto(
+                    r.Id,
+                    r.Symbol,
+                    r.Name,
+                    r.AccountName,
+                    r.MarketValue,
+                    r.CostBasis,
+                    r.UnrealizedPnL,
+                    r.TotalReturn,
+                    r.CostBasis <= 0 ? null : Math.Round(r.TotalReturn / r.CostBasis * 100m, 2)))
+                .ToList();
+
+            return Results.Ok(new HoldingAnalyticsDto(
+                DateTime.UtcNow,
+                CurrencyConversion.BaseCurrency,
+                new HoldingAnalyticsTotals(
+                    Math.Round(totalMarketValue, 2),
+                    Math.Round(totalCostBasis, 2),
+                    Math.Round(rows.Sum(r => r.UnrealizedPnL), 2),
+                    Math.Round(rows.Sum(r => r.RealizedPnL), 2),
+                    Math.Round(rows.Sum(r => r.Dividends), 2),
+                    Math.Round(rows.Sum(r => r.Fees), 2),
+                    Math.Round(totalReturn, 2),
+                    totalCostBasis <= 0 ? null : Math.Round(totalReturn / totalCostBasis * 100m, 2),
+                    rows.Count),
+                allocationByAccount,
+                allocationBySymbol,
+                performers.OrderByDescending(r => r.TotalReturn).Take(5).ToArray(),
+                performers.OrderBy(r => r.TotalReturn).Take(5).ToArray()));
+        });
+
         holdings.MapPut("/{id:int}", async (int id, [FromBody] HoldingPriceInput input, AppDbContext db) =>
         {
             var holding = await db.Holdings.Include(h => h.Account).FirstOrDefaultAsync(h => h.Id == id);
@@ -141,6 +234,19 @@ internal static class HoldingEndpoints
 
     private static string PerformanceKey(int accountId, string symbol) =>
         $"{accountId}:{symbol.ToUpperInvariant()}";
+
+    private static HoldingAllocationDto Allocation(
+        string name,
+        decimal marketValue,
+        decimal costBasis,
+        decimal totalReturn,
+        decimal totalMarketValue) =>
+        new(
+            name,
+            Math.Round(marketValue, 2),
+            Math.Round(costBasis, 2),
+            Math.Round(totalReturn, 2),
+            totalMarketValue <= 0 ? 0 : Math.Round(marketValue / totalMarketValue * 100m, 2));
 
     private sealed class HoldingPerformanceAccumulator
     {

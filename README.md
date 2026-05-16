@@ -55,13 +55,13 @@
 
 ### 💰 Personal finance
 - **Multi-account ledger** — checking, savings, cash, credit cards, investments, crypto, loans; per-account currency (default CHF) and starting balance
-- **Manual exchange rates** — convert multi-currency accounts, subscriptions and transaction analytics into CHF aggregate totals
+- **Dated exchange rates** — convert multi-currency accounts, subscriptions and historical transaction analytics into CHF aggregate totals
 - **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled), plus trade kinds (buy / sell / dividend / fee) with symbol, quantity and price-per-unit for investment & crypto accounts
 - **Category rules** — auto-categorize uncategorized/manual imports by matching payee, description or notes
-- **Holdings & live prices** — symbol-level positions per investment/crypto account with average cost, last price and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
+- **Holdings, analytics & live prices** — symbol-level positions per investment/crypto account with average cost, last price, realized/dividend/fee return, allocation, top movers and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
 - **Budgets** — per-category monthly limits with spend tracking
 - **Savings goals** — target amount, current amount, status and due-date tracking for funds or payoff plans
-- **Recurring subscriptions** — billing interval, next-due date, auto-renew, optional document attachments (contracts, invoices)
+- **Recurring subscriptions** — billing interval, next-due date, auto-renew, due forecast generation, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
 - **Statistics** — charts and breakdowns for spend, income and category trends
@@ -171,7 +171,24 @@ Use **Settings → Category rules** to create simple auto-categorization rules. 
 
 ### Exchange rates
 
-Use **Settings → Exchange rates** to add manual conversion rates into CHF. Aggregate dashboard and statistics totals convert account balances, subscriptions, monthly summaries and transaction analytics into CHF. Individual account and transaction rows still display in their original currency.
+Use **Settings → Exchange rates** to add dated manual conversion rates into CHF. Aggregate dashboard and statistics totals convert account balances, subscriptions, monthly summaries and transaction analytics into CHF. Transaction and monthly-summary analytics use the rate effective on that date, falling back to the nearest known rate when a currency has no older entry. Individual account and transaction rows still display in their original currency.
+
+### Subscription automation
+
+Use **Subscriptions → Forecast due** to generate pending forecast transactions for active, auto-renewing subscriptions due in the next seven days. The automation advances `NextDueOn` and tags generated transactions so repeat runs do not duplicate the same due date.
+
+Scheduled generation is disabled by default. Enable it from backend configuration:
+
+```jsonc
+// LuminaVault-Backend/appsettings.json
+{
+  "SubscriptionAutomation": {
+    "Enabled": true,
+    "LookAheadDays": 7,
+    "IntervalHours": 24
+  }
+}
+```
 
 ### Bank CSV import
 
