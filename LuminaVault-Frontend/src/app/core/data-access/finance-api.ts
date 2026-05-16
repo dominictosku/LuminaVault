@@ -18,6 +18,7 @@ import {
   HoldingAnalytics,
   HoldingPriceInput,
   HoldingRefreshResult,
+  NetWorthSnapshot,
   PriceProviderStatus,
   SavingsGoal,
   SavingsGoalInput,
@@ -144,6 +145,17 @@ export class FinanceApi {
 
   deleteBalanceSnapshot(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/balance-snapshots/${id}`);
+  }
+
+  netWorthHistory(opts: { from?: string; to?: string } = {}) {
+    let params = new HttpParams();
+    if (opts.from) params = params.set('from', opts.from);
+    if (opts.to) params = params.set('to', opts.to);
+    return this.http.get<NetWorthSnapshot[]>(`${API_BASE}/api/finance/net-worth/history`, { params });
+  }
+
+  captureNetWorthSnapshot() {
+    return this.http.post<NetWorthSnapshot>(`${API_BASE}/api/finance/net-worth/snapshot`, {});
   }
 
   listFinanceTransactions(opts: {

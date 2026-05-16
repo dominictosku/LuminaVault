@@ -64,6 +64,7 @@
 - **Recurring subscriptions** — billing interval, next-due date, auto-renew, due forecast generation, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
+- **Net worth history** — daily snapshots of (cash + holdings market value + inventory), rendered as a line chart on the dashboard with delta vs. earliest point; manual "snapshot now" button seeds the curve before the first cron run
 - **Statistics** — charts and breakdowns for spend, income and category trends
 - **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import)
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
@@ -190,6 +191,20 @@ Scheduled generation is disabled by default. Enable it from backend configuratio
 }
 ```
 
+### Net worth history
+
+A `NetWorthBackgroundService` captures one snapshot per day (cash across accounts + holdings market value + inventory, all in the base currency) into the `NetWorthSnapshots` table. The dashboard renders the history as an SVG line chart with a delta badge vs. the earliest point. A "Snapshot now" button on the dashboard (or `POST /api/finance/net-worth/snapshot`) seeds the curve immediately. Defaults can be tuned:
+
+```jsonc
+{
+  "NetWorth": {
+    "Enabled": true,
+    "IntervalHours": 24,
+    "RetentionDays": 0      // 0 = keep forever
+  }
+}
+```
+
 ### Bank CSV import
 
 Use **Import & export → Import bank CSV** for bank statement files. The importer supports either:
@@ -226,6 +241,7 @@ LuminaVault/
 │   │   │   ├── Subscriptions/          # Subscription entity + background auto-forecast service
 │   │   │   ├── MonthlySummaries/
 │   │   │   ├── BalanceSnapshots/
+│   │   │   ├── NetWorth/               # Daily net-worth snapshots + history endpoint
 │   │   │   ├── Summary/                # /summary and /statistics aggregates
 │   │   │   └── Shared/                 # FinanceHelpers (balance recompute), DTOs, mappers
 │   │   ├── Data/

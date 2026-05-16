@@ -14,6 +14,7 @@ public static class FinanceEndpoints
         SubscriptionEndpoints.Map(app);
         MonthlySummaryEndpoints.Map(app);
         BalanceSnapshotEndpoints.Map(app);
+        NetWorthEndpoints.Map(app);
         FinanceSummaryEndpoints.Map(app);
         return app;
     }

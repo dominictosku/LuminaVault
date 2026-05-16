@@ -45,6 +45,63 @@
     </div>
   }
 
+  <section class="surface p-5 mb-4">
+    <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+      <div class="flex items-center gap-3 min-w-0">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-chart-line text-violet-300"></i> Net worth history
+        </h2>
+        @if (netWorthDelta(); as delta) {
+          <span class="text-xs px-2 py-0.5 rounded-md border"
+                [class.text-emerald-300]="delta.abs >= 0"
+                [class.border-emerald-500/30]="delta.abs >= 0"
+                [class.bg-emerald-500/10]="delta.abs >= 0"
+                [class.text-red-300]="delta.abs < 0"
+                [class.border-red-500/30]="delta.abs < 0"
+                [class.bg-red-500/10]="delta.abs < 0">
+            {{ delta.abs >= 0 ? '+' : '' }}{{ money(delta.abs) }}
+            @if (delta.pct != null) { · {{ delta.pct | number:'1.0-1' }}% }
+          </span>
+        }
+      </div>
+      <button type="button" class="btn btn-ghost text-xs" (click)="captureSnapshot()" [disabled]="capturingSnapshot()">
+        @if (capturingSnapshot()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-camera"></i> }
+        Snapshot now
+      </button>
+    </div>
+    @if (netWorthLoading()) {
+      <div class="h-56 surface-muted animate-pulse"></div>
+    } @else if (netWorthHistory().length === 0) {
+      <div class="text-sm text-slate-500 py-8 text-center">
+        No snapshots yet — the daily cron will create one shortly, or click <span class="font-medium text-slate-300">Snapshot now</span> to seed.
+      </div>
+    } @else {
+      <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" class="w-full h-56" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="netWorthFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgb(167 139 250)" stop-opacity="0.45" />
+            <stop offset="100%" stop-color="rgb(167 139 250)" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        @if (netWorthHistory().length > 1) {
+          <path [attr.d]="netWorthAreaPath()" fill="url(#netWorthFill)" />
+        }
+        <path [attr.d]="netWorthLinePath()" fill="none" stroke="rgb(167 139 250)" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <div class="flex items-center justify-between text-xs text-slate-400 mt-2">
+        <div>
+          {{ netWorthHistory()[0].snapshotDate | date:'MMM d, y' }}
+          → {{ netWorthHistory()[netWorthHistory().length - 1].snapshotDate | date:'MMM d, y' }}
+          <span class="text-slate-500">· {{ netWorthHistory().length }} snapshot{{ netWorthHistory().length === 1 ? '' : 's' }}</span>
+        </div>
+        <div class="text-slate-300">
+          Latest: {{ money(netWorthHistory()[netWorthHistory().length - 1].netWorth) }}
+        </div>
+      </div>
+    }
+  </section>
+
   <div class="grid grid-cols-1 xl:grid-cols-[1.35fr_0.85fr] gap-4">
     <section class="surface p-5">
       <div class="flex items-center justify-between mb-5">

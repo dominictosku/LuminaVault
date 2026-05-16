@@ -26,7 +26,8 @@
       "Bash(powershell -Command \"Stop-Process -Id 35284 -Force\")",
       "Bash(mkdir -p .githooks)",
       "Read(//c/c/Users/domin/MyDocuments/Projects/LuminaVault/**)",
-      "Bash(chmod +x .githooks/pre-commit)"
+      "Bash(chmod +x .githooks/pre-commit)",
+      "Bash(npm run *)"
     ]
   }
 }

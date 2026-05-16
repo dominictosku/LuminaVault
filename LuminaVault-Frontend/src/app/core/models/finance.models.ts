@@ -424,3 +424,15 @@ export interface FinanceStatistics {
   topExpenses: { id: number; payee: string; category: string; amount: number; occurredOn: string; accountName?: string | null }[];
   subscriptionRunway: { id: number; name: string; category: string; amount: number; currency: string; monthlyAmount: number; monthlyAmountBase: number; annualAmount: number; nextDueOn: string }[];
 }
+
+export interface NetWorthSnapshot {
+  id: number;
+  snapshotDate: string;
+  accountNetWorth: number;
+  holdingsMarketValue: number;
+  holdingsCostBasis: number;
+  inventoryValue: number;
+  netWorth: number;
+  currency: string;
+  createdAt: string;
+}

@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<AccountBalanceSnapshot> AccountBalanceSnapshots => Set<AccountBalanceSnapshot>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Holding> Holdings => Set<Holding>();
+    public DbSet<NetWorthSnapshot> NetWorthSnapshots => Set<NetWorthSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -170,5 +171,12 @@ public class AppDbContext : DbContext
 
         b.Entity<Subscription>().Property(s => s.Amount).HasColumnType("decimal(18,2)");
         b.Entity<Subscription>().HasIndex(s => s.NextDueOn);
+
+        b.Entity<NetWorthSnapshot>().Property(s => s.AccountNetWorth).HasColumnType("decimal(18,2)");
+        b.Entity<NetWorthSnapshot>().Property(s => s.HoldingsMarketValue).HasColumnType("decimal(18,2)");
+        b.Entity<NetWorthSnapshot>().Property(s => s.HoldingsCostBasis).HasColumnType("decimal(18,2)");
+        b.Entity<NetWorthSnapshot>().Property(s => s.InventoryValue).HasColumnType("decimal(18,2)");
+        b.Entity<NetWorthSnapshot>().Property(s => s.NetWorth).HasColumnType("decimal(18,2)");
+        b.Entity<NetWorthSnapshot>().HasIndex(s => s.SnapshotDate).IsUnique();
     }
 }

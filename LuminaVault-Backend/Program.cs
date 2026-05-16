@@ -188,6 +188,16 @@ builder.Services.AddSingleton(subscriptionAutomationOptions);
 builder.Services.AddScoped<SubscriptionAutomationService>();
 builder.Services.AddHostedService<SubscriptionAutomationBackgroundService>();
 
+// --- Net worth snapshots ---
+// Captures aggregate net worth (cash + holdings market value + inventory) on a daily cron
+// so the dashboard can render a historical equity curve. Manual capture is available via
+// POST /api/finance/net-worth/snapshot. Hosted service no-ops when NetWorth:Enabled=false.
+var netWorthOptions = new NetWorthOptions();
+builder.Configuration.GetSection("NetWorth").Bind(netWorthOptions);
+builder.Services.AddSingleton(netWorthOptions);
+builder.Services.AddScoped<NetWorthSnapshotService>();
+builder.Services.AddHostedService<NetWorthBackgroundService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
