@@ -122,7 +122,7 @@ export class ShellComponent {
 
   protected readonly groups: NavGroup[] = [
     {
-      id: 'money', label: 'Money', icon: 'pi-dollar', items: [
+      id: 'money', label: 'Money', icon: 'pi-money-bill', items: [
         { path: '/transactions', icon: 'pi-arrow-right-arrow-left', label: 'Transactions' },
         { path: '/monthly-summaries', icon: 'pi-calendar-plus', label: 'Monthly sums' },
         { path: '/statistics', icon: 'pi-chart-bar', label: 'Statistics' },
