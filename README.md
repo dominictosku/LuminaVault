@@ -222,13 +222,17 @@ LuminaVault/
 │   │   │   ├── Holdings/
 │   │   │   │   └── Pricing/            # IPriceProvider + Finnhub & CoinGecko adapters
 │   │   │   ├── Budgets/
-│   │   │   ├── Subscriptions/
+│   │   │   ├── Goals/                  # Savings goals
+│   │   │   ├── Subscriptions/          # Subscription entity + background auto-forecast service
 │   │   │   ├── MonthlySummaries/
 │   │   │   ├── BalanceSnapshots/
 │   │   │   ├── Summary/                # /summary and /statistics aggregates
 │   │   │   └── Shared/                 # FinanceHelpers (balance recompute), DTOs, mappers
-│   │   ├── Data/Ods/                   # ODS import/export pipeline
-│   │   └── Settings/                   # AssetCategory + FinanceCategory + endpoints
+│   │   ├── Data/
+│   │   │   ├── Backup/                 # Backup endpoint + background scheduler
+│   │   │   ├── BankCsv/                # Bank CSV preview + import
+│   │   │   └── Ods/                    # ODS import/export pipeline
+│   │   └── Settings/                   # AssetCategory + FinanceCategory + ExchangeRate + CategoryRule
 │   ├── Infrastructure/
 │   │   ├── Data/                       # AppDbContext + Seeder + Migrations/
 │   │   └── Validation/                 # Problem + Validate helpers
@@ -252,6 +256,7 @@ LuminaVault/
             ├── transactions/
             ├── holdings/           # Investment & crypto positions, price refresh
             ├── budgets/
+            ├── goals/              # Savings goals
             ├── subscriptions/
             ├── monthly-summaries/  # Reconciliation
             ├── statistics/
