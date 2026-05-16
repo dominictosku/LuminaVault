@@ -65,6 +65,7 @@
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
 - **Net worth history** — daily snapshots of (cash + holdings market value + inventory), rendered as a line chart on the dashboard with delta vs. earliest point; manual "snapshot now" button seeds the curve before the first cron run
+- **Cash-flow forecast** — replays scheduled subscription dues and pending transactions forward 14/30/60/90/180 days, plotting projected liquid cash as a line chart with the lowest-balance date called out and a warning banner if the projection dips below zero
 - **Statistics** — charts and breakdowns for spend, income and category trends
 - **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import)
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
@@ -191,6 +192,12 @@ Scheduled generation is disabled by default. Enable it from backend configuratio
 }
 ```
 
+### Cash-flow forecast
+
+`/forecast` projects daily liquid cash forward for 14/30/60/90/180 days by replaying every cash movement we already know about — pending transactions plus scheduled subscription dues (rolled forward by their billing interval). It deliberately avoids trend-from-history estimation so every dip on the chart maps to a specific row in the event timeline.
+
+The summary cards call out today's balance, projected ending balance, lowest point + date, and event count. A red banner appears if the projection crosses zero. Filter by account to drill into a single ledger. Subscription dues that already have a tagged pending transaction (from the auto-forecast job) are deduplicated to avoid double-counting.
+
 ### Net worth history
 
 A `NetWorthBackgroundService` captures one snapshot per day (cash across accounts + holdings market value + inventory, all in the base currency) into the `NetWorthSnapshots` table. The dashboard renders the history as an SVG line chart with a delta badge vs. the earliest point. A "Snapshot now" button on the dashboard (or `POST /api/finance/net-worth/snapshot`) seeds the curve immediately. Defaults can be tuned:
@@ -242,6 +249,7 @@ LuminaVault/
 │   │   │   ├── MonthlySummaries/
 │   │   │   ├── BalanceSnapshots/
 │   │   │   ├── NetWorth/               # Daily net-worth snapshots + history endpoint
+│   │   │   ├── Forecast/               # Cash-flow projection (subscriptions + pending tx)
 │   │   │   ├── Summary/                # /summary and /statistics aggregates
 │   │   │   └── Shared/                 # FinanceHelpers (balance recompute), DTOs, mappers
 │   │   ├── Data/
@@ -273,6 +281,7 @@ LuminaVault/
             ├── holdings/           # Investment & crypto positions, price refresh
             ├── budgets/
             ├── goals/              # Savings goals
+            ├── forecast/           # Cash-flow projection chart + event timeline
             ├── subscriptions/
             ├── monthly-summaries/  # Reconciliation
             ├── statistics/

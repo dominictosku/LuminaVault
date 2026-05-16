@@ -436,3 +436,36 @@ export interface NetWorthSnapshot {
   currency: string;
   createdAt: string;
 }
+
+export interface ForecastPoint {
+  date: string;
+  balance: number;
+  changeFromYesterday: number;
+}
+
+export interface ForecastEvent {
+  date: string;
+  source: 'Subscription' | 'Pending' | 'Transfer';
+  description: string;
+  accountId?: number | null;
+  accountName?: string | null;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+}
+
+export interface CashFlowForecast {
+  generatedAt: string;
+  from: string;
+  to: string;
+  days: number;
+  baseCurrency: string;
+  startingBalance: number;
+  endingBalance: number;
+  netChange: number;
+  lowestBalance: number;
+  lowestDate: string;
+  eventCount: number;
+  daily: ForecastPoint[];
+  events: ForecastEvent[];
+}

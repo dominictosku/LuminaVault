@@ -133,6 +133,7 @@ export class ShellComponent {
       id: 'planning', label: 'Planning', icon: 'pi-bullseye', items: [
         { path: '/budgets', icon: 'pi-chart-pie', label: 'Budgets' },
         { path: '/goals', icon: 'pi-flag', label: 'Goals' },
+        { path: '/forecast', icon: 'pi-chart-line', label: 'Forecast' },
       ],
     },
     {

@@ -1,0 +1,154 @@
+<div class="p-4 md:p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Cash-flow forecast</h1>
+      <p class="text-slate-400 text-sm mt-1">
+        Projected liquid cash, replaying pending transactions and scheduled subscription dues forward from today.
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      @for (opt of rangeOptions; track opt.days) {
+        <button type="button" class="btn btn-ghost text-xs"
+                [class.!bg-white\/10]="rangeDays() === opt.days"
+                [class.!text-white]="rangeDays() === opt.days"
+                (click)="setRange(opt.days)">
+          {{ opt.label }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="surface p-3 mb-4 flex items-center gap-3 flex-wrap">
+    <label class="text-xs uppercase tracking-wide text-slate-400">Account</label>
+    <select class="select !w-72" [ngModel]="accountFilter()" (ngModelChange)="setAccountFilter($event)">
+      <option [ngValue]="null">All accounts (aggregate)</option>
+      @for (a of accounts(); track a.id) {
+        @if (!a.isArchived) { <option [ngValue]="a.id">{{ a.name }} · {{ a.type }}</option> }
+      }
+    </select>
+    @if (forecast()) {
+      <span class="ml-auto text-xs text-slate-500">
+        Generated {{ forecast()!.generatedAt | date:'MMM d, y, HH:mm' }}
+      </span>
+    }
+  </div>
+
+  @if (error()) {
+    <div class="surface p-4 mb-4 text-red-300 text-sm bg-red-500/10 border-red-500/30">
+      {{ error() }}
+    </div>
+  }
+
+  @if (loading() && !forecast()) {
+    <div class="surface h-72 animate-pulse mb-4"></div>
+  } @else if (forecast(); as f) {
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <section class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Today</div>
+        <div class="text-xl font-semibold mt-2">{{ money(f.startingBalance) }}</div>
+        <div class="text-xs text-slate-500 mt-1">{{ f.baseCurrency }} liquid</div>
+      </section>
+      <section class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">In {{ f.days }} days</div>
+        <div class="text-xl font-semibold mt-2" [ngClass]="eventToneClass(f.netChange)">
+          {{ money(f.endingBalance) }}
+        </div>
+        <div class="text-xs mt-1" [ngClass]="eventToneClass(f.netChange)">
+          {{ f.netChange >= 0 ? '+' : '' }}{{ money(f.netChange) }}
+        </div>
+      </section>
+      <section class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Lowest point</div>
+        <div class="text-xl font-semibold mt-2" [class.text-red-300]="hasNegativeProjection()">
+          {{ money(f.lowestBalance) }}
+        </div>
+        <div class="text-xs text-slate-500 mt-1">{{ f.lowestDate | date:'MMM d, y' }}</div>
+      </section>
+      <section class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Scheduled events</div>
+        <div class="text-xl font-semibold mt-2">{{ f.eventCount }}</div>
+        <div class="text-xs text-slate-500 mt-1">subscriptions + pending tx</div>
+      </section>
+    </div>
+
+    @if (hasNegativeProjection()) {
+      <div class="mb-4 text-red-200 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+        <i class="pi pi-exclamation-triangle mr-1"></i>
+        Projected to go below zero on {{ f.lowestDate | date:'MMM d, y' }} ({{ money(f.lowestBalance) }}). Consider adjusting subscriptions or scheduled payments before then.
+      </div>
+    }
+
+    <section class="surface p-5 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-chart-line text-violet-300"></i> Projected balance
+        </h2>
+        <div class="text-xs text-slate-500">
+          {{ f.from | date:'MMM d' }} → {{ f.to | date:'MMM d, y' }}
+        </div>
+      </div>
+      <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" class="w-full h-60" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="forecastFill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="rgb(167 139 250)" stop-opacity="0.45" />
+            <stop offset="100%" stop-color="rgb(167 139 250)" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        @if (zeroLineY() != null) {
+          <line [attr.x1]="16" [attr.x2]="chartWidth - 16"
+                [attr.y1]="zeroLineY()" [attr.y2]="zeroLineY()"
+                stroke="rgb(248 113 113 / 0.4)" stroke-width="1" stroke-dasharray="4 4" />
+        }
+        @if (f.daily.length > 1) {
+          <path [attr.d]="areaPath()" fill="url(#forecastFill)" />
+        }
+        <path [attr.d]="linePath()" fill="none" stroke="rgb(167 139 250)" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+    </section>
+
+    <section class="surface p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-list text-sky-300"></i> Upcoming events
+        </h2>
+        <a routerLink="/subscriptions" class="text-xs text-teal-300 hover:underline">Subscriptions</a>
+      </div>
+      @if (f.events.length === 0) {
+        <div class="text-sm text-slate-500 py-8 text-center">
+          No scheduled cash movements in this window. Add a subscription or generate pending forecasts
+          from the Subscriptions page to populate this view.
+        </div>
+      } @else {
+        <div class="divide-y divide-slate-800">
+          @for (e of upcomingEvents(); track e.date + e.description) {
+            <div class="py-2.5 flex items-center gap-3">
+              <div class="text-xs text-slate-400 w-24 shrink-0">{{ e.date | date:'EEE MMM d' }}</div>
+              <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border shrink-0"
+                    [ngClass]="sourceBadgeClass(e.source)">{{ e.source }}</span>
+              <div class="min-w-0 flex-1">
+                <div class="text-sm truncate">{{ e.description }}</div>
+                <div class="text-xs text-slate-500 truncate">{{ e.accountName }}</div>
+              </div>
+              <div class="text-right">
+                <div class="text-sm" [ngClass]="eventToneClass(e.amount)">
+                  {{ e.amount >= 0 ? '+' : '' }}{{ e.amount | currency:e.currency:'symbol-narrow' }}
+                </div>
+                @if (e.currency !== f.baseCurrency) {
+                  <div class="text-[11px] text-slate-500">
+                    {{ e.baseAmount >= 0 ? '+' : '' }}{{ money(e.baseAmount) }}
+                  </div>
+                }
+              </div>
+            </div>
+          }
+          @if (f.events.length > upcomingEvents().length) {
+            <div class="pt-3 text-xs text-slate-500 text-center">
+              Showing first {{ upcomingEvents().length }} of {{ f.events.length }} events.
+            </div>
+          }
+        </div>
+      }
+    </section>
+  }
+</div>

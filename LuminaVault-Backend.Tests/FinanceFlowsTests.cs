@@ -476,4 +476,114 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
     }
 
     private record TransactionDto(int Id, int AccountId, decimal Amount, string Kind);
+
+    private record ForecastPointDto(DateTime Date, decimal Balance, decimal ChangeFromYesterday);
+    private record ForecastEventDto(DateTime Date, string Source, string Description, int? AccountId, string? AccountName, decimal Amount, string Currency, decimal BaseAmount);
+    private record ForecastDto(
+        DateTime From, DateTime To, int Days, string BaseCurrency,
+        decimal StartingBalance, decimal EndingBalance, decimal NetChange,
+        decimal LowestBalance, DateTime LowestDate, int EventCount,
+        ForecastPointDto[] Daily, ForecastEventDto[] Events);
+
+    [Fact]
+    public async Task Forecast_with_no_scheduled_events_is_flat()
+    {
+        var account = await CreateAccount("Quiet account", balance: 1234.56m);
+
+        var forecast = await _api.GetAsync<ForecastDto>("/api/finance/forecast?days=30&accountId=" + account.Id);
+
+        Assert.NotNull(forecast);
+        Assert.Equal(30, forecast!.Days);
+        Assert.Equal(31, forecast.Daily.Length); // today + 30 future days
+        Assert.Empty(forecast.Events);
+        Assert.Equal(0, forecast.EventCount);
+        Assert.Equal(forecast.StartingBalance, forecast.EndingBalance);
+        Assert.Equal(0m, forecast.NetChange);
+        // Every day equals the starting balance — flat line.
+        Assert.All(forecast.Daily, p => Assert.Equal(forecast.StartingBalance, p.Balance));
+    }
+
+    [Fact]
+    public async Task Forecast_replays_pending_expense_on_its_due_date()
+    {
+        var account = await CreateAccount("Forecast account", balance: 1000m);
+        var dueDate = DateTime.UtcNow.Date.AddDays(5);
+        var pending = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account.Id,
+            transferAccountId = (int?)null,
+            kind = "Expense",
+            status = "Pending",
+            occurredOn = dueDate,
+            payee = "Future rent",
+            category = "Housing",
+            amount = 250m,
+            description = (string?)null,
+            notes = (string?)null,
+            tags = Array.Empty<string>(),
+        });
+        pending.EnsureSuccessStatusCode();
+
+        var forecast = await _api.GetAsync<ForecastDto>("/api/finance/forecast?days=30&accountId=" + account.Id);
+
+        Assert.NotNull(forecast);
+        Assert.Equal(1000m, forecast!.StartingBalance);
+        Assert.Equal(750m, forecast.EndingBalance);
+        Assert.Equal(-250m, forecast.NetChange);
+        Assert.Equal(750m, forecast.LowestBalance);
+        Assert.Equal(dueDate, forecast.LowestDate.Date);
+
+        var evt = Assert.Single(forecast.Events);
+        Assert.Equal("Pending", evt.Source);
+        Assert.Equal(-250m, evt.Amount);
+        Assert.Equal(dueDate, evt.Date.Date);
+
+        // Day-by-day: balance stays at 1000 up to (but not including) dueDate, then drops.
+        var beforeDip = forecast.Daily.First(p => p.Date.Date == dueDate.AddDays(-1));
+        var atDip = forecast.Daily.First(p => p.Date.Date == dueDate);
+        Assert.Equal(1000m, beforeDip.Balance);
+        Assert.Equal(750m, atDip.Balance);
+    }
+
+    [Fact]
+    public async Task Forecast_rolls_subscriptions_forward_and_deduplicates_against_generated_pending()
+    {
+        var account = await CreateAccount("Sub account", balance: 1000m);
+        var firstDue = DateTime.UtcNow.Date.AddDays(3);
+        await _api.PostAsync("/api/finance/subscriptions/", new
+        {
+            name = "Hosting",
+            category = "Subscriptions",
+            provider = (string?)null,
+            accountId = account.Id,
+            amount = 20m,
+            currency = "CHF",
+            billingIntervalDays = 30,
+            startedOn = firstDue.AddDays(-30),
+            nextDueOn = firstDue,
+            autoRenew = true,
+            status = "Active",
+            notes = (string?)null,
+        });
+
+        // 60-day window should project two billing cycles (day 3 and day 33).
+        var forecast = await _api.GetAsync<ForecastDto>("/api/finance/forecast?days=60&accountId=" + account.Id);
+        Assert.NotNull(forecast);
+        Assert.Equal(2, forecast!.Events.Length);
+        Assert.All(forecast.Events, e => Assert.Equal("Subscription", e.Source));
+        Assert.Equal(960m, forecast.EndingBalance);  // 1000 - 20 - 20
+        Assert.Equal(-40m, forecast.NetChange);
+
+        // Generate the next due as a tagged pending tx — forecast must deduplicate it
+        // so the cycle isn't double-counted (once as Pending, once as Subscription).
+        var generated = await _api.PostAsync("/api/finance/subscriptions/generate-due?lookAheadDays=5", new { });
+        generated.EnsureSuccessStatusCode();
+
+        var refreshed = await _api.GetAsync<ForecastDto>("/api/finance/forecast?days=60&accountId=" + account.Id);
+        Assert.Equal(2, refreshed!.Events.Length);
+        Assert.Equal(-40m, refreshed.NetChange);
+        // One event is now a Pending row (the auto-generated one), the other is still a rolled-forward Subscription.
+        Assert.Contains(refreshed.Events, e => e.Source == "Pending");
+        Assert.Contains(refreshed.Events, e => e.Source == "Subscription");
+    }
 }

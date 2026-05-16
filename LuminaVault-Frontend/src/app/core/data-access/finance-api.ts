@@ -16,6 +16,7 @@ import {
   FinanceTransactionKind,
   Holding,
   HoldingAnalytics,
+  CashFlowForecast,
   HoldingPriceInput,
   HoldingRefreshResult,
   NetWorthSnapshot,
@@ -156,6 +157,13 @@ export class FinanceApi {
 
   captureNetWorthSnapshot() {
     return this.http.post<NetWorthSnapshot>(`${API_BASE}/api/finance/net-worth/snapshot`, {});
+  }
+
+  cashFlowForecast(opts: { days?: number; accountId?: number } = {}) {
+    let params = new HttpParams();
+    if (opts.days != null) params = params.set('days', opts.days);
+    if (opts.accountId != null) params = params.set('accountId', opts.accountId);
+    return this.http.get<CashFlowForecast>(`${API_BASE}/api/finance/forecast`, { params });
   }
 
   listFinanceTransactions(opts: {

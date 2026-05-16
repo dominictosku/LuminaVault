@@ -198,6 +198,8 @@ builder.Services.AddSingleton(netWorthOptions);
 builder.Services.AddScoped<NetWorthSnapshotService>();
 builder.Services.AddHostedService<NetWorthBackgroundService>();
 
+builder.Services.AddScoped<CashFlowForecastService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();

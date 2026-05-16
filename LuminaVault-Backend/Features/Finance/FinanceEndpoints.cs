@@ -15,6 +15,7 @@ public static class FinanceEndpoints
         MonthlySummaryEndpoints.Map(app);
         BalanceSnapshotEndpoints.Map(app);
         NetWorthEndpoints.Map(app);
+        ForecastEndpoints.Map(app);
         FinanceSummaryEndpoints.Map(app);
         return app;
     }
