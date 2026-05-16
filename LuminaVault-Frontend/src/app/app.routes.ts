@@ -57,6 +57,10 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/forecast/forecast').then(m => m.ForecastComponent),
       },
       {
+        path: 'notifications',
+        loadComponent: () => import('./pages/notifications/notifications').then(m => m.NotificationsComponent),
+      },
+      {
         path: 'data',
         loadComponent: () => import('./pages/data/data').then(m => m.DataComponent),
       },

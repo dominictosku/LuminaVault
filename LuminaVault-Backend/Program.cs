@@ -200,6 +200,16 @@ builder.Services.AddHostedService<NetWorthBackgroundService>();
 
 builder.Services.AddScoped<CashFlowForecastService>();
 
+// --- Notifications ---
+// Periodic scan of subscriptions/budgets/forecast against alert rules. Dedupe is
+// keyed off Notification.Source so re-runs upsert instead of spamming.
+var notificationOptions = new NotificationOptions();
+builder.Configuration.GetSection("Notifications").Bind(notificationOptions);
+builder.Services.AddSingleton(notificationOptions);
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<NotificationScanner>();
+builder.Services.AddHostedService<NotificationBackgroundService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -308,6 +318,7 @@ app.MapOdsData();
 app.MapBankCsvData();
 app.MapBackup();
 app.MapSettings();
+app.MapNotifications();
 
 try
 {

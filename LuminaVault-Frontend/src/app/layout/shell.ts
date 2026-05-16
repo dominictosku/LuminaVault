@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Event as RouterEvent, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { AuthService } from '../core/auth.service';
+import { NotificationCenterService } from '../shared/notifications/notification-center.service';
 import { ToastOutletComponent } from '../shared/toast/toast.component';
 
 type NavItem = { path: string; icon: string; label: string; badge?: string };
@@ -53,6 +54,14 @@ type NavGroup = { id: string; label: string; icon: string; items: NavItem[] };
           <a routerLink="/dashboard" routerLinkActive="bg-white/8 text-white" [routerLinkActiveOptions]="{exact:true}"
              class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
             <i class="pi pi-chart-line text-violet-300"></i> Overview
+          </a>
+          <a routerLink="/notifications" routerLinkActive="bg-white/8 text-white"
+             class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-white/5 transition">
+            <i class="pi pi-bell text-violet-300"></i>
+            <span class="flex-1">Notifications</span>
+            @if (notifications.unread() > 0) {
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 border border-pink-500/30">{{ notifications.unread() }}</span>
+            }
           </a>
 
           @for (group of groups; track group.id) {
@@ -115,6 +124,7 @@ type NavGroup = { id: string; label: string; icon: string; items: NavItem[] };
 })
 export class ShellComponent {
   protected auth = inject(AuthService);
+  protected notifications = inject(NotificationCenterService);
   private router = inject(Router);
 
   // Closed by default — desktop CSS forces it visible via lg:translate-x-0.
@@ -160,8 +170,12 @@ export class ShellComponent {
       .subscribe(() => {
         this.sidebarOpen.set(false);
         this.autoExpandActiveGroup();
+        // Repull the badge on every navigation. Cheap (one int) and keeps it fresh
+        // without polling. The Notifications page also pushes refreshes after writes.
+        this.notifications.refresh();
       });
     this.autoExpandActiveGroup();
+    this.notifications.refresh();
   }
 
   toggleSidebar() { this.sidebarOpen.update(v => !v); }

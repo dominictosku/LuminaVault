@@ -66,6 +66,7 @@
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
 - **Net worth history** — daily snapshots of (cash + holdings market value + inventory), rendered as a line chart on the dashboard with delta vs. earliest point; manual "snapshot now" button seeds the curve before the first cron run
 - **Cash-flow forecast** — replays scheduled subscription dues and pending transactions forward 14/30/60/90/180 days, plotting projected liquid cash as a line chart with the lowest-balance date called out and a warning banner if the projection dips below zero
+- **Notifications & alerts** — in-app inbox with unread-count badge in the sidebar; a background scanner fires alerts for subscriptions due soon, budget overruns, and forecast dips below zero. Dedup by stable `Source` key means re-scans upsert instead of spam; dismissed alerts resurface if the underlying condition still holds
 - **Statistics** — charts and breakdowns for spend, income and category trends
 - **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import)
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
@@ -192,6 +193,27 @@ Scheduled generation is disabled by default. Enable it from backend configuratio
 }
 ```
 
+### Notifications
+
+A background `NotificationScanner` runs every few hours and writes rows into a `Notifications` table for three rule types:
+
+- **SubscriptionDue** — any active auto-renewing subscription due within `SubscriptionDueLookAheadDays` (default 3)
+- **BudgetOverrun** — any current-month budget where actual spend > limit
+- **ForecastNegative** — the `ForecastLookAheadDays` (default 30) cash-flow projection dipping below zero
+
+Each notification has a stable `Source` key (e.g. `subscription:42:due:2026-05-20`) with a unique index, so re-runs upsert instead of spamming. A user-dismissed notification will resurface on a later scan if the underlying condition still holds — the alert isn't permanently silenced just because it was acknowledged once. The sidebar bell shows the unread count and refreshes on every navigation. The `/notifications` page has unread/all/dismissed filters and a manual **Rescan** button. Defaults can be tuned:
+
+```jsonc
+{
+  "Notifications": {
+    "Enabled": true,
+    "IntervalHours": 6,
+    "SubscriptionDueLookAheadDays": 3,
+    "ForecastLookAheadDays": 30
+  }
+}
+```
+
 ### Cash-flow forecast
 
 `/forecast` projects daily liquid cash forward for 14/30/60/90/180 days by replaying every cash movement we already know about — pending transactions plus scheduled subscription dues (rolled forward by their billing interval). It deliberately avoids trend-from-history estimation so every dip on the chart maps to a specific row in the event timeline.
@@ -256,6 +278,7 @@ LuminaVault/
 │   │   │   ├── Backup/                 # Backup endpoint + background scheduler
 │   │   │   ├── BankCsv/                # Bank CSV preview + import
 │   │   │   └── Ods/                    # ODS import/export pipeline
+│   │   ├── Notifications/              # In-app alerts (scanner + background service + dedup)
 │   │   └── Settings/                   # AssetCategory + FinanceCategory + ExchangeRate + CategoryRule
 │   ├── Infrastructure/
 │   │   ├── Data/                       # AppDbContext + Seeder + Migrations/
@@ -282,6 +305,7 @@ LuminaVault/
             ├── budgets/
             ├── goals/              # Savings goals
             ├── forecast/           # Cash-flow projection chart + event timeline
+            ├── notifications/      # In-app alerts inbox
             ├── subscriptions/
             ├── monthly-summaries/  # Reconciliation
             ├── statistics/

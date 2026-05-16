@@ -1,0 +1,95 @@
+<div class="p-4 md:p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Notifications</h1>
+      <p class="text-slate-400 text-sm mt-1">
+        Subscription dues, budget overruns and cash-flow warnings. Scanned every few hours; click <span class="text-slate-300">Rescan</span> to check now.
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <button type="button" class="btn btn-ghost text-xs" (click)="markAllRead()" [disabled]="unreadCount() === 0">
+        <i class="pi pi-check"></i> Mark all read
+      </button>
+      <button type="button" class="btn btn-primary text-xs" (click)="scan()" [disabled]="scanning()">
+        @if (scanning()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-sync"></i> }
+        Rescan
+      </button>
+    </div>
+  </div>
+
+  <div class="surface p-2 mb-4 flex gap-1 w-fit">
+    <button type="button" class="px-3 py-1.5 text-xs rounded-md transition"
+            [class.bg-white/10]="filter() === 'unread'"
+            [class.text-white]="filter() === 'unread'"
+            [class.text-slate-400]="filter() !== 'unread'"
+            (click)="setFilter('unread')">
+      Unread @if (unreadCount() > 0) { <span class="ml-1 text-violet-300">{{ unreadCount() }}</span> }
+    </button>
+    <button type="button" class="px-3 py-1.5 text-xs rounded-md transition"
+            [class.bg-white/10]="filter() === 'all'"
+            [class.text-white]="filter() === 'all'"
+            [class.text-slate-400]="filter() !== 'all'"
+            (click)="setFilter('all')">All</button>
+    <button type="button" class="px-3 py-1.5 text-xs rounded-md transition"
+            [class.bg-white/10]="filter() === 'dismissed'"
+            [class.text-white]="filter() === 'dismissed'"
+            [class.text-slate-400]="filter() !== 'dismissed'"
+            (click)="setFilter('dismissed')">Dismissed</button>
+  </div>
+
+  @if (loading()) {
+    <div class="space-y-2">
+      @for (_ of [1,2,3]; track _) { <div class="surface h-20 animate-pulse"></div> }
+    </div>
+  } @else if (filteredItems().length === 0) {
+    <div class="surface p-10 text-center">
+      <i class="pi pi-bell-slash text-4xl text-slate-500"></i>
+      <div class="mt-3 text-lg">
+        @if (filter() === 'unread') { No unread notifications. }
+        @else if (filter() === 'dismissed') { No dismissed notifications. }
+        @else { Nothing to show. }
+      </div>
+      <p class="text-sm text-slate-400 mt-2">
+        Subscription dues, budget overruns and cash-flow warnings will appear here when the next scan runs.
+      </p>
+    </div>
+  } @else {
+    <div class="space-y-2">
+      @for (n of filteredItems(); track n.id) {
+        <button type="button"
+                class="w-full text-left surface p-4 border transition hover:translate-y-[-1px]"
+                [ngClass]="toneClasses(n.severity)"
+                [class.opacity-60]="n.status === 'Dismissed'"
+                (click)="open(n)">
+          <div class="flex items-start gap-3">
+            <i class="pi shrink-0 mt-0.5" [ngClass]="severityIcon(n.severity)"></i>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                @if (isUnread(n.status)) {
+                  <span class="w-2 h-2 rounded-full bg-violet-400 shrink-0"></span>
+                }
+                <span class="font-medium truncate">{{ n.title }}</span>
+                <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
+                  {{ n.type }}
+                </span>
+              </div>
+              <div class="text-sm text-slate-300 mt-1">{{ n.message }}</div>
+              <div class="text-xs text-slate-500 mt-2">{{ n.createdAt | date:'MMM d, y, HH:mm' }}</div>
+            </div>
+            <div class="flex gap-1 shrink-0">
+              @if (n.status !== 'Dismissed') {
+                <button type="button" class="btn btn-ghost !p-2" title="Dismiss" (click)="dismiss(n, $event)">
+                  <i class="pi pi-times"></i>
+                </button>
+              } @else {
+                <button type="button" class="btn btn-ghost !p-2" title="Delete" (click)="remove(n, $event)">
+                  <i class="pi pi-trash"></i>
+                </button>
+              }
+            </div>
+          </div>
+        </button>
+      }
+    </div>
+  }
+</div>
