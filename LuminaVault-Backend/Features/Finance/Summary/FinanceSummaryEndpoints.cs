@@ -1,6 +1,7 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
 using Microsoft.EntityFrameworkCore;
+using static LuminaVault.Endpoints.FinanceAggregations;
 using static LuminaVault.Endpoints.FinanceHelpers;
 using static LuminaVault.Endpoints.FinanceMappers;
 
@@ -8,6 +9,7 @@ namespace LuminaVault.Endpoints;
 
 /// Aggregate read-only endpoints: dashboard `/summary` and the deeper `/statistics` view.
 /// These pull from every other finance entity, so they live separately from the per-resource files.
+/// Aggregation math lives in FinanceAggregations; this file is just data loading + DTO shaping.
 internal static class FinanceSummaryEndpoints
 {
     public static void Map(IEndpointRouteBuilder app)
@@ -19,23 +21,31 @@ internal static class FinanceSummaryEndpoints
             var now = DateTime.UtcNow.Date;
             var monthStart = new DateTime(now.Year, now.Month, 1);
             var nextMonth = monthStart.AddMonths(1);
+            var seriesStart = monthStart.AddMonths(-5);
             var rates = await CurrencyConversion.LoadRates(db);
             var rateHistory = await CurrencyConversion.LoadRateHistory(db);
             var activeAccounts = await db.FinanceAccounts.Where(a => !a.IsArchived).ToListAsync();
-            var rawMonthlyTransactions = await db.FinanceTransactions
+
+            // Pull a 6-month sliding window once so the dashboard's chart series and the
+            // current-month totals can both feed off the same query result.
+            var windowedTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.Splits)
-                .Where(t => t.OccurredOn >= monthStart && t.OccurredOn < nextMonth)
+                .Where(t => t.OccurredOn >= seriesStart && t.OccurredOn < nextMonth)
                 .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
-            var monthlySummaryRows = await db.MonthlyAccountSummaries
+            var windowedSummaries = await db.MonthlyAccountSummaries
                 .Include(s => s.Account)
-                .Where(s => s.Month == monthStart)
+                .Where(s => s.Month >= seriesStart && s.Month < nextMonth)
                 .ToListAsync();
-            var currentSummaryKeys = monthlySummaryRows.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
-            var monthlyTransactions = rawMonthlyTransactions
-                .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, currentSummaryKeys))
+
+            var currentMonthSummaries = windowedSummaries.Where(s => s.Month == monthStart).ToList();
+            var currentMonthSummaryKeys = currentMonthSummaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+            var currentMonthTransactions = windowedTransactions
+                .Where(t => t.OccurredOn >= monthStart && t.OccurredOn < nextMonth)
+                .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, currentMonthSummaryKeys))
                 .ToList();
+
             var allRecentTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
@@ -50,21 +60,17 @@ internal static class FinanceSummaryEndpoints
             var inventoryValue = await db.Items
                 .Select(i => new { i.Value, i.Quantity })
                 .ToListAsync();
+            var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
 
-            var income = monthlyTransactions
-                .Where(t => t.Kind == FinanceTransactionKind.Income)
-                .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                + monthlySummaryRows.Sum(s => CurrencyConversion.ToBase(s.Income, s.Account?.Currency, s.Month, rateHistory));
-            var expenses = monthlyTransactions
-                .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                + monthlySummaryRows.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory));
+            var income = SumKindWithSummaries(currentMonthTransactions, FinanceTransactionKind.Income,
+                currentMonthSummaries, s => s.Income, rateHistory);
+            var expenses = SumKindWithSummaries(currentMonthTransactions, FinanceTransactionKind.Expense,
+                currentMonthSummaries, s => s.Expenses, rateHistory);
             var cashFlow = income - expenses;
             var recurringMonthly = activeSubscriptions.Sum(s =>
                 CurrencyConversion.ToBase(ToMonthlyAmount(s), s.Currency, rates));
             var accountNetWorth = activeAccounts.Sum(a => CurrencyConversion.ToBase(a.Balance, a.Currency, rates));
             var assetValue = inventoryValue.Sum(i => (i.Value ?? 0m) * i.Quantity);
-            var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
             var holdingsMarketValue = holdings.Sum(h =>
                 CurrencyConversion.ToBase(
                     h.LastPrice.HasValue ? h.Quantity * h.LastPrice.Value : h.Quantity * h.AverageCost,
@@ -73,63 +79,24 @@ internal static class FinanceSummaryEndpoints
             var holdingsCostBasis = holdings.Sum(h =>
                 CurrencyConversion.ToBase(h.Quantity * h.AverageCost, h.Account?.Currency, rates));
 
-            var series = new List<object>();
-            for (var i = 5; i >= 0; i--)
-            {
-                var start = monthStart.AddMonths(-i);
-                var end = start.AddMonths(1);
-                var tx = await db.FinanceTransactions
-                    .Include(t => t.Account)
-                    .Where(t => t.OccurredOn >= start && t.OccurredOn < end)
-                    .Where(t => t.Status != FinanceTransactionStatus.Pending)
-                    .ToListAsync();
-                var summaryRows = await db.MonthlyAccountSummaries
-                    .Include(s => s.Account)
-                    .Where(s => s.Month == start)
-                    .ToListAsync();
-                var summaryKeys = summaryRows.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
-                var unsummarizedTx = tx
-                    .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
-                    .ToList();
-                var inMonth = unsummarizedTx
-                    .Where(t => t.Kind == FinanceTransactionKind.Income)
-                    .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                    + summaryRows.Sum(s => CurrencyConversion.ToBase(s.Income, s.Account?.Currency, s.Month, rateHistory));
-                var outMonth = unsummarizedTx
-                    .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                    .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                    + summaryRows.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory));
-                series.Add(new
+            var series = MonthlyIncomeExpenseSeries(monthStart, 6, windowedTransactions, windowedSummaries, rateHistory)
+                .Select(p => new
                 {
-                    month = start.ToString("MMM yyyy"),
-                    income = inMonth,
-                    expenses = outMonth,
-                    net = inMonth - outMonth
+                    month = p.Month.ToString("MMM yyyy"),
+                    income = p.Income,
+                    expenses = p.Expenses,
+                    net = p.Income - p.Expenses,
                 });
-            }
 
-            var categories = monthlyTransactions
-                .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
-                {
-                    category = x.Category,
-                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
-                }))
-                .Concat(monthlySummaryRows
-                    .Where(s => s.Expenses > 0)
-                    .GroupBy(_ => "Bank summaries")
-                    .Select(g => new { category = g.Key, amount = g.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory)) }))
-                .GroupBy(x => x.category)
-                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount) })
-                .OrderByDescending(x => x.amount)
+            var categories = CategoryBreakdown(currentMonthTransactions, FinanceTransactionKind.Expense,
+                    currentMonthSummaries, s => s.Expenses, rateHistory)
                 .Take(8)
-                .ToList();
+                .Select(c => new { category = c.Category, amount = c.Amount });
 
             var accountMix = activeAccounts
                 .GroupBy(a => a.Type)
                 .Select(g => new { type = g.Key.ToString(), balance = g.Sum(a => CurrencyConversion.ToBase(a.Balance, a.Currency, rates)) })
-                .OrderByDescending(x => x.balance)
-                .ToList();
+                .OrderByDescending(x => x.balance);
 
             var upcoming = activeSubscriptions
                 .Where(s => s.NextDueOn >= now && s.NextDueOn <= now.AddDays(30))
@@ -235,10 +202,7 @@ internal static class FinanceSummaryEndpoints
                 .GroupBy(s => string.IsNullOrWhiteSpace(s.Category) ? "Uncategorized" : s.Category)
                 .Select(g =>
                 {
-                    var monthly = g.Sum(s => CurrencyConversion.ToBase(
-                        ToMonthlyAmount(s),
-                        s.Currency,
-                        rates));
+                    var monthly = g.Sum(s => CurrencyConversion.ToBase(ToMonthlyAmount(s), s.Currency, rates));
                     return new
                     {
                         category = g.Key,
@@ -250,100 +214,36 @@ internal static class FinanceSummaryEndpoints
                 .OrderByDescending(x => x.monthlyAmount)
                 .ToList();
 
-            var transactionExpenseBreakdown = unsummarizedTransactions
-                .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
-                {
-                    category = x.Category,
-                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
-                }))
-                .GroupBy(x => x.category)
-                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount), count = g.Count(), average = Math.Round(g.Average(x => x.amount), 2) })
-                .Concat(monthlySummaries
-                    .Where(s => s.Expenses > 0)
-                    .GroupBy(_ => "Bank summaries")
-                    .Select(g => new
-                    {
-                        category = g.Key,
-                        amount = g.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory)),
-                        count = g.Count(),
-                        average = Math.Round(g.Average(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory)), 2)
-                    }))
-                .GroupBy(x => x.category)
-                .Select(g => new
-                {
-                    category = g.Key,
-                    amount = g.Sum(x => x.amount),
-                    count = g.Sum(x => x.count),
-                    average = g.Sum(x => x.count) <= 0 ? 0 : Math.Round(g.Sum(x => x.amount) / g.Sum(x => x.count), 2)
-                })
-                .OrderByDescending(x => x.amount)
-                .ToList();
+            var transactionExpenseBreakdown = CategoryStats(unsummarizedTransactions, FinanceTransactionKind.Expense,
+                monthlySummaries, s => s.Expenses, rateHistory);
+            var transactionIncomeBreakdown = CategoryStats(unsummarizedTransactions, FinanceTransactionKind.Income,
+                monthlySummaries, s => s.Income, rateHistory);
 
-            var transactionIncomeBreakdown = unsummarizedTransactions
-                .Where(t => t.Kind == FinanceTransactionKind.Income)
-                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
+            var monthlySeries = MonthlyIncomeExpenseSeries(currentMonth, 12, transactions, monthlySummaries, rateHistory)
+                .Select(p =>
                 {
-                    category = x.Category,
-                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
-                }))
-                .GroupBy(x => x.category)
-                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount), count = g.Count(), average = Math.Round(g.Average(x => x.amount), 2) })
-                .Concat(monthlySummaries
-                    .Where(s => s.Income > 0)
-                    .GroupBy(_ => "Bank summaries")
-                    .Select(g => new
+                    var monthSummaries = monthlySummaries.Where(s => s.Month == p.Month).ToList();
+                    var monthSummaryKeys = monthSummaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
+                    var monthTransactions = transactions
+                        .Where(t => t.OccurredOn >= p.Month && t.OccurredOn < p.Month.AddMonths(1))
+                        .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, monthSummaryKeys))
+                        .ToList();
+                    return new
                     {
-                        category = g.Key,
-                        amount = g.Sum(s => CurrencyConversion.ToBase(s.Income, s.Account?.Currency, s.Month, rateHistory)),
-                        count = g.Count(),
-                        average = Math.Round(g.Average(s => CurrencyConversion.ToBase(s.Income, s.Account?.Currency, s.Month, rateHistory)), 2)
-                    }))
-                .GroupBy(x => x.category)
-                .Select(g => new
-                {
-                    category = g.Key,
-                    amount = g.Sum(x => x.amount),
-                    count = g.Sum(x => x.count),
-                    average = g.Sum(x => x.count) <= 0 ? 0 : Math.Round(g.Sum(x => x.amount) / g.Sum(x => x.count), 2)
+                        month = p.Month.ToString("MMM yyyy"),
+                        income = p.Income,
+                        expenses = p.Expenses,
+                        net = p.Income - p.Expenses,
+                        summaryCount = monthSummaries.Count,
+                        transactionCount = monthTransactions.Count,
+                    };
                 })
-                .OrderByDescending(x => x.amount)
                 .ToList();
-
-            var monthlySeries = new List<object>();
-            for (var i = 11; i >= 0; i--)
-            {
-                var start = currentMonth.AddMonths(-i);
-                var end = start.AddMonths(1);
-                var monthSummaries = monthlySummaries.Where(s => s.Month == start).ToList();
-                var monthKeys = monthSummaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
-                var monthTransactions = transactions
-                    .Where(t => t.OccurredOn >= start && t.OccurredOn < end)
-                    .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, monthKeys))
-                    .ToList();
-                var income = monthTransactions
-                    .Where(t => t.Kind == FinanceTransactionKind.Income)
-                    .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                    + monthSummaries.Sum(s => CurrencyConversion.ToBase(s.Income, s.Account?.Currency, s.Month, rateHistory));
-                var expenses = monthTransactions
-                    .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                    .Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory))
-                    + monthSummaries.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory));
-                monthlySeries.Add(new
-                {
-                    month = start.ToString("MMM yyyy"),
-                    income,
-                    expenses,
-                    net = income - expenses,
-                    summaryCount = monthSummaries.Count,
-                    transactionCount = monthTransactions.Count
-                });
-            }
 
             var totalAssetValue = assetCategoryBreakdown.Sum(x => x.amount);
             var totalMonthlySubscriptions = subscriptionCategoryBreakdown.Sum(x => x.monthlyAmount);
-            var totalTransactionExpenses = transactionExpenseBreakdown.Sum(x => x.amount);
-            var totalTransactionIncome = transactionIncomeBreakdown.Sum(x => x.amount);
+            var totalTransactionExpenses = transactionExpenseBreakdown.Sum(x => x.Amount);
+            var totalTransactionIncome = transactionIncomeBreakdown.Sum(x => x.Amount);
             var accountNetWorth = accounts.Sum(a => CurrencyConversion.ToBase(a.Balance, a.Currency, rates));
 
             return Results.Ok(new
@@ -375,8 +275,20 @@ internal static class FinanceSummaryEndpoints
                 },
                 assetCategoryBreakdown,
                 subscriptionCategoryBreakdown,
-                transactionExpenseBreakdown,
-                transactionIncomeBreakdown,
+                transactionExpenseBreakdown = transactionExpenseBreakdown.Select(c => new
+                {
+                    category = c.Category,
+                    amount = c.Amount,
+                    count = c.Count,
+                    average = c.Average,
+                }),
+                transactionIncomeBreakdown = transactionIncomeBreakdown.Select(c => new
+                {
+                    category = c.Category,
+                    amount = c.Amount,
+                    count = c.Count,
+                    average = c.Average,
+                }),
                 monthlySeries,
                 accountBalances = accounts.Select(a => new
                 {
