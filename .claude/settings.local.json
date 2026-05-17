@@ -29,7 +29,8 @@
       "Bash(chmod +x .githooks/pre-commit)",
       "Bash(npm run *)",
       "Bash(npx --no-install ng build --configuration production)",
-      "Bash(npx --no-install vitest run finance-math)"
+      "Bash(npx --no-install vitest run finance-math)",
+      "Bash(npx --no-install vitest run)"
     ]
   }
 }

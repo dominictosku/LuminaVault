@@ -70,7 +70,7 @@
 - **Net worth history** — daily snapshots of (cash + holdings market value + inventory), rendered as a line chart on the dashboard with delta vs. earliest point; manual "snapshot now" button seeds the curve before the first cron run
 - **Cash-flow forecast** — replays scheduled subscription dues and pending transactions forward 14/30/60/90/180 days, plotting projected liquid cash as a line chart with the lowest-balance date called out and a warning banner if the projection dips below zero
 - **Notifications & alerts** — in-app inbox with unread-count badge in the sidebar; a background scanner fires alerts for subscriptions due soon, budget overruns, and forecast dips below zero. Dedup by stable `Source` key means re-scans upsert instead of spam; dismissed alerts resurface if the underlying condition still holds
-- **Statistics** — charts and breakdowns for spend, income and category trends
+- **Statistics** — charts and breakdowns for spend, income and category trends, plus a **money-flow Sankey** (income categories → Net → expense categories) over the last 12 months with a Surplus/Shortfall balance node and hover highlighting
 - **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import); splits ride along inline in the Transactions sheet as `Category=Amount[|Notes];…`
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
 

@@ -2,19 +2,25 @@ import { CurrencyPipe, DatePipe, DecimalPipe, NgTemplateOutlet } from '@angular/
 import { Component, computed, inject, signal } from '@angular/core';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { FinanceStatistics } from '../../core/models';
+import { FinanceSankeyComponent, FinanceSankeyRow } from '../../shared/sankey/finance-sankey';
 
 type AmountRow = { category: string; amount: number; count: number; average?: number };
 type SubscriptionRow = { category: string; monthlyAmount: number; annualAmount: number; count: number };
 
 @Component({
   selector: 'app-statistics',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, NgTemplateOutlet],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, NgTemplateOutlet, FinanceSankeyComponent],
   templateUrl: './statistics.html',
   styleUrl: './statistics.scss'
 })
 export class StatisticsComponent {
   private api = inject(FinanceApi);
   stats = signal<FinanceStatistics | null>(null);
+
+  sankeyIncome = computed<FinanceSankeyRow[]>(() =>
+    (this.stats()?.transactionIncomeBreakdown ?? []).map(r => ({ category: r.category, amount: r.amount })));
+  sankeyExpenses = computed<FinanceSankeyRow[]>(() =>
+    (this.stats()?.transactionExpenseBreakdown ?? []).map(r => ({ category: r.category, amount: r.amount })));
 
   maxFlow = computed(() => Math.max(
     1,
