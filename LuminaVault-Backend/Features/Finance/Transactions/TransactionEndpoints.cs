@@ -135,7 +135,84 @@ internal static class TransactionEndpoints
 
             return Results.NoContent();
         });
+
+        // Bulk operations over a selected set of transactions. Single endpoint with a discriminator
+        // keeps the contract tight; the alternative (one route per operation) duplicates the
+        // "load by ids → mutate → save+recalc" plumbing three times. Recalculates balances and
+        // each touched account's holdings exactly once, regardless of how many rows changed.
+        transactions.MapPost("/bulk", async ([FromBody] BulkTransactionInput input, AppDbContext db) =>
+        {
+            if (input.Ids is null || input.Ids.Length == 0)
+                return Problem.BadRequest("No transactions selected.");
+            if (input.Ids.Length > 500)
+                return Problem.BadRequest("Bulk operations are capped at 500 rows per request.");
+
+            var rows = await db.FinanceTransactions
+                .Where(t => input.Ids.Contains(t.Id))
+                .ToListAsync();
+            if (rows.Count == 0) return Results.Ok(new { matched = 0, updated = 0 });
+
+            // Accounts whose holdings need recompute. Include the *previous* account on any
+            // row whose account would change (currently none of the supported ops do this,
+            // but the set is the right unit to track if we add `set-account` later).
+            var touchedAccounts = new HashSet<int>(rows.Select(r => r.AccountId));
+
+            switch (input.Operation)
+            {
+                case "delete":
+                    db.FinanceTransactions.RemoveRange(rows);
+                    break;
+
+                case "set-category":
+                    {
+                        var category = string.IsNullOrWhiteSpace(input.Category) ? null : input.Category.Trim();
+                        if (category is null) return Problem.BadRequest("Category is required.");
+                        foreach (var t in rows)
+                        {
+                            t.Category = category;
+                            t.UpdatedAt = DateTime.UtcNow;
+                        }
+                        break;
+                    }
+
+                case "set-status":
+                    {
+                        if (input.Status is null) return Problem.BadRequest("Status is required.");
+                        foreach (var t in rows)
+                        {
+                            t.Status = input.Status.Value;
+                            t.UpdatedAt = DateTime.UtcNow;
+                        }
+                        break;
+                    }
+
+                default:
+                    return Problem.BadRequest($"Unknown operation '{input.Operation}'. Expected delete, set-category, or set-status.");
+            }
+
+            // Status/category changes don't affect cash balances or holdings, but delete
+            // does — and the helper is cheap enough that calling it unconditionally keeps
+            // the code simpler than splitting paths. RecalculateBalances walks all accounts;
+            // we still recompute holdings per touched account for delete-of-trades.
+            await using var tx = await db.Database.BeginTransactionAsync();
+            await db.SaveChangesAsync();
+            if (input.Operation == "delete")
+            {
+                foreach (var accountId in touchedAccounts)
+                    await RecalculateHoldings(db, accountId);
+                await RecalculateBalances(db);
+            }
+            await tx.CommitAsync();
+
+            return Results.Ok(new { matched = rows.Count, updated = rows.Count });
+        });
     }
+
+    public record BulkTransactionInput(
+        int[] Ids,
+        string Operation,
+        string? Category,
+        FinanceTransactionStatus? Status);
 
     public static void ApplyTransaction(FinanceTransaction transaction, FinanceTransactionInput input)
     {

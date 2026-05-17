@@ -15,6 +15,7 @@ import {
   FinanceTransactionInput,
   FinanceTransactionKind,
   FinanceTransactionPage,
+  FinanceTransactionStatus,
   Holding,
   HoldingAnalytics,
   CashFlowForecast,
@@ -238,6 +239,20 @@ export class FinanceApi {
 
   deleteFinanceTransaction(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/transactions/${id}`);
+  }
+
+  /// Bulk apply one operation to many transactions in a single request. Server
+  /// recalculates balances + holdings once after the batch, not per-row.
+  bulkFinanceTransactions(input: {
+    ids: number[];
+    operation: 'delete' | 'set-category' | 'set-status';
+    category?: string | null;
+    status?: FinanceTransactionStatus | null;
+  }) {
+    return this.http.post<{ matched: number; updated: number }>(
+      `${API_BASE}/api/finance/transactions/bulk`,
+      input,
+    );
   }
 
   listMonthlySummaries(opts: { accountId?: number; from?: string; to?: string } = {}) {

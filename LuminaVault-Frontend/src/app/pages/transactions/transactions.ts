@@ -1,4 +1,4 @@
-import { CurrencyPipe, DatePipe, NgClass } from '@angular/common';
+import { CurrencyPipe, DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -23,6 +23,7 @@ import {
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { tradeAmount } from '../../core/finance-math';
+import { parseReceipt, recognizeReceipt } from '../../core/receipt-ocr';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
@@ -37,7 +38,7 @@ const DEFAULT_FILTERS: TransactionFilters = { q: '', account: null, kind: null, 
 
 @Component({
   selector: 'app-transactions',
-  imports: [FormsModule, CurrencyPipe, DatePipe, NgClass],
+  imports: [FormsModule, CurrencyPipe, DatePipe, DecimalPipe, NgClass],
   templateUrl: './transactions.html',
   styleUrl: './transactions.scss',
   providers: [FilterStateController],
@@ -71,6 +72,18 @@ export class TransactionsComponent {
   tagsRaw = '';
   private debounce: any = null;
   presetName = '';
+
+  /// IDs of rows the user has checkboxed for a bulk operation. Reset when filters
+  /// change (via fetch()) so a stale selection from a hidden row can't be acted on.
+  selectedIds = signal<Set<number>>(new Set());
+  bulkCategory = '';
+  bulkStatus: FinanceTransactionStatus | '' = '';
+  bulkApplying = signal(false);
+
+  /// OCR state for the "Scan receipt" button. `ocrProgress` is the Tesseract.js
+  /// recognition fraction (0–1); the model + WASM (~3 MB) loads on first use.
+  ocrRunning = signal(false);
+  ocrProgress = signal(0);
 
   kinds = FINANCE_TRANSACTION_KINDS;
   statuses = FINANCE_TRANSACTION_STATUSES;
@@ -160,6 +173,9 @@ export class TransactionsComponent {
   fetch() {
     this.loading.set(true);
     this.syncFiltersToUrl();
+    // Clear bulk selection on refetch — kept selections from a previous filter
+    // would let the user act on rows they can no longer see.
+    this.clearSelection();
     this.api.listFinanceTransactions({
       q: this.query.trim() || undefined,
       accountId: this.accountFilter || undefined,
@@ -400,6 +416,101 @@ export class TransactionsComponent {
     });
   }
 
+  // ---- Bulk selection + actions ----
+
+  isSelected(id: number) { return this.selectedIds().has(id); }
+  selectedCount = computed(() => this.selectedIds().size);
+
+  allVisibleSelected = computed(() => {
+    const rows = this.transactions();
+    if (rows.length === 0) return false;
+    const sel = this.selectedIds();
+    return rows.every(r => sel.has(r.id));
+  });
+
+  toggleRow(id: number) {
+    this.selectedIds.update(set => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  toggleAllVisible() {
+    const rows = this.transactions();
+    const allSelected = this.allVisibleSelected();
+    this.selectedIds.update(set => {
+      const next = new Set(set);
+      for (const r of rows) {
+        if (allSelected) next.delete(r.id); else next.add(r.id);
+      }
+      return next;
+    });
+  }
+
+  clearSelection() { this.selectedIds.set(new Set()); }
+
+  async bulkDelete() {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0) return;
+    const confirmed = await this.confirmDialog.confirm({
+      title: `Delete ${ids.length} transaction${ids.length === 1 ? '' : 's'}?`,
+      message: 'The selected rows will be removed and account balances will recalculate.',
+      confirmText: 'Delete',
+    });
+    if (!confirmed) return;
+    this.bulkApplying.set(true);
+    this.api.bulkFinanceTransactions({ ids, operation: 'delete' }).subscribe({
+      next: r => {
+        this.bulkApplying.set(false);
+        this.toast.success(`Deleted ${r.updated} transaction${r.updated === 1 ? '' : 's'}.`);
+        this.fetch();
+      },
+      error: e => {
+        this.bulkApplying.set(false);
+        this.error.set(e?.error?.error ?? 'Bulk delete failed.');
+      },
+    });
+  }
+
+  bulkApplyCategory() {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0 || !this.bulkCategory.trim()) return;
+    this.bulkApplying.set(true);
+    const category = this.bulkCategory.trim();
+    this.api.bulkFinanceTransactions({ ids, operation: 'set-category', category }).subscribe({
+      next: r => {
+        this.bulkApplying.set(false);
+        this.toast.success(`Re-categorized ${r.updated} transaction${r.updated === 1 ? '' : 's'} → ${category}.`);
+        this.bulkCategory = '';
+        this.fetch();
+      },
+      error: e => {
+        this.bulkApplying.set(false);
+        this.error.set(e?.error?.error ?? 'Bulk category change failed.');
+      },
+    });
+  }
+
+  bulkApplyStatus() {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0 || !this.bulkStatus) return;
+    this.bulkApplying.set(true);
+    const status = this.bulkStatus as FinanceTransactionStatus;
+    this.api.bulkFinanceTransactions({ ids, operation: 'set-status', status }).subscribe({
+      next: r => {
+        this.bulkApplying.set(false);
+        this.toast.success(`Marked ${r.updated} transaction${r.updated === 1 ? '' : 's'} ${status}.`);
+        this.bulkStatus = '';
+        this.fetch();
+      },
+      error: e => {
+        this.bulkApplying.set(false);
+        this.error.set(e?.error?.error ?? 'Bulk status change failed.');
+      },
+    });
+  }
+
   reset() {
     this.editingId.set(null);
     this.error.set(null);
@@ -409,6 +520,40 @@ export class TransactionsComponent {
     this.splits.set([]);
     if (this.accounts()[0]) this.model.accountId = this.accounts()[0].id;
     if (this.financeCategories()[0]) this.model.category = this.financeCategories()[0].name;
+  }
+
+  /// OCR a receipt photo and pre-fill the form with the parser's best guesses.
+  /// Runs entirely in the browser via tesseract.js — no upload, no external service.
+  /// We only fill fields the user hasn't touched yet, so re-scanning a second receipt
+  /// doesn't silently overwrite the amount they just typed.
+  async scanReceipt(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) return;
+    input.value = '';
+    this.ocrRunning.set(true);
+    this.ocrProgress.set(0);
+    try {
+      const text = await recognizeReceipt(file, p => this.ocrProgress.set(p));
+      const parsed = parseReceipt(text);
+      if (!parsed.payee && parsed.amount == null && !parsed.date) {
+        this.toast.warning('Could not read this receipt. Try a clearer photo.');
+        return;
+      }
+      if (parsed.payee && !this.model.payee.trim()) this.model.payee = parsed.payee;
+      if (parsed.amount != null && !this.model.amount) this.model.amount = parsed.amount;
+      if (parsed.date) this.dateValue = parsed.date;
+      const filled = [
+        parsed.payee && 'payee',
+        parsed.amount != null && 'amount',
+        parsed.date && 'date',
+      ].filter(Boolean) as string[];
+      this.toast.success(`Receipt scanned — filled ${filled.join(', ')}. Please verify.`);
+    } catch (e: any) {
+      this.toast.error(e?.message ?? 'Could not process this image.');
+    } finally {
+      this.ocrRunning.set(false);
+      this.ocrProgress.set(0);
+    }
   }
 
   sign(kind: FinanceTransactionKind) {

@@ -56,6 +56,43 @@
             </div>
           </div>
 
+          @if (selectedCount() > 0) {
+            <div class="surface mb-3 px-4 py-3 flex flex-wrap items-center gap-3 border border-sky-500/40 bg-sky-500/5">
+              <span class="text-sm font-medium text-sky-100">
+                {{ selectedCount() }} selected
+              </span>
+              <button type="button" class="btn btn-ghost text-xs" (click)="clearSelection()">
+                <i class="pi pi-times"></i> Clear
+              </button>
+              <span class="hidden sm:inline-block h-5 w-px bg-white/10"></span>
+              <div class="flex items-center gap-2">
+                <select class="select py-1 text-sm" [(ngModel)]="bulkCategory" name="bulkCat" [disabled]="bulkApplying()">
+                  <option value="">Set category…</option>
+                  @for (c of categories(); track c) { <option [value]="c">{{ c }}</option> }
+                </select>
+                <button type="button" class="btn btn-ghost text-xs" (click)="bulkApplyCategory()"
+                        [disabled]="!bulkCategory || bulkApplying()">
+                  Apply
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <select class="select py-1 text-sm" [(ngModel)]="bulkStatus" name="bulkStatus" [disabled]="bulkApplying()">
+                  <option value="">Set status…</option>
+                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+                </select>
+                <button type="button" class="btn btn-ghost text-xs" (click)="bulkApplyStatus()"
+                        [disabled]="!bulkStatus || bulkApplying()">
+                  Apply
+                </button>
+              </div>
+              <span class="hidden sm:inline-block h-5 w-px bg-white/10"></span>
+              <button type="button" class="btn btn-ghost text-xs text-red-200 hover:text-red-100"
+                      (click)="bulkDelete()" [disabled]="bulkApplying()">
+                <i class="pi pi-trash"></i> Delete
+              </button>
+            </div>
+          }
+
           @if (loading()) {
         <div class="space-y-2">
           @for (_ of [1,2,3,4,5,6]; track _) { <div class="surface h-16 animate-pulse"></div> }
@@ -78,13 +115,23 @@
         </div>
       } @else {
         <div class="surface overflow-hidden">
-          <div class="hidden md:grid grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-2 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+          <div class="hidden md:grid grid-cols-[36px_110px_1fr_150px_130px] gap-3 px-4 py-2 text-xs uppercase tracking-wide text-slate-500 border-b border-slate-800">
+            <div>
+              <input type="checkbox" class="accent-sky-400 cursor-pointer"
+                     [checked]="allVisibleSelected()" (change)="toggleAllVisible()"
+                     aria-label="Select all visible transactions" />
+            </div>
             <div>Date</div><div>Details</div><div>Account</div><div class="text-right">Amount</div>
           </div>
           <div class="divide-y divide-slate-800">
             @for (t of filteredTransactions(); track t.id) {
-              <button type="button" class="w-full text-left grid grid-cols-1 md:grid-cols-[110px_1fr_150px_130px] gap-3 px-4 py-3 hover:bg-slate-900/70 transition"
-                      (click)="editTransaction(t)">
+              <div class="w-full grid grid-cols-[36px_1fr] md:grid-cols-[36px_110px_1fr_150px_130px] gap-3 px-4 py-3 hover:bg-slate-900/70 transition cursor-pointer"
+                   (click)="editTransaction(t)" role="button" tabindex="0">
+                <div class="flex items-center" (click)="$event.stopPropagation()">
+                  <input type="checkbox" class="accent-sky-400 cursor-pointer"
+                         [checked]="isSelected(t.id)" (change)="toggleRow(t.id)"
+                         attr.aria-label="Select transaction {{ t.payee }}" />
+                </div>
                 <div class="text-sm text-slate-400">{{ t.occurredOn | date:'MMM d, y' }}</div>
                 <div class="min-w-0">
                   <div class="font-medium truncate flex items-center gap-2">
@@ -117,7 +164,7 @@
                 <div class="text-right font-medium" [ngClass]="amountToneClass(t.kind)">
                   {{ sign(t.kind) }}{{ t.amount | currency:'CHF':'symbol-narrow' }}
                 </div>
-              </button>
+              </div>
             }
           </div>
           @if (nextCursor()) {
@@ -133,10 +180,28 @@
     </section>
 
     <aside class="surface p-5 h-fit">
-      <h2 class="font-medium flex items-center gap-2 mb-4">
-        <i class="pi pi-pen-to-square text-sky-300"></i>
-        {{ editingId() ? 'Edit transaction' : 'New transaction' }}
-      </h2>
+      <div class="flex items-center justify-between mb-4 gap-3">
+        <h2 class="font-medium flex items-center gap-2">
+          <i class="pi pi-pen-to-square text-sky-300"></i>
+          {{ editingId() ? 'Edit transaction' : 'New transaction' }}
+        </h2>
+        @if (!editingId()) {
+          <label class="btn btn-ghost text-xs cursor-pointer"
+                 [class.opacity-60]="ocrRunning()"
+                 [class.pointer-events-none]="ocrRunning()"
+                 title="Scan a receipt photo to pre-fill the form. OCR runs entirely in your browser.">
+            @if (ocrRunning()) {
+              <i class="pi pi-spin pi-spinner"></i>
+              <span>Scanning… {{ (ocrProgress() * 100) | number:'1.0-0' }}%</span>
+            } @else {
+              <i class="pi pi-camera"></i>
+              <span>Scan receipt</span>
+            }
+            <input #receiptFile type="file" accept="image/*" class="hidden"
+                   (change)="scanReceipt(receiptFile)" />
+          </label>
+        }
+      </div>
 
       @if (accounts().length === 0) {
         <div class="text-sm text-slate-400 mb-4">

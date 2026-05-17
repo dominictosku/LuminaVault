@@ -704,4 +704,128 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         Assert.Contains(refreshed.Events, e => e.Source == "Pending");
         Assert.Contains(refreshed.Events, e => e.Source == "Subscription");
     }
+
+    private record TxRowDto(int Id, string Category, string Status);
+
+    [Fact]
+    public async Task Bulk_set_category_applies_to_all_selected_rows()
+    {
+        var account = await CreateAccount(balance: 1000m);
+        var ids = await Task.WhenAll(
+            CreateExpense(account.Id, "Coffee Co", "Imported", 5m),
+            CreateExpense(account.Id, "Grocery Mart", "Imported", 42m),
+            CreateExpense(account.Id, "Petrol Stop", "General", 60m));
+
+        var bulk = await _api.PostAsync("/api/finance/transactions/bulk", new
+        {
+            ids,
+            operation = "set-category",
+            category = "Recategorized",
+            status = (string?)null,
+        });
+        bulk.EnsureSuccessStatusCode();
+
+        var page = await _api.GetAsync<TransactionPageOfRows>("/api/finance/transactions/?pageSize=20");
+        var touched = page!.Items.Where(t => ids.Contains(t.Id)).ToList();
+        Assert.Equal(3, touched.Count);
+        Assert.All(touched, t => Assert.Equal("Recategorized", t.Category));
+    }
+
+    [Fact]
+    public async Task Bulk_set_status_applies_to_all_selected_rows()
+    {
+        var account = await CreateAccount(balance: 1000m);
+        var ids = await Task.WhenAll(
+            CreateExpense(account.Id, "Pending-1", "General", 10m, "Pending"),
+            CreateExpense(account.Id, "Pending-2", "General", 20m, "Pending"));
+
+        var bulk = await _api.PostAsync("/api/finance/transactions/bulk", new
+        {
+            ids,
+            operation = "set-status",
+            category = (string?)null,
+            status = "Reconciled",
+        });
+        bulk.EnsureSuccessStatusCode();
+
+        var page = await _api.GetAsync<TransactionPageOfRows>("/api/finance/transactions/?pageSize=20");
+        var touched = page!.Items.Where(t => ids.Contains(t.Id)).ToList();
+        Assert.Equal(2, touched.Count);
+        Assert.All(touched, t => Assert.Equal("Reconciled", t.Status));
+    }
+
+    [Fact]
+    public async Task Bulk_delete_removes_rows_and_recomputes_balance()
+    {
+        var account = await CreateAccount(balance: 1000m);
+        var ids = await Task.WhenAll(
+            CreateExpense(account.Id, "Tx-A", "General", 50m),
+            CreateExpense(account.Id, "Tx-B", "General", 75m));
+
+        var bulk = await _api.PostAsync("/api/finance/transactions/bulk", new
+        {
+            ids,
+            operation = "delete",
+            category = (string?)null,
+            status = (string?)null,
+        });
+        bulk.EnsureSuccessStatusCode();
+
+        // Both rows gone from the list.
+        var page = await _api.GetAsync<TransactionPageOfRows>("/api/finance/transactions/?pageSize=20");
+        Assert.DoesNotContain(page!.Items, t => ids.Contains(t.Id));
+
+        // Account balance is back to the starting balance because the two expenses
+        // (-50 and -75) were removed and RecalculateBalances was rerun.
+        var accounts = await _api.GetAsync<AccountDto[]>("/api/finance/accounts/");
+        Assert.Equal(1000m, accounts!.Single(a => a.Id == account.Id).Balance);
+    }
+
+    [Fact]
+    public async Task Bulk_with_empty_or_huge_id_set_is_rejected()
+    {
+        var empty = await _api.PostAsync("/api/finance/transactions/bulk", new
+        {
+            ids = Array.Empty<int>(),
+            operation = "delete",
+            category = (string?)null,
+            status = (string?)null,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+
+        var huge = await _api.PostAsync("/api/finance/transactions/bulk", new
+        {
+            ids = Enumerable.Range(1, 501).ToArray(),
+            operation = "delete",
+            category = (string?)null,
+            status = (string?)null,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, huge.StatusCode);
+    }
+
+    private record TransactionPageOfRows(TxRowDto[] Items, string? NextCursor);
+
+    private async Task<int> CreateExpense(int accountId, string payee, string category, decimal amount, string status = "Cleared")
+    {
+        var resp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId,
+            transferAccountId = (int?)null,
+            kind = "Expense",
+            status,
+            occurredOn = DateTime.UtcNow.Date,
+            payee,
+            category,
+            amount,
+            description = "",
+            notes = "",
+            tags = Array.Empty<string>(),
+            symbol = (string?)null,
+            quantity = (decimal?)null,
+            pricePerUnit = (decimal?)null,
+        });
+        resp.EnsureSuccessStatusCode();
+        var created = await resp.Content.ReadFromJsonAsync<TransactionDto>();
+        return created!.Id;
+    }
 }
