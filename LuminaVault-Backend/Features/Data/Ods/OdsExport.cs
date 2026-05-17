@@ -15,11 +15,31 @@ internal static class OdsExport
 
     public static OdsSheet Transactions(IEnumerable<FinanceTransaction> transactions) =>
         Sheet("Transactions",
-            new[] { Row("Date", "Kind", "Account", "Transfer account", "Payee", "Category", "Amount", "Status", "Description", "Notes", "Tags", "Symbol", "Quantity", "Price per unit") }
+            new[] { Row("Date", "Kind", "Account", "Transfer account", "Payee", "Category", "Amount", "Status", "Description", "Notes", "Tags", "Symbol", "Quantity", "Price per unit", "Splits") }
                 .Concat(transactions.Select(t => Row(
                     DateOnly.FromDateTime(t.OccurredOn), t.Kind, t.Account?.Name, t.TransferAccount?.Name,
                     t.Payee, t.Category, t.Amount, t.Status, t.Description, t.Notes, t.TagsCsv,
-                    t.Symbol, t.Quantity, t.PricePerUnit))));
+                    t.Symbol, t.Quantity, t.PricePerUnit, EncodeSplits(t.Splits)))));
+
+    /// Splits are serialised inline in the Transactions sheet as
+    /// `Category=Amount[|Notes];Category=Amount[|Notes];…`. Keeps the round-trip
+    /// in one sheet (no cross-sheet linkage needed when transactions don't dedupe).
+    static string EncodeSplits(IEnumerable<TransactionSplit>? splits)
+    {
+        if (splits is null) return "";
+        var parts = splits
+            .OrderBy(s => s.SortOrder).ThenBy(s => s.Id)
+            .Select(s =>
+            {
+                var category = (s.Category ?? "").Replace(";", ",").Replace("=", "-").Replace("|", "/");
+                var amount = s.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var notes = string.IsNullOrWhiteSpace(s.Notes)
+                    ? ""
+                    : "|" + s.Notes.Replace(";", ",").Replace("|", "/");
+                return $"{category}={amount}{notes}";
+            });
+        return string.Join(";", parts);
+    }
 
     public static OdsSheet Holdings(IEnumerable<Holding> holdings) =>
         Sheet("Holdings",
@@ -66,6 +86,15 @@ internal static class OdsExport
         Sheet("Finance categories",
             new[] { Row("Name", "Color", "Sort order") }
                 .Concat(categories.Select(c => Row(c.Name, c.Color, c.SortOrder))));
+
+    public static OdsSheet Loans(IEnumerable<Loan> loans) =>
+        Sheet("Loans",
+            new[] { Row("Name", "Lender", "Account", "Currency", "Principal", "Annual interest rate", "Term months", "Start date", "Extra monthly payment", "Status", "Notes") }
+                .Concat(loans.Select(l => Row(
+                    l.Name, l.Lender, l.Account?.Name, l.Currency, l.Principal,
+                    l.AnnualInterestRate, l.TermMonths,
+                    DateOnly.FromDateTime(l.StartDate), l.ExtraMonthlyPayment,
+                    l.Status, l.Notes))));
 
     public static OdsSheet Assets(IEnumerable<Item> assets) =>
         Sheet("Assets",

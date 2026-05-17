@@ -19,6 +19,7 @@ internal static class OdsTargets
         ["Finance categories"] = new[] { "Finance categories", "FinanceCategories", "Finanzkategorien" },
         ["Asset categories"] = new[] { "Asset categories", "AssetCategories", "Kategorien" },
         ["Assets"] = new[] { "Assets", "Inventar" },
+        ["Loans"] = new[] { "Loans", "Kredite", "Darlehen" },
     };
 
     /// Maps a normalised import target name (from the preview/mapped-import flow)
@@ -33,6 +34,7 @@ internal static class OdsTargets
         "financecategories" => "Finance categories",
         "assetcategories" => "Asset categories",
         "assets" => "Assets",
+        "loans" => "Loans",
         _ => target
     };
 
@@ -50,6 +52,7 @@ internal static class OdsTargets
         if (name.Contains("financecategor")) return "Finance categories";
         if (name.Contains("assetcategor") || name.Contains("kategorien")) return "Asset categories";
         if (name.Contains("asset") || name.Contains("inventar")) return "Assets";
+        if (name.Contains("loan") || name.Contains("kredit") || name.Contains("darlehen")) return "Loans";
         return "";
     }
 

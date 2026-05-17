@@ -80,26 +80,89 @@ internal static class OdsImport
                 financeCategories[financeCategory.Name.ToLowerInvariant()] = financeCategory;
             }
 
-            db.FinanceTransactions.Add(new FinanceTransaction
+            var kind = ParseEnum(Get(row, headers, "Kind"), FinanceTransactionKind.Expense);
+            var amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount")));
+            var transaction = new FinanceTransaction
             {
                 AccountId = account.Id,
                 TransferAccountId = transferAccount?.Id,
-                Kind = ParseEnum(Get(row, headers, "Kind"), FinanceTransactionKind.Expense),
+                Kind = kind,
                 Status = ParseEnum(Get(row, headers, "Status"), FinanceTransactionStatus.Cleared),
                 OccurredOn = ParseDate(Get(row, headers, "Date")) ?? DateTime.UtcNow.Date,
                 Payee = EmptyToNull(Get(row, headers, "Payee")) ?? "Imported transaction",
                 Category = category,
-                Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount"))),
+                Amount = amount,
                 Description = EmptyToNull(Get(row, headers, "Description")),
                 Notes = EmptyToNull(Get(row, headers, "Notes")),
                 TagsCsv = EmptyToNull(Get(row, headers, "Tags")) ?? "",
                 Symbol = EmptyToNull(Get(row, headers, "Symbol"))?.Trim().ToUpperInvariant(),
                 Quantity = ParseNullableDecimal(Get(row, headers, "Quantity")),
                 PricePerUnit = ParseNullableDecimal(Get(row, headers, "Price per unit", "PricePerUnit", "Unit price")),
-            });
+            };
+
+            var splits = ParseSplits(Get(row, headers, "Splits"));
+            if (splits.Count > 0)
+            {
+                if (kind is not (FinanceTransactionKind.Income or FinanceTransactionKind.Expense))
+                {
+                    warnings.Add($"Ignored splits on non-income/expense transaction: {transaction.Payee}");
+                }
+                else
+                {
+                    var splitSum = splits.Sum(s => s.Amount);
+                    if (Math.Abs(splitSum - amount) > 0.01m)
+                    {
+                        warnings.Add($"Splits for '{transaction.Payee}' sum to {splitSum:F2}, not {amount:F2} — kept as a single-category transaction.");
+                    }
+                    else
+                    {
+                        var i = 0;
+                        foreach (var split in splits)
+                        {
+                            split.SortOrder = i++;
+                            transaction.Splits.Add(split);
+                        }
+                    }
+                }
+            }
+
+            db.FinanceTransactions.Add(transaction);
             count++;
         }
         return count;
+    }
+
+    /// Inverse of OdsExport.EncodeSplits: parses `Category=Amount[|Notes];…` into split rows.
+    /// Bad rows are skipped silently — caller validates the sum against the transaction amount.
+    static List<TransactionSplit> ParseSplits(string? value)
+    {
+        var result = new List<TransactionSplit>();
+        if (string.IsNullOrWhiteSpace(value)) return result;
+        foreach (var raw in value.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var part = raw.Trim();
+            if (part.Length == 0) continue;
+            var eq = part.IndexOf('=');
+            if (eq < 1 || eq == part.Length - 1) continue;
+            var category = part[..eq].Trim();
+            var rest = part[(eq + 1)..].Trim();
+            string? notes = null;
+            var pipe = rest.IndexOf('|');
+            if (pipe >= 0)
+            {
+                notes = EmptyToNull(rest[(pipe + 1)..]);
+                rest = rest[..pipe].Trim();
+            }
+            var amount = ParseDecimal(rest);
+            if (string.IsNullOrWhiteSpace(category) || amount <= 0) continue;
+            result.Add(new TransactionSplit
+            {
+                Category = category,
+                Amount = amount,
+                Notes = notes,
+            });
+        }
+        return result;
     }
 
     public static async Task<int> Holdings(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
@@ -306,6 +369,53 @@ internal static class OdsImport
             };
             db.AssetCategories.Add(category);
             existing[category.Name.ToLowerInvariant()] = category;
+            count++;
+        }
+        return count;
+    }
+
+    public static async Task<int> Loans(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
+    {
+        if (!TryGetByAlias(tables, "Loans", out var rows)) return 0;
+
+        var (headers, data) = SplitHeader(rows);
+        var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var existing = await db.Loans.ToDictionaryAsync(l => l.Name.ToLowerInvariant());
+        var count = 0;
+        foreach (var row in data)
+        {
+            var name = Get(row, headers, "Name");
+            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
+
+            FinanceAccount? account = null;
+            var accountName = Get(row, headers, "Account");
+            if (!string.IsNullOrWhiteSpace(accountName))
+                accounts.TryGetValue(accountName.ToLowerInvariant(), out account);
+
+            var principal = Math.Abs(ParseDecimal(Get(row, headers, "Principal")));
+            if (principal <= 0)
+            {
+                warnings.Add($"Skipped loan with non-positive principal: {name}");
+                continue;
+            }
+            var termRaw = ParseDecimal(Get(row, headers, "Term months", "Term"));
+            var term = (int)Math.Round(termRaw <= 0 ? 1 : termRaw);
+            var loan = new Loan
+            {
+                Name = name.Trim(),
+                Lender = EmptyToNull(Get(row, headers, "Lender")),
+                AccountId = account?.Id,
+                Currency = (EmptyToNull(Get(row, headers, "Currency")) ?? "CHF").ToUpperInvariant(),
+                Principal = principal,
+                AnnualInterestRate = Math.Max(0m, ParseDecimal(Get(row, headers, "Annual interest rate", "Interest rate", "Rate"))),
+                TermMonths = term,
+                StartDate = ParseDate(Get(row, headers, "Start date", "Started on")) ?? DateTime.UtcNow.Date,
+                ExtraMonthlyPayment = Math.Max(0m, ParseDecimal(Get(row, headers, "Extra monthly payment", "Extra payment"))),
+                Status = ParseEnum(Get(row, headers, "Status"), LoanStatus.Active),
+                Notes = EmptyToNull(Get(row, headers, "Notes")),
+            };
+            db.Loans.Add(loan);
+            existing[loan.Name.ToLowerInvariant()] = loan;
             count++;
         }
         return count;

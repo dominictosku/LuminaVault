@@ -28,6 +28,9 @@ export const SUBSCRIPTION_STATUSES: SubscriptionStatus[] = ['Active', 'Paused', 
 export type SavingsGoalStatus = 'Active' | 'Paused' | 'Achieved' | 'Cancelled';
 export const SAVINGS_GOAL_STATUSES: SavingsGoalStatus[] = ['Active', 'Paused', 'Achieved', 'Cancelled'];
 
+export type LoanStatus = 'Active' | 'PaidOff' | 'Closed';
+export const LOAN_STATUSES: LoanStatus[] = ['Active', 'PaidOff', 'Closed'];
+
 export interface FinanceAccount {
   id: number;
   name: string;
@@ -88,6 +91,71 @@ export interface SavingsGoalInput {
   targetDate?: string | null;
   status: SavingsGoalStatus;
   notes?: string | null;
+}
+
+export interface Loan {
+  id: number;
+  name: string;
+  lender?: string | null;
+  accountId?: number | null;
+  accountName?: string | null;
+  currency: string;
+  principal: number;
+  annualInterestRate: number;
+  termMonths: number;
+  startDate: string;
+  extraMonthlyPayment: number;
+  monthlyPayment: number;
+  currentBalance: number;
+  totalInterest: number;
+  totalPayments: number;
+  paymentsMade: number;
+  payoffDate: string;
+  nextPaymentDue: number;
+  nextPaymentDate?: string | null;
+  status: LoanStatus;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LoanInput {
+  name: string;
+  lender?: string | null;
+  accountId?: number | null;
+  currency: string;
+  principal: number;
+  annualInterestRate: number;
+  termMonths: number;
+  startDate: string;
+  extraMonthlyPayment: number;
+  status: LoanStatus;
+  notes?: string | null;
+}
+
+export interface LoanScheduleRow {
+  paymentNumber: number;
+  paymentDate: string;
+  payment: number;
+  principal: number;
+  interest: number;
+  extraPrincipal: number;
+  balance: number;
+}
+
+export interface LoanSchedule {
+  loanId: number;
+  name: string;
+  monthlyPayment: number;
+  totalPayments: number;
+  totalInterest: number;
+  totalPrincipal: number;
+  paymentsMade: number;
+  payoffDate: string;
+  currentBalance: number;
+  nextPaymentDue: number;
+  nextPaymentDate?: string | null;
+  rows: LoanScheduleRow[];
 }
 
 export interface FinanceBudgetOverview {

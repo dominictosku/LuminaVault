@@ -62,6 +62,7 @@
 - **Holdings, analytics & live prices** — symbol-level positions per investment/crypto account with average cost, last price, realized/dividend/fee return, allocation, top movers and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
 - **Budgets** — per-category monthly limits with spend tracking
 - **Savings goals** — target amount, current amount, status and due-date tracking for funds or payoff plans
+- **Loan amortisation** — track mortgages, car and personal loans with principal, rate, term and optional extra monthly payments; per-loan schedule shows monthly principal/interest split, year-level totals, and how much earlier extra payments pay the loan off
 - **Recurring subscriptions** — billing interval, next-due date, auto-renew, due forecast generation, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift
@@ -69,7 +70,7 @@
 - **Cash-flow forecast** — replays scheduled subscription dues and pending transactions forward 14/30/60/90/180 days, plotting projected liquid cash as a line chart with the lowest-balance date called out and a warning banner if the projection dips below zero
 - **Notifications & alerts** — in-app inbox with unread-count badge in the sidebar; a background scanner fires alerts for subscriptions due soon, budget overruns, and forecast dips below zero. Dedup by stable `Source` key means re-scans upsert instead of spam; dismissed alerts resurface if the underlying condition still holds
 - **Statistics** — charts and breakdowns for spend, income and category trends
-- **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import)
+- **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import); splits ride along inline in the Transactions sheet as `Category=Amount[|Notes];…`
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
 
 ### 🔐 Platform

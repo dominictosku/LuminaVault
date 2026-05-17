@@ -16,6 +16,7 @@ public record OdsImportResult(
     int FinanceCategories,
     int AssetCategories,
     int Assets,
+    int Loans,
     string[] Warnings);
 
 public record OdsPreviewSheet(string Name, string[] Headers, string[][] SampleRows, string SuggestedTarget);
@@ -36,7 +37,7 @@ public static class OdsEndpoints
 
             var accounts = await db.FinanceAccounts.OrderBy(a => a.Name).ToListAsync();
             var transactions = await db.FinanceTransactions
-                .Include(t => t.Account).Include(t => t.TransferAccount)
+                .Include(t => t.Account).Include(t => t.TransferAccount).Include(t => t.Splits)
                 .OrderByDescending(t => t.OccurredOn).ThenByDescending(t => t.Id)
                 .ToListAsync();
             var holdings = await db.Holdings
@@ -65,6 +66,7 @@ public static class OdsEndpoints
                 .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
                 .ToListAsync();
             var assets = await db.Items.OrderBy(i => i.Name).ToListAsync();
+            var loans = await db.Loans.Include(l => l.Account).OrderBy(l => l.Name).ToListAsync();
 
             var bytes = OdsWriter.Build(new[]
             {
@@ -78,6 +80,7 @@ public static class OdsEndpoints
                 OdsExport.AssetCategories(assetCategories),
                 OdsExport.FinanceCategories(financeCategories),
                 OdsExport.Assets(assets),
+                OdsExport.Loans(loans),
             });
 
             var fileName = $"LuminaVault-export-{DateTime.UtcNow:yyyy-MM-dd}.ods";
@@ -110,11 +113,12 @@ public static class OdsEndpoints
             await OdsBalances.Recalculate(db);
             await RecalculateImportedHoldings(db);
             var holdingCount = await OdsImport.Holdings(tables, db, warnings);
+            var loanCount = await OdsImport.Loans(tables, db, warnings);
             await db.SaveChangesAsync();
 
             return Results.Ok(new OdsImportResult(
                 accountCount, transactionCount, holdingCount, monthlySummaryCount, subscriptionCount,
-                financeCategoryCount, assetCategoryCount, assetCount, warnings.ToArray()));
+                financeCategoryCount, assetCategoryCount, assetCount, loanCount, warnings.ToArray()));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
         g.MapPost("/import/ods/preview", ([FromForm] IFormFile file) =>
@@ -185,6 +189,9 @@ public static class OdsEndpoints
                 case "assets":
                     counts.Assets = await OdsImport.Assets(targetTables, db, warnings);
                     break;
+                case "loans":
+                    counts.Loans = await OdsImport.Loans(targetTables, db, warnings);
+                    break;
                 default:
                     return Problem.BadRequest("Unsupported import target.");
             }
@@ -195,7 +202,7 @@ public static class OdsEndpoints
                 await RecalculateImportedHoldings(db);
             return Results.Ok(new OdsImportResult(
                 counts.Accounts, counts.Transactions, counts.Holdings, counts.MonthlySummaries, counts.Subscriptions,
-                counts.FinanceCategories, counts.AssetCategories, counts.Assets, warnings.ToArray()));
+                counts.FinanceCategories, counts.AssetCategories, counts.Assets, counts.Loans, warnings.ToArray()));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
         return app;
@@ -206,7 +213,7 @@ public static class OdsEndpoints
     struct ImportCounts
     {
         public int Accounts, Transactions, Holdings, MonthlySummaries, Subscriptions,
-            FinanceCategories, AssetCategories, Assets;
+            FinanceCategories, AssetCategories, Assets, Loans;
     }
 
     static async Task RecalculateImportedHoldings(AppDbContext db)

@@ -30,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<NetWorthSnapshot> NetWorthSnapshots => Set<NetWorthSnapshot>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<TransactionSplit> TransactionSplits => Set<TransactionSplit>();
+    public DbSet<Loan> Loans => Set<Loan>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -193,5 +194,15 @@ public class AppDbContext : DbContext
         b.Entity<Notification>().HasIndex(n => n.Source).IsUnique();
         b.Entity<Notification>().HasIndex(n => n.Status);
         b.Entity<Notification>().HasIndex(n => n.CreatedAt);
+
+        b.Entity<Loan>()
+            .HasOne(l => l.Account)
+            .WithMany()
+            .HasForeignKey(l => l.AccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+        b.Entity<Loan>().Property(l => l.Principal).HasColumnType("decimal(18,2)");
+        b.Entity<Loan>().Property(l => l.AnnualInterestRate).HasColumnType("decimal(8,4)");
+        b.Entity<Loan>().Property(l => l.ExtraMonthlyPayment).HasColumnType("decimal(18,2)");
+        b.Entity<Loan>().HasIndex(l => l.Status);
     }
 }

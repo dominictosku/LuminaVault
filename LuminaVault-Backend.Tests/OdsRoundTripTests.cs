@@ -31,6 +31,9 @@ public class OdsRoundTripTests : IClassFixture<LuminaVaultFactory>
         [property: JsonPropertyName("assets")] int Assets,
         [property: JsonPropertyName("warnings")] string[] Warnings);
 
+    private record SplitDto(int Id, string Category, decimal Amount, string? Notes, int SortOrder);
+    private record TransactionDto(int Id, string Payee, string Category, decimal Amount, SplitDto[] Splits);
+
     [Fact]
     public async Task Export_returns_non_empty_ods_with_correct_content_type()
     {
@@ -80,8 +83,133 @@ public class OdsRoundTripTests : IClassFixture<LuminaVaultFactory>
         Assert.DoesNotContain(result.Warnings, w => w.Contains("Exception", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task Transaction_splits_round_trip_through_export_and_reimport()
+    {
+        await _api.EnsureAuthedAsync();
+        var account = await SeedNamedAccount("Split-RT");
+        // Use unique categories so the splits stay attributable when re-imported
+        // alongside other transactions sharing common categories.
+        var postResp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account.Id,
+            transferAccountId = (int?)null,
+            kind = "Expense",
+            status = "Cleared",
+            occurredOn = "2026-04-12",
+            payee = "Split-RT-Grocery",
+            category = "RT-Food",
+            amount = 100m,
+            description = (string?)null,
+            notes = (string?)null,
+            tags = Array.Empty<string>(),
+            symbol = (string?)null,
+            quantity = (decimal?)null,
+            pricePerUnit = (decimal?)null,
+            splits = new object[]
+            {
+                new { category = "RT-Food", amount = 70m, notes = (string?)"groceries" },
+                new { category = "RT-Household", amount = 30m, notes = (string?)null },
+            }
+        });
+        postResp.EnsureSuccessStatusCode();
+
+        var exportResp = await _api.Raw.GetAsync("/api/data/export/ods");
+        exportResp.EnsureSuccessStatusCode();
+        var bytes = await exportResp.Content.ReadAsByteArrayAsync();
+
+        using var form = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(bytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.oasis.opendocument.spreadsheet");
+        form.Add(fileContent, "file", "export.ods");
+        var importResp = await _api.Raw.PostAsync("/api/data/import/ods", form);
+        importResp.EnsureSuccessStatusCode();
+
+        // After re-import, two transactions with payee "Split-RT-Grocery" exist
+        // (transactions don't dedupe). Both should carry the same 2-row split set.
+        var listResp = await _api.Raw.GetAsync("/api/finance/transactions/?q=Split-RT-Grocery");
+        listResp.EnsureSuccessStatusCode();
+        var list = await listResp.Content.ReadFromJsonAsync<TransactionDto[]>();
+        Assert.NotNull(list);
+        Assert.True(list!.Length >= 2, $"expected at least 2 round-tripped rows, got {list.Length}");
+        foreach (var tx in list)
+        {
+            Assert.Equal(2, tx.Splits.Length);
+            var food = tx.Splits.Single(s => s.Category == "RT-Food");
+            var household = tx.Splits.Single(s => s.Category == "RT-Household");
+            Assert.Equal(70m, food.Amount);
+            Assert.Equal("groceries", food.Notes);
+            Assert.Equal(30m, household.Amount);
+            Assert.Null(household.Notes);
+        }
+    }
+
+    [Fact]
+    public async Task Splits_with_a_bad_sum_drop_silently_and_warn()
+    {
+        // Hand-craft a minimal ODS so we can inject malformed split data without
+        // going through the validated POST endpoint.
+        await _api.EnsureAuthedAsync();
+        var account = await SeedNamedAccount("Split-Bad-Sum");
+
+        var ods = OdsTestBuilder.Build(("Transactions", new[]
+        {
+            new[] { "Date", "Kind", "Account", "Payee", "Category", "Amount", "Status", "Splits" },
+            new[] { "2026-04-13", "Expense", account.Name, "Bad-Sum-Tx", "RT-Food", "100", "Cleared", "RT-Food=70;RT-Household=20" },
+        }));
+
+        using var form = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(ods);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.oasis.opendocument.spreadsheet");
+        form.Add(fileContent, "file", "splits-bad.ods");
+        var importResp = await _api.Raw.PostAsync("/api/data/import/ods", form);
+        importResp.EnsureSuccessStatusCode();
+        var result = await importResp.Content.ReadFromJsonAsync<OdsImportResult>();
+
+        Assert.Contains(result!.Warnings, w => w.Contains("Bad-Sum-Tx") && w.Contains("90"));
+        // Transaction is still inserted, just without splits.
+        var listResp = await _api.Raw.GetAsync("/api/finance/transactions/?q=Bad-Sum-Tx");
+        var list = await listResp.Content.ReadFromJsonAsync<TransactionDto[]>();
+        Assert.Single(list!);
+        Assert.Empty(list![0].Splits);
+    }
+
+    async Task<AccountDto> SeedNamedAccount(string name)
+    {
+        // The accounts API doesn't dedupe by name, so multiple tests calling the
+        // same seed leaves duplicates that break the import-side ToDictionary by
+        // lowercased name. Look the account up first and reuse it if present.
+        var existing = await GetAccountByName(name);
+        if (existing is not null) return existing;
+        var resp = await _api.PostAsync("/api/finance/accounts/", new
+        {
+            name,
+            institution = (string?)null,
+            type = "Checking",
+            currency = "CHF",
+            startingBalance = 1000m,
+            balance = 1000m,
+            color = "#14b8a6",
+            notes = (string?)null,
+            isArchived = false,
+        });
+        resp.EnsureSuccessStatusCode();
+        return (await resp.Content.ReadFromJsonAsync<AccountDto>())!;
+    }
+
+    async Task<AccountDto?> GetAccountByName(string name)
+    {
+        await _api.EnsureAuthedAsync();
+        var resp = await _api.Raw.GetAsync("/api/finance/accounts/");
+        if (!resp.IsSuccessStatusCode) return null;
+        var accounts = await resp.Content.ReadFromJsonAsync<AccountDto[]>();
+        return accounts?.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
     async Task SeedOneAccount()
     {
+        var existing = await GetAccountByName("RT-Test");
+        if (existing is not null) return;
         var resp = await _api.PostAsync("/api/finance/accounts/", new
         {
             name = "RT-Test",

@@ -1,0 +1,228 @@
+<div class="p-4 md:p-6 xl:p-8 fade-in">
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Loans</h1>
+      <p class="text-slate-400 text-sm mt-1">Track mortgages, car loans, and personal loans with full amortisation.</p>
+    </div>
+    <label class="surface-muted px-3 py-2 flex items-center gap-2 text-sm">
+      <input type="checkbox" [ngModel]="includeClosed()" (ngModelChange)="toggleClosed($event)" />
+      Show paid off
+    </label>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_390px] gap-4">
+    <section class="space-y-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Outstanding</div>
+          <div class="text-2xl font-semibold mt-2">{{ totals().balance | currency:baseCurrency():'symbol-narrow' }}</div>
+        </div>
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Principal</div>
+          <div class="text-2xl font-semibold mt-2">{{ totals().principal | currency:baseCurrency():'symbol-narrow' }}</div>
+        </div>
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Monthly payment</div>
+          <div class="text-2xl font-semibold mt-2">{{ totals().monthly | currency:baseCurrency():'symbol-narrow' }}</div>
+        </div>
+        <div class="surface p-4">
+          <div class="text-xs text-slate-400 uppercase tracking-wide">Total interest</div>
+          <div class="text-2xl font-semibold mt-2">{{ totals().interest | currency:baseCurrency():'symbol-narrow' }}</div>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <div class="space-y-2">
+          @for (_ of [1,2,3]; track _) { <div class="surface h-24 animate-pulse"></div> }
+        </div>
+      } @else if (loans().length === 0) {
+        <div class="surface p-8 text-center">
+          <i class="pi pi-credit-card text-4xl text-violet-300/70"></i>
+          <div class="mt-3 text-lg">No loans yet.</div>
+          <div class="text-sm text-slate-400 mt-1">Add a mortgage or car loan to see the full payoff plan.</div>
+        </div>
+      } @else {
+        <div class="surface overflow-hidden">
+          <div class="divide-y divide-white/5">
+            @for (loan of loans(); track loan.id) {
+              <div class="px-4 py-4">
+                <div class="flex items-start justify-between gap-4">
+                  <button type="button" class="text-left min-w-0 flex-1 hover:opacity-90" (click)="edit(loan)">
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <div class="font-medium truncate">{{ loan.name }}</div>
+                        <div class="text-xs mt-1" [ngClass]="statusClass(loan.status)">
+                          {{ loan.status }}
+                          @if (loan.lender) { <span class="text-slate-500"> · {{ loan.lender }}</span> }
+                          @if (loan.accountName) { <span class="text-slate-500"> · {{ loan.accountName }}</span> }
+                          <span class="text-slate-500"> · {{ loan.annualInterestRate | number:'1.2-3' }}% · {{ loan.termMonths }} mo</span>
+                        </div>
+                      </div>
+                      <div class="text-right text-sm">
+                        <div class="font-medium">{{ loan.currentBalance | currency:loan.currency:'symbol-narrow' }}</div>
+                        <div class="text-xs text-slate-500">of {{ loan.principal | currency:loan.currency:'symbol-narrow' }}</div>
+                      </div>
+                    </div>
+                    <div class="mt-3 h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div class="h-full bg-emerald-400" [style.width.%]="progressWidth(loan)"></div>
+                    </div>
+                    <div class="mt-2 flex justify-between text-xs text-slate-500">
+                      <span>{{ paidPercent(loan) | number:'1.0-1' }}% paid · {{ loan.paymentsMade }}/{{ loan.termMonths }} payments</span>
+                      <span>
+                        {{ loan.monthlyPayment | currency:loan.currency:'symbol-narrow' }}/mo
+                        @if (loan.nextPaymentDate) {
+                          · next {{ loan.nextPaymentDate | date:'MMM d' }}
+                        }
+                      </span>
+                    </div>
+                  </button>
+                  <button type="button" class="btn btn-ghost text-xs whitespace-nowrap" (click)="viewSchedule(loan)">
+                    @if (selectedScheduleId() === loan.id) {
+                      <i class="pi pi-chevron-up"></i> Hide
+                    } @else {
+                      <i class="pi pi-list"></i> Schedule
+                    }
+                  </button>
+                </div>
+
+                @if (selectedScheduleId() === loan.id) {
+                  <div class="mt-4 rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                    @if (scheduleLoading()) {
+                      <div class="text-sm text-slate-400">Computing schedule…</div>
+                    } @else if (schedule(); as s) {
+                      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                        <div>
+                          <div class="text-xs text-slate-400">Total payments</div>
+                          <div class="font-medium">{{ s.totalPayments | currency:loan.currency:'symbol-narrow' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs text-slate-400">Total interest</div>
+                          <div class="font-medium">{{ s.totalInterest | currency:loan.currency:'symbol-narrow' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs text-slate-400">Payoff date</div>
+                          <div class="font-medium">{{ s.payoffDate | date:'MMM y' }}</div>
+                        </div>
+                        <div>
+                          <div class="text-xs text-slate-400">Rows</div>
+                          <div class="font-medium">{{ s.rows.length }} payments</div>
+                        </div>
+                      </div>
+                      <div class="overflow-x-auto">
+                        <table class="w-full text-xs">
+                          <thead class="text-slate-400">
+                            <tr>
+                              <th class="text-left py-1.5 pr-3">Year</th>
+                              <th class="text-right py-1.5 pr-3">Principal paid</th>
+                              <th class="text-right py-1.5 pr-3">Interest paid</th>
+                              <th class="text-right py-1.5">Balance at year-end</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (bucket of scheduleProgressBuckets(s.rows); track bucket.year) {
+                              <tr class="border-t border-white/5">
+                                <td class="py-1.5 pr-3">{{ bucket.year }}</td>
+                                <td class="text-right py-1.5 pr-3">{{ bucket.principal | currency:loan.currency:'symbol-narrow':'1.0-0' }}</td>
+                                <td class="text-right py-1.5 pr-3 text-amber-200">{{ bucket.interest | currency:loan.currency:'symbol-narrow':'1.0-0' }}</td>
+                                <td class="text-right py-1.5">{{ bucket.balance | currency:loan.currency:'symbol-narrow':'1.0-0' }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </section>
+
+    <aside class="surface p-5 h-fit">
+      <h2 class="font-medium flex items-center gap-2 mb-4">
+        <i class="pi pi-pen-to-square text-violet-300"></i>
+        {{ editingId() ? 'Edit loan' : 'New loan' }}
+      </h2>
+      <form (ngSubmit)="save()" class="space-y-4">
+        <div>
+          <label class="label">Name</label>
+          <input class="input" name="name" [(ngModel)]="model.name" required />
+        </div>
+        <div>
+          <label class="label">Lender</label>
+          <input class="input" name="lender" [(ngModel)]="model.lender" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label>
+            <span class="label">Account</span>
+            <select class="select" name="account" [(ngModel)]="model.accountId" (ngModelChange)="onAccountChange()">
+              <option [ngValue]="null">No account</option>
+              @for (account of accounts(); track account.id) {
+                <option [ngValue]="account.id">{{ account.name }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span class="label">Currency</span>
+            <input class="input" name="currency" [(ngModel)]="model.currency" maxlength="8" />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label>
+            <span class="label">Principal</span>
+            <input class="input" type="number" step="0.01" min="0" name="principal" [(ngModel)]="model.principal" />
+          </label>
+          <label>
+            <span class="label">Rate (% / yr)</span>
+            <input class="input" type="number" step="0.01" min="0" name="rate" [(ngModel)]="model.annualInterestRate" />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label>
+            <span class="label">Term (months)</span>
+            <input class="input" type="number" step="1" min="1" name="term" [(ngModel)]="model.termMonths" />
+          </label>
+          <label>
+            <span class="label">Start date</span>
+            <input class="input" type="date" name="startDate" [(ngModel)]="startDateValue" />
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label>
+            <span class="label">Extra monthly</span>
+            <input class="input" type="number" step="0.01" min="0" name="extra" [(ngModel)]="model.extraMonthlyPayment" />
+          </label>
+          <label>
+            <span class="label">Status</span>
+            <select class="select" name="status" [(ngModel)]="model.status">
+              @for (status of statuses; track status) {
+                <option [ngValue]="status">{{ status }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        <div>
+          <label class="label">Notes</label>
+          <textarea class="textarea" rows="3" name="notes" [(ngModel)]="model.notes"></textarea>
+        </div>
+        @if (error()) {
+          <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{{ error() }}</div>
+        }
+        <div class="flex gap-2">
+          @if (editingId()) {
+            <button type="button" class="btn btn-danger" (click)="remove()" [disabled]="saving()">
+              <i class="pi pi-trash"></i>
+            </button>
+          }
+          <button type="button" class="btn btn-ghost flex-1 justify-center" (click)="reset()">Cancel</button>
+          <button class="btn btn-primary flex-1 justify-center" type="submit" [disabled]="saving()">
+            @if (saving()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-check"></i> }
+            Save
+          </button>
+        </div>
+      </form>
+    </aside>
+  </div>
+</div>

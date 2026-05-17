@@ -27,7 +27,8 @@
       "Bash(mkdir -p .githooks)",
       "Read(//c/c/Users/domin/MyDocuments/Projects/LuminaVault/**)",
       "Bash(chmod +x .githooks/pre-commit)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npx --no-install ng build --configuration production)"
     ]
   }
 }
