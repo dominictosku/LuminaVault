@@ -19,13 +19,19 @@ public record FinanceTransactionDto(
     FinanceTransactionKind Kind, FinanceTransactionStatus Status, DateTime OccurredOn,
     string Payee, string Category, decimal Amount, string? Description, string? Notes,
     string[] Tags, string? Symbol, decimal? Quantity, decimal? PricePerUnit,
+    TransactionSplitDto[] Splits,
     DateTime CreatedAt, DateTime UpdatedAt);
 
 public record FinanceTransactionInput(
     int AccountId, int? TransferAccountId, FinanceTransactionKind Kind, FinanceTransactionStatus Status,
     DateTime OccurredOn, string Payee, string Category, decimal Amount,
     string? Description, string? Notes, string[] Tags,
-    string? Symbol, decimal? Quantity, decimal? PricePerUnit);
+    string? Symbol, decimal? Quantity, decimal? PricePerUnit,
+    TransactionSplitInput[]? Splits);
+
+public record TransactionSplitDto(int Id, string Category, decimal Amount, string? Notes, int SortOrder);
+
+public record TransactionSplitInput(string Category, decimal Amount, string? Notes);
 
 public record HoldingDto(
     int Id, int AccountId, string? AccountName, string Currency, string Symbol, string? Name,

@@ -69,16 +69,20 @@ public class NotificationScanner
         if (budgets.Count == 0) return 0;
 
         // Reuse the same spend calc the budgets page shows: Expense-kind cleared/reconciled
-        // transactions in the month, grouped by category. Pending tx are excluded.
+        // transactions in the month, grouped by category. Pending tx are excluded. Split-aware
+        // via ExpandCategoryAmounts so a one-receipt-many-categories transaction lands in the
+        // right buckets.
         var nextMonth = month.AddMonths(1);
-        var monthExpenses = await db.FinanceTransactions
+        var monthTx = await db.FinanceTransactions
+            .Include(t => t.Splits)
             .Where(t => t.Kind == FinanceTransactionKind.Expense)
             .Where(t => t.Status != FinanceTransactionStatus.Pending)
             .Where(t => t.OccurredOn >= month && t.OccurredOn < nextMonth)
-            .GroupBy(t => t.Category)
-            .Select(g => new { Category = g.Key, Spent = g.Sum(t => t.Amount) })
             .ToListAsync(ct);
-        var spentByCategory = monthExpenses.ToDictionary(x => x.Category ?? "", x => x.Spent);
+        var spentByCategory = monthTx
+            .SelectMany(ExpandCategoryAmounts)
+            .GroupBy(x => x.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
 
         var created = 0;
         foreach (var b in budgets)

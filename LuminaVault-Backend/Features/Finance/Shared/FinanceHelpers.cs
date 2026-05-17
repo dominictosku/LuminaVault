@@ -225,16 +225,36 @@ internal static class FinanceHelpers
         var summaries = await db.MonthlyAccountSummaries.Where(s => s.Month == start).ToListAsync();
         var summaryKeys = summaries.Select(s => SummaryKey(s.AccountId, s.Month)).ToHashSet();
         var tx = await db.FinanceTransactions
+            .Include(t => t.Splits)
             .Where(t => t.Kind == FinanceTransactionKind.Expense && t.OccurredOn >= start && t.OccurredOn < end)
             .Where(t => t.Status != FinanceTransactionStatus.Pending)
             .ToListAsync();
         var result = tx
             .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
-            .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
-            .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
+            .SelectMany(ExpandCategoryAmounts)
+            .GroupBy(x => x.Category)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
         var summaryAmount = summaries.Sum(s => s.Expenses);
         if (summaryAmount > 0) result["Bank summaries"] = result.GetValueOrDefault("Bank summaries") + summaryAmount;
         return result;
+    }
+
+    /// Yields one (Category, Amount) row per transaction, expanding any TransactionSplits.
+    /// Falls back to the transaction's own Category when there are no splits. Used for budget
+    /// and statistics aggregation so splits redirect cash to the right category buckets.
+    public static IEnumerable<(string Category, decimal Amount)> ExpandCategoryAmounts(FinanceTransaction t)
+    {
+        if (t.Splits is { Count: > 0 })
+        {
+            foreach (var split in t.Splits)
+            {
+                var cat = string.IsNullOrWhiteSpace(split.Category) ? "Uncategorized" : split.Category;
+                yield return (cat, split.Amount);
+            }
+            yield break;
+        }
+        var fallback = string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category;
+        yield return (fallback, t.Amount);
     }
 
     public static decimal ToMonthlyAmount(decimal amount, int billingIntervalDays) =>

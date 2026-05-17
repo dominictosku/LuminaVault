@@ -57,6 +57,7 @@
 - **Multi-account ledger** — checking, savings, cash, credit cards, investments, crypto, loans; per-account currency (default CHF) and starting balance
 - **Dated exchange rates** — convert multi-currency accounts, subscriptions and historical transaction analytics into CHF aggregate totals
 - **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled), plus trade kinds (buy / sell / dividend / fee) with symbol, quantity and price-per-unit for investment & crypto accounts
+- **Transaction splits** — one Income/Expense can be split across multiple categories (e.g. one grocery receipt = 70 Food + 30 Household). Cash impact still runs off the single Amount; budget/statistics aggregation routes each split to its own category bucket
 - **Category rules** — auto-categorize uncategorized/manual imports by matching payee, description or notes
 - **Holdings, analytics & live prices** — symbol-level positions per investment/crypto account with average cost, last price, realized/dividend/fee return, allocation, top movers and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
 - **Budgets** — per-category monthly limits with spend tracking

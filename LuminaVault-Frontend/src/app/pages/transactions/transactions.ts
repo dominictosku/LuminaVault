@@ -16,7 +16,9 @@ import {
   FinanceTransactionKind,
   FinanceTransactionStatus,
   TRADE_TRANSACTION_KINDS,
+  TransactionSplitInput,
   isInvestmentAccount,
+  supportsSplits,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { tradeAmount } from '../../core/finance-math';
@@ -92,6 +94,17 @@ export class TransactionsComponent {
   needsTradeDetails(kind: FinanceTransactionKind): boolean {
     return kind === 'Buy' || kind === 'Sell';
   }
+
+  // Splits live in their own signal so the form can mutate them without re-creating the model.
+  splits = signal<TransactionSplitInput[]>([]);
+  canSplit = computed(() => supportsSplits(this.model.kind));
+  splitsTotal = computed(() =>
+    this.splits().reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+  );
+  splitsRemaining = computed(() =>
+    Number(((Number(this.model.amount) || 0) - this.splitsTotal()).toFixed(2))
+  );
+  splitsBalanced = computed(() => Math.abs(this.splitsRemaining()) < 0.005);
 
   filteredTransactions = computed(() => {
     const month = this.monthFilter();
@@ -226,6 +239,43 @@ export class TransactionsComponent {
       quantity: transaction.quantity ?? null,
       pricePerUnit: transaction.pricePerUnit ?? null,
     };
+    this.splits.set(transaction.splits.map(s => ({
+      category: s.category,
+      amount: s.amount,
+      notes: s.notes ?? null,
+    })));
+  }
+
+  addSplit() {
+    const defaultCategory = this.financeCategories()[0]?.name ?? 'General';
+    // Seed amount with the unallocated remainder so adding rows in order trivially balances.
+    const remainder = Math.max(0, this.splitsRemaining());
+    this.splits.update(list => [...list, {
+      category: defaultCategory,
+      amount: Number(remainder.toFixed(2)),
+      notes: null,
+    }]);
+  }
+
+  removeSplit(index: number) {
+    this.splits.update(list => list.filter((_, i) => i !== index));
+  }
+
+  clearSplits() {
+    this.splits.set([]);
+  }
+
+  autoBalanceLastSplit() {
+    const list = this.splits();
+    if (list.length === 0) return;
+    const remainder = this.splitsRemaining();
+    const lastIndex = list.length - 1;
+    const next = [...list];
+    next[lastIndex] = {
+      ...next[lastIndex],
+      amount: Number((Number(next[lastIndex].amount || 0) + remainder).toFixed(2)),
+    };
+    this.splits.set(next);
   }
 
   onAccountChange() {
@@ -239,6 +289,9 @@ export class TransactionsComponent {
       this.model.symbol = '';
       this.model.quantity = null;
       this.model.pricePerUnit = null;
+    }
+    if (!supportsSplits(this.model.kind)) {
+      this.splits.set([]);
     }
   }
 
@@ -257,6 +310,11 @@ export class TransactionsComponent {
       this.error.set('Payee is required.');
       return;
     }
+    const splits = this.canSplit() && this.splits().length > 0 ? this.splits() : [];
+    if (splits.length > 0 && !this.splitsBalanced()) {
+      this.error.set(`Splits must sum to ${Number(this.model.amount).toFixed(2)} (off by ${this.splitsRemaining().toFixed(2)}).`);
+      return;
+    }
     this.saving.set(true);
     this.error.set(null);
     const isTrade = this.isTradeKind(this.model.kind);
@@ -270,6 +328,13 @@ export class TransactionsComponent {
       symbol: isTrade ? (this.model.symbol?.trim().toUpperCase() || null) : null,
       quantity: isTrade && this.model.quantity != null ? Number(this.model.quantity) || null : null,
       pricePerUnit: isTrade && this.model.pricePerUnit != null ? Number(this.model.pricePerUnit) || null : null,
+      splits: splits.length > 0
+        ? splits.map(s => ({
+            category: s.category,
+            amount: Number(s.amount) || 0,
+            notes: s.notes?.trim() || null,
+          }))
+        : null,
     };
     const op = this.editingId()
       ? this.api.updateFinanceTransaction(this.editingId()!, input)
@@ -300,6 +365,7 @@ export class TransactionsComponent {
     this.dateValue = new Date().toISOString().substring(0, 10);
     this.tagsRaw = '';
     this.model = this.defaultModel();
+    this.splits.set([]);
     if (this.accounts()[0]) this.model.accountId = this.accounts()[0].id;
     if (this.financeCategories()[0]) this.model.category = this.financeCategories()[0].name;
   }

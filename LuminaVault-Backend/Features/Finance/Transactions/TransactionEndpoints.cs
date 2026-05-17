@@ -21,6 +21,7 @@ internal static class TransactionEndpoints
             var query = db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
+                .Include(t => t.Splits)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(q))
@@ -84,6 +85,7 @@ internal static class TransactionEndpoints
             var transaction = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
+                .Include(t => t.Splits)
                 .FirstOrDefaultAsync(t => t.Id == id);
             if (transaction is null) return Results.NotFound();
             var validation = await ValidateTransaction(input, db);
@@ -156,7 +158,27 @@ internal static class TransactionEndpoints
             transaction.Quantity = null;
             transaction.PricePerUnit = null;
         }
+
+        // Replace splits wholesale. Validation has already ensured sum == Amount and the
+        // kind is splittable, so we just rebuild the list from the input.
+        transaction.Splits.Clear();
+        if (SupportsSplits(input.Kind) && input.Splits is { Length: > 0 })
+        {
+            var ordered = input.Splits
+                .Select((s, i) => new TransactionSplit
+                {
+                    Category = string.IsNullOrWhiteSpace(s.Category) ? "General" : s.Category.Trim(),
+                    Amount = Math.Abs(s.Amount),
+                    Notes = Clean(s.Notes),
+                    SortOrder = i,
+                });
+            foreach (var split in ordered)
+                transaction.Splits.Add(split);
+        }
     }
+
+    public static bool SupportsSplits(FinanceTransactionKind kind) =>
+        kind is FinanceTransactionKind.Income or FinanceTransactionKind.Expense;
 
     public static async Task<IResult?> ValidateTransaction(FinanceTransactionInput input, AppDbContext db)
     {
@@ -182,6 +204,23 @@ internal static class TransactionEndpoints
                     ? Problem.BadRequest("Quantity must be greater than zero.") : null,
                 input.PricePerUnit is not { } p || p <= 0
                     ? Problem.BadRequest("Price per unit must be greater than zero.") : null);
+        }
+
+        if (input.Splits is { Length: > 0 })
+        {
+            if (!SupportsSplits(input.Kind))
+                return Problem.BadRequest("Splits are only supported on Income and Expense transactions.");
+            foreach (var split in input.Splits)
+            {
+                if (string.IsNullOrWhiteSpace(split.Category))
+                    return Problem.BadRequest("Every split needs a category.");
+                if (split.Amount <= 0)
+                    return Problem.BadRequest("Split amounts must be greater than zero.");
+            }
+            // Tolerate 1-rappen rounding noise; the UI auto-fills the last split to balance.
+            var splitTotal = input.Splits.Sum(s => Math.Abs(s.Amount));
+            if (Math.Abs(splitTotal - Math.Abs(input.Amount)) > 0.01m)
+                return Problem.BadRequest($"Splits must sum to {Math.Abs(input.Amount):F2}; got {splitTotal:F2}.");
         }
         return null;
     }

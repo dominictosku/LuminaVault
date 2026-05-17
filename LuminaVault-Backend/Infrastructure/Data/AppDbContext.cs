@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<Holding> Holdings => Set<Holding>();
     public DbSet<NetWorthSnapshot> NetWorthSnapshots => Set<NetWorthSnapshot>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<TransactionSplit> TransactionSplits => Set<TransactionSplit>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -117,6 +118,15 @@ public class AppDbContext : DbContext
         b.Entity<FinanceTransaction>().HasIndex(t => t.OccurredOn);
         b.Entity<FinanceTransaction>().HasIndex(t => t.Category);
         b.Entity<FinanceTransaction>().HasIndex(t => t.Symbol);
+
+        b.Entity<TransactionSplit>()
+            .HasOne(s => s.Transaction)
+            .WithMany(t => t.Splits)
+            .HasForeignKey(s => s.TransactionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<TransactionSplit>().Property(s => s.Amount).HasColumnType("decimal(18,2)");
+        b.Entity<TransactionSplit>().HasIndex(s => s.TransactionId);
+        b.Entity<TransactionSplit>().HasIndex(s => s.Category);
 
         b.Entity<Holding>()
             .HasOne(h => h.Account)

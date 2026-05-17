@@ -94,9 +94,19 @@
                         {{ t.kind }}@if (t.symbol) { · {{ t.symbol }} }
                       </span>
                     }
+                    @if (t.splits.length > 0) {
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-200 border border-teal-500/30"
+                            title="{{ t.splits.length }} split categories">
+                        <i class="pi pi-list text-[9px]"></i> {{ t.splits.length }}
+                      </span>
+                    }
                   </div>
                   <div class="text-xs text-slate-500 truncate">
-                    {{ t.category }}
+                    @if (t.splits.length > 0) {
+                      {{ t.splits[0].category }}@if (t.splits.length > 1) { + {{ t.splits.length - 1 }} more }
+                    } @else {
+                      {{ t.category }}
+                    }
                     @if (t.kind === 'Transfer') { · {{ t.transferAccountName || 'Transfer' }} }
                     @if (t.quantity && t.pricePerUnit) {
                       · {{ t.quantity }} × {{ t.pricePerUnit | currency:'CHF':'symbol-narrow' }}
@@ -212,10 +222,72 @@
         </div>
         <div>
           <label class="label">Category</label>
-          <select class="select" name="category" [(ngModel)]="model.category">
+          <select class="select" name="category" [(ngModel)]="model.category" [disabled]="splits().length > 0">
             @for (c of categories(); track c) { <option [ngValue]="c">{{ c }}</option> }
           </select>
+          @if (splits().length > 0) {
+            <p class="text-[11px] text-slate-500 mt-1">
+              Per-split categories are in use; this default is ignored until you clear the splits.
+            </p>
+          }
         </div>
+
+        @if (canSplit()) {
+          <div class="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs uppercase tracking-wide text-violet-200 flex items-center gap-1">
+                <i class="pi pi-list"></i> Split across categories
+              </div>
+              @if (splits().length === 0) {
+                <button type="button" class="text-xs text-violet-200 hover:text-white" (click)="addSplit()">
+                  + Add split
+                </button>
+              } @else {
+                <button type="button" class="text-xs text-slate-400 hover:text-slate-200" (click)="clearSplits()">
+                  Remove all
+                </button>
+              }
+            </div>
+
+            @if (splits().length > 0) {
+              <div class="space-y-2">
+                @for (s of splits(); track $index; let i = $index) {
+                  <div class="grid grid-cols-[1fr_110px_36px] gap-2 items-center">
+                    <select class="select" name="split-cat-{{ i }}" [(ngModel)]="s.category">
+                      @for (c of categories(); track c) { <option [ngValue]="c">{{ c }}</option> }
+                    </select>
+                    <input class="input" type="number" step="0.01" min="0" name="split-amt-{{ i }}"
+                           [(ngModel)]="s.amount" />
+                    <button type="button" class="btn btn-ghost !p-2" title="Remove split" (click)="removeSplit(i)">
+                      <i class="pi pi-times"></i>
+                    </button>
+                  </div>
+                }
+              </div>
+              <div class="flex items-center justify-between text-xs gap-2 pt-1">
+                <div class="text-slate-400">
+                  Total: {{ splitsTotal() | currency:'CHF':'symbol-narrow' }}
+                  @if (splitsBalanced()) {
+                    <span class="text-emerald-300 ml-1">· balanced</span>
+                  } @else {
+                    <span class="text-amber-300 ml-1">· {{ splitsRemaining() >= 0 ? 'short' : 'over' }} {{ splitsRemaining() | currency:'CHF':'symbol-narrow' }}</span>
+                  }
+                </div>
+                <div class="flex gap-2">
+                  @if (!splitsBalanced()) {
+                    <button type="button" class="text-xs text-violet-200 hover:text-white" (click)="autoBalanceLastSplit()">
+                      Auto-balance
+                    </button>
+                  }
+                  <button type="button" class="text-xs text-violet-200 hover:text-white" (click)="addSplit()">
+                    + Row
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+
         <div>
           <label class="label">Tags</label>
           <input class="input" name="tags" [(ngModel)]="tagsRaw" placeholder="comma separated" />

@@ -133,6 +133,24 @@ export interface FinanceAccountInput {
   isArchived: boolean;
 }
 
+export interface TransactionSplit {
+  id: number;
+  category: string;
+  amount: number;
+  notes?: string | null;
+  sortOrder: number;
+}
+
+export interface TransactionSplitInput {
+  category: string;
+  amount: number;
+  notes?: string | null;
+}
+
+export const SPLITTABLE_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Income', 'Expense'];
+export const supportsSplits = (kind: FinanceTransactionKind | null | undefined) =>
+  kind === 'Income' || kind === 'Expense';
+
 export interface FinanceTransaction {
   id: number;
   accountId: number;
@@ -151,6 +169,7 @@ export interface FinanceTransaction {
   symbol?: string | null;
   quantity?: number | null;
   pricePerUnit?: number | null;
+  splits: TransactionSplit[];
   createdAt: string;
   updatedAt: string;
 }
@@ -170,6 +189,7 @@ export interface FinanceTransactionInput {
   symbol?: string | null;
   quantity?: number | null;
   pricePerUnit?: number | null;
+  splits?: TransactionSplitInput[] | null;
 }
 
 export interface Holding {

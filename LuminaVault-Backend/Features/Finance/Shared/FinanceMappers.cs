@@ -20,6 +20,10 @@ internal static class FinanceMappers
             transaction.Description, transaction.Notes,
             string.IsNullOrWhiteSpace(transaction.TagsCsv) ? Array.Empty<string>() : transaction.TagsCsv.Split(','),
             transaction.Symbol, transaction.Quantity, transaction.PricePerUnit,
+            transaction.Splits
+                .OrderBy(s => s.SortOrder).ThenBy(s => s.Id)
+                .Select(s => new TransactionSplitDto(s.Id, s.Category, s.Amount, s.Notes, s.SortOrder))
+                .ToArray(),
             transaction.CreatedAt, transaction.UpdatedAt);
 
     public static HoldingDto MapHolding(Holding holding, HoldingPerformance? performance = null)

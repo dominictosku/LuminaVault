@@ -37,4 +37,20 @@ public class FinanceTransaction
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// Optional per-line breakdown for splitting one cash movement across categories
+    /// (e.g. a grocery receipt that's part Food and part Household). Cash math still
+    /// runs off Amount/Kind — splits only redirect category aggregation.
+    public List<TransactionSplit> Splits { get; set; } = new();
+}
+
+public class TransactionSplit
+{
+    public int Id { get; set; }
+    public int TransactionId { get; set; }
+    public FinanceTransaction? Transaction { get; set; }
+    [Required, MaxLength(80)] public string Category { get; set; } = "";
+    public decimal Amount { get; set; }
+    public string? Notes { get; set; }
+    public int SortOrder { get; set; }
 }

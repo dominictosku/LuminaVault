@@ -24,6 +24,7 @@ internal static class FinanceSummaryEndpoints
             var activeAccounts = await db.FinanceAccounts.Where(a => !a.IsArchived).ToListAsync();
             var rawMonthlyTransactions = await db.FinanceTransactions
                 .Include(t => t.Account)
+                .Include(t => t.Splits)
                 .Where(t => t.OccurredOn >= monthStart && t.OccurredOn < nextMonth)
                 .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
@@ -109,8 +110,11 @@ internal static class FinanceSummaryEndpoints
 
             var categories = monthlyTransactions
                 .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .GroupBy(t => t.Category)
-                .Select(g => new { category = g.Key, amount = g.Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)) })
+                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
+                {
+                    category = x.Category,
+                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
+                }))
                 .Concat(monthlySummaryRows
                     .Where(s => s.Expenses > 0)
                     .GroupBy(_ => "Bank summaries")
@@ -192,6 +196,7 @@ internal static class FinanceSummaryEndpoints
             var transactions = await db.FinanceTransactions
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
+                .Include(t => t.Splits)
                 .Where(t => t.OccurredOn >= fromMonth && t.OccurredOn < nextMonth)
                 .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
@@ -247,14 +252,13 @@ internal static class FinanceSummaryEndpoints
 
             var transactionExpenseBreakdown = unsummarizedTransactions
                 .Where(t => t.Kind == FinanceTransactionKind.Expense)
-                .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
-                .Select(g => new
+                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
                 {
-                    category = g.Key,
-                    amount = g.Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)),
-                    count = g.Count(),
-                    average = Math.Round(g.Average(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)), 2)
-                })
+                    category = x.Category,
+                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
+                }))
+                .GroupBy(x => x.category)
+                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount), count = g.Count(), average = Math.Round(g.Average(x => x.amount), 2) })
                 .Concat(monthlySummaries
                     .Where(s => s.Expenses > 0)
                     .GroupBy(_ => "Bank summaries")
@@ -278,14 +282,13 @@ internal static class FinanceSummaryEndpoints
 
             var transactionIncomeBreakdown = unsummarizedTransactions
                 .Where(t => t.Kind == FinanceTransactionKind.Income)
-                .GroupBy(t => string.IsNullOrWhiteSpace(t.Category) ? "Uncategorized" : t.Category)
-                .Select(g => new
+                .SelectMany(t => ExpandCategoryAmounts(t).Select(x => new
                 {
-                    category = g.Key,
-                    amount = g.Sum(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)),
-                    count = g.Count(),
-                    average = Math.Round(g.Average(t => CurrencyConversion.ToBase(t.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)), 2)
-                })
+                    category = x.Category,
+                    amount = CurrencyConversion.ToBase(x.Amount, t.Account?.Currency, t.OccurredOn, rateHistory)
+                }))
+                .GroupBy(x => x.category)
+                .Select(g => new { category = g.Key, amount = g.Sum(x => x.amount), count = g.Count(), average = Math.Round(g.Average(x => x.amount), 2) })
                 .Concat(monthlySummaries
                     .Where(s => s.Income > 0)
                     .GroupBy(_ => "Bank summaries")

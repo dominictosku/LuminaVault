@@ -475,7 +475,123 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         Assert.Equal("Goal account", goal.AccountName);
     }
 
-    private record TransactionDto(int Id, int AccountId, decimal Amount, string Kind);
+    private record TransactionDto(int Id, int AccountId, decimal Amount, string Kind, SplitDto[] Splits);
+    private record SplitDto(int Id, string Category, decimal Amount, string? Notes, int SortOrder);
+
+    [Fact]
+    public async Task Transaction_can_be_saved_with_splits_that_redirect_budget_spend()
+    {
+        var account = await CreateAccount("Split account", balance: 500m);
+        var month = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        // Use unique category names so the shared SQLite fixture doesn't bleed into
+        // other tests' budget tallies (e.g. the existing Food budget test).
+        await _api.PostAsync("/api/finance/budgets/", new
+        {
+            category = "SplitHousehold", month, limitAmount = 50m, notes = (string?)null,
+        });
+
+        var resp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account.Id, transferAccountId = (int?)null,
+            kind = "Expense", status = "Cleared", occurredOn = DateTime.UtcNow.Date,
+            payee = "Grocery", category = "SplitMisc", amount = 100m,
+            description = (string?)null, notes = (string?)null,
+            tags = Array.Empty<string>(),
+            splits = new[]
+            {
+                new { category = "SplitFood", amount = 70m, notes = (string?)null },
+                new { category = "SplitHousehold", amount = 30m, notes = (string?)null },
+            },
+        });
+        resp.EnsureSuccessStatusCode();
+        var saved = await resp.Content.ReadFromJsonAsync<TransactionDto>();
+        Assert.Equal(2, saved!.Splits.Length);
+        Assert.Contains(saved.Splits, s => s.Category == "SplitFood" && s.Amount == 70m);
+        Assert.Contains(saved.Splits, s => s.Category == "SplitHousehold" && s.Amount == 30m);
+
+        // The SplitHousehold budget (CHF 50) should now show CHF 30 spent — not CHF 100 —
+        // because the split-aware aggregator routes the CHF 30 portion of the receipt to
+        // SplitHousehold even though the transaction's headline category is "SplitMisc".
+        var budgets = await _api.GetAsync<BudgetDto[]>($"/api/finance/budgets/?month={month:yyyy-MM-dd}");
+        var household = budgets!.Single(b => b.Category == "SplitHousehold");
+        Assert.Equal(30m, household.Spent);
+        Assert.Equal(20m, household.Remaining);
+    }
+
+    [Fact]
+    public async Task Splits_that_dont_sum_to_amount_are_rejected()
+    {
+        var account = await CreateAccount("Bad split", balance: 500m);
+        var resp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account.Id, transferAccountId = (int?)null,
+            kind = "Expense", status = "Cleared", occurredOn = DateTime.UtcNow.Date,
+            payee = "Mismatch", category = "General", amount = 100m,
+            description = (string?)null, notes = (string?)null,
+            tags = Array.Empty<string>(),
+            splits = new[]
+            {
+                new { category = "Food", amount = 30m, notes = (string?)null },
+                new { category = "Household", amount = 40m, notes = (string?)null },
+            },
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Transfers_cannot_be_split()
+    {
+        var src = await CreateAccount("Transfer src", balance: 500m);
+        var dest = await CreateAccount("Transfer dest", balance: 0m);
+        var resp = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = src.Id, transferAccountId = (int?)dest.Id,
+            kind = "Transfer", status = "Cleared", occurredOn = DateTime.UtcNow.Date,
+            payee = "Move", category = "General", amount = 50m,
+            description = (string?)null, notes = (string?)null,
+            tags = Array.Empty<string>(),
+            splits = new[] { new { category = "Food", amount = 50m, notes = (string?)null } },
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Editing_a_transaction_replaces_its_splits()
+    {
+        var account = await CreateAccount("Edit splits", balance: 500m);
+        var create = await _api.PostAsync("/api/finance/transactions/", new
+        {
+            accountId = account.Id, transferAccountId = (int?)null,
+            kind = "Expense", status = "Cleared", occurredOn = DateTime.UtcNow.Date,
+            payee = "First", category = "General", amount = 100m,
+            description = (string?)null, notes = (string?)null,
+            tags = Array.Empty<string>(),
+            splits = new[]
+            {
+                new { category = "Food", amount = 60m, notes = (string?)null },
+                new { category = "Household", amount = 40m, notes = (string?)null },
+            },
+        });
+        var initial = await create.Content.ReadFromJsonAsync<TransactionDto>();
+        Assert.Equal(2, initial!.Splits.Length);
+
+        var update = await _api.PutAsync($"/api/finance/transactions/{initial.Id}", new
+        {
+            accountId = account.Id, transferAccountId = (int?)null,
+            kind = "Expense", status = "Cleared", occurredOn = DateTime.UtcNow.Date,
+            payee = "First", category = "General", amount = 100m,
+            description = (string?)null, notes = (string?)null,
+            tags = Array.Empty<string>(),
+            splits = new[]
+            {
+                new { category = "Hobby", amount = 100m, notes = (string?)null },
+            },
+        });
+        update.EnsureSuccessStatusCode();
+        var updated = await update.Content.ReadFromJsonAsync<TransactionDto>();
+        Assert.Single(updated!.Splits);
+        Assert.Equal("Hobby", updated.Splits[0].Category);
+    }
 
     private record ForecastPointDto(DateTime Date, decimal Balance, decimal ChangeFromYesterday);
     private record ForecastEventDto(DateTime Date, string Source, string Description, int? AccountId, string? AccountName, decimal Amount, string Currency, decimal BaseAmount);
