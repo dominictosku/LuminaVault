@@ -1,0 +1,220 @@
+<div class="p-4 md:p-6 xl:p-8 fade-in space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight">Tax export</h1>
+      <p class="text-slate-400 text-sm mt-1">
+        Year-end snapshot for the Swiss Wertschriftenverzeichnis &amp; wealth declaration.
+        Holdings are rolled forward from Buy/Sell transactions through Dec 31; account balances reflect Dec 31 expected balance.
+      </p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <select class="select min-w-28" [ngModel]="year()" (ngModelChange)="setYear(+$event)">
+        @for (y of yearOptions(); track y) {
+          <option [ngValue]="y">{{ y }}</option>
+        }
+      </select>
+      <button class="btn btn-primary" (click)="downloadOds()" [disabled]="downloading() || loading()">
+        @if (downloading()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-download"></i> }
+        Download ODS
+      </button>
+    </div>
+  </div>
+
+  @if (error()) {
+    <div class="surface p-4 border border-red-500/30 bg-red-500/10 text-red-200 text-sm">{{ error() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      @for (_ of [1,2,3]; track _) { <div class="surface h-24 animate-pulse"></div> }
+    </div>
+  } @else if (bundle(); as b) {
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Securities value</div>
+        <div class="text-2xl font-semibold mt-2">{{ b.totalSecuritiesValue | currency:baseCurrency():'symbol-narrow' }}</div>
+      </div>
+      <div class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Cash on Dec 31</div>
+        <div class="text-2xl font-semibold mt-2">{{ b.totalCashBalance | currency:baseCurrency():'symbol-narrow' }}</div>
+      </div>
+      <div class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Total wealth</div>
+        <div class="text-2xl font-semibold mt-2 text-emerald-300">{{ totalWealth() | currency:baseCurrency():'symbol-narrow' }}</div>
+      </div>
+      <div class="surface p-4">
+        <div class="text-xs text-slate-400 uppercase tracking-wide">Net income</div>
+        <div class="text-2xl font-semibold mt-2">{{ (b.totalIncome - b.totalExpenses) | currency:baseCurrency():'symbol-narrow' }}</div>
+        <div class="text-xs text-slate-500 mt-1">
+          {{ b.totalIncome | currency:baseCurrency():'symbol-narrow':'1.0-0' }} in
+          / {{ b.totalExpenses | currency:baseCurrency():'symbol-narrow':'1.0-0' }} out
+        </div>
+      </div>
+    </div>
+
+    @if (b.warnings.length > 0) {
+      <div class="surface p-4 border border-amber-400/30 bg-amber-400/5">
+        <div class="text-sm font-medium text-amber-200 mb-2 flex items-center gap-2">
+          <i class="pi pi-exclamation-triangle"></i>
+          {{ b.warnings.length }} thing{{ b.warnings.length === 1 ? '' : 's' }} to check before filing
+        </div>
+        <ul class="text-xs text-amber-100/80 list-disc pl-5 space-y-1">
+          @for (w of b.warnings; track w) { <li>{{ w }}</li> }
+        </ul>
+      </div>
+    }
+
+    <section class="surface overflow-hidden">
+      <header class="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+        <div>
+          <h2 class="font-medium">Year-end securities &amp; crypto holdings</h2>
+          <p class="text-xs text-slate-400">As of {{ b.asOf | date:'longDate' }}. Average cost reflects buys up to that date.</p>
+        </div>
+        <div class="text-sm text-slate-300">{{ b.holdings.length }} position{{ b.holdings.length === 1 ? '' : 's' }}</div>
+      </header>
+      @if (b.holdings.length === 0) {
+        <div class="p-8 text-center text-slate-400">
+          <i class="pi pi-briefcase text-3xl text-slate-500"></i>
+          <div class="mt-2 text-sm">No holdings on Dec 31, {{ b.year }}.</div>
+        </div>
+      } @else {
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-xs text-slate-400 uppercase tracking-wide">
+              <tr>
+                <th class="text-left px-4 py-2">Account</th>
+                <th class="text-left px-4 py-2">Symbol</th>
+                <th class="text-left px-4 py-2">Name</th>
+                <th class="text-right px-4 py-2">Quantity</th>
+                <th class="text-right px-4 py-2">Avg cost</th>
+                <th class="text-right px-4 py-2">Cost basis</th>
+                <th class="text-right px-4 py-2">Price</th>
+                <th class="text-left px-4 py-2">Price as of</th>
+                <th class="text-right px-4 py-2">Estimated value</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+              @for (h of b.holdings; track h.account + ':' + h.symbol) {
+                <tr>
+                  <td class="px-4 py-2 text-slate-300">{{ h.account }}</td>
+                  <td class="px-4 py-2 font-mono">{{ h.symbol }}</td>
+                  <td class="px-4 py-2 text-slate-400">{{ h.name || '—' }}</td>
+                  <td class="px-4 py-2 text-right font-mono">{{ h.quantity | number:'1.0-8' }}</td>
+                  <td class="px-4 py-2 text-right">{{ h.averageCost | currency:h.currency:'symbol-narrow' }}</td>
+                  <td class="px-4 py-2 text-right">{{ h.costBasis | currency:h.currency:'symbol-narrow' }}</td>
+                  <td class="px-4 py-2 text-right">
+                    @if (h.priceAtYearEnd != null) {
+                      {{ h.priceAtYearEnd | currency:h.currency:'symbol-narrow' }}
+                    } @else {
+                      <span class="text-amber-300">missing</span>
+                    }
+                  </td>
+                  <td class="px-4 py-2 text-xs" [ngClass]="staleClass(h.priceIsStale)">
+                    @if (h.priceAsOf) {
+                      {{ h.priceAsOf | date:'mediumDate' }}
+                      @if (h.priceIsStale) { <i class="pi pi-info-circle ml-1" title="Not from Dec 31"></i> }
+                    } @else { — }
+                  </td>
+                  <td class="px-4 py-2 text-right font-medium">
+                    @if (h.estimatedValue != null) {
+                      {{ h.estimatedValue | currency:h.currency:'symbol-narrow' }}
+                    } @else {
+                      <span class="text-slate-500">—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+            <tfoot class="text-sm">
+              <tr class="border-t border-white/10 bg-white/[0.02]">
+                <td colspan="8" class="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-400">Total</td>
+                <td class="px-4 py-2 text-right font-semibold">{{ b.totalSecuritiesValue | currency:baseCurrency():'symbol-narrow' }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      }
+    </section>
+
+    <section class="surface overflow-hidden">
+      <header class="px-4 py-3 border-b border-white/5">
+        <h2 class="font-medium">Account balances on Dec 31</h2>
+        <p class="text-xs text-slate-400">Computed from snapshots + summaries + transactions up to year-end.</p>
+      </header>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-xs text-slate-400 uppercase tracking-wide">
+            <tr>
+              <th class="text-left px-4 py-2">Account</th>
+              <th class="text-left px-4 py-2">Type</th>
+              <th class="text-left px-4 py-2">Currency</th>
+              <th class="text-right px-4 py-2">Balance</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-white/5">
+            @for (a of b.accountBalances; track a.account) {
+              <tr>
+                <td class="px-4 py-2 text-slate-300">{{ a.account }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ a.type }}</td>
+                <td class="px-4 py-2 text-slate-400">{{ a.currency }}</td>
+                <td class="px-4 py-2 text-right" [class.text-rose-300]="a.balanceAtYearEnd < 0">
+                  {{ a.balanceAtYearEnd | currency:a.currency:'symbol-narrow' }}
+                </td>
+              </tr>
+            }
+          </tbody>
+          <tfoot class="text-sm">
+            <tr class="border-t border-white/10 bg-white/[0.02]">
+              <td colspan="3" class="px-4 py-2 text-right text-xs uppercase tracking-wide text-slate-400">Total cash</td>
+              <td class="px-4 py-2 text-right font-semibold">{{ b.totalCashBalance | currency:baseCurrency():'symbol-narrow' }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <section class="surface overflow-hidden">
+        <header class="px-4 py-3 border-b border-white/5">
+          <h2 class="font-medium">Income by category</h2>
+          <p class="text-xs text-slate-400">Total: {{ b.totalIncome | currency:baseCurrency():'symbol-narrow' }}</p>
+        </header>
+        @if (b.income.length === 0) {
+          <div class="p-6 text-sm text-slate-400 text-center">No income recorded in {{ b.year }}.</div>
+        } @else {
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-white/5">
+              @for (i of b.income; track i.category) {
+                <tr>
+                  <td class="px-4 py-2 text-slate-300">{{ i.category }}</td>
+                  <td class="px-4 py-2 text-right">{{ i.amount | currency:baseCurrency():'symbol-narrow' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+
+      <section class="surface overflow-hidden">
+        <header class="px-4 py-3 border-b border-white/5">
+          <h2 class="font-medium">Expenses by category</h2>
+          <p class="text-xs text-slate-400">Total: {{ b.totalExpenses | currency:baseCurrency():'symbol-narrow' }}</p>
+        </header>
+        @if (b.expenses.length === 0) {
+          <div class="p-6 text-sm text-slate-400 text-center">No expenses recorded in {{ b.year }}.</div>
+        } @else {
+          <table class="w-full text-sm">
+            <tbody class="divide-y divide-white/5">
+              @for (e of b.expenses; track e.category) {
+                <tr>
+                  <td class="px-4 py-2 text-slate-300">{{ e.category }}</td>
+                  <td class="px-4 py-2 text-right">{{ e.amount | currency:baseCurrency():'symbol-narrow' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+    </div>
+  }
+</div>

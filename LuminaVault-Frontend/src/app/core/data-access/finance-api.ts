@@ -26,6 +26,7 @@ import {
   Loan,
   LoanInput,
   LoanSchedule,
+  TaxExport,
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
   MonthlyReconciliationInput,
@@ -127,6 +128,19 @@ export class FinanceApi {
 
   deleteLoan(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/finance/loans/${id}`);
+  }
+
+  taxExport(year: number) {
+    return this.http.get<TaxExport>(`${API_BASE}/api/finance/tax-export`, {
+      params: new HttpParams().set('year', year),
+    });
+  }
+
+  taxExportOds(year: number) {
+    return this.http.get(`${API_BASE}/api/finance/tax-export/ods`, {
+      params: new HttpParams().set('year', year),
+      responseType: 'blob',
+    });
   }
 
   listHoldings(accountId?: number) {

@@ -145,6 +145,7 @@ export class ShellComponent {
         { path: '/goals', icon: 'pi-flag', label: 'Goals' },
         { path: '/forecast', icon: 'pi-chart-line', label: 'Forecast' },
         { path: '/loans', icon: 'pi-credit-card', label: 'Loans' },
+        { path: '/tax', icon: 'pi-file-export', label: 'Tax export' },
       ],
     },
     {

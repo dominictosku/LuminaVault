@@ -63,6 +63,7 @@
 - **Budgets** — per-category monthly limits with spend tracking
 - **Savings goals** — target amount, current amount, status and due-date tracking for funds or payoff plans
 - **Loan amortisation** — track mortgages, car and personal loans with principal, rate, term and optional extra monthly payments; per-loan schedule shows monthly principal/interest split, year-level totals, and how much earlier extra payments pay the loan off
+- **Swiss tax export** — year-end bundle for the Wertschriftenverzeichnis & wealth declaration: every crypto/stock held on Dec 31 (rolled forward from Buy/Sell history), Dec 31 cash account balances, and income/expense aggregates for the year. Available as on-screen tables or as a multi-sheet ODS download; price rows are flagged when the last known quote is older than Dec 31 so you can spot which lines to override before filing
 - **Recurring subscriptions** — billing interval, next-due date, auto-renew, due forecast generation, optional document attachments (contracts, invoices)
 - **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
 - **Balance snapshots** — record actual vs. expected balance over time to catch drift

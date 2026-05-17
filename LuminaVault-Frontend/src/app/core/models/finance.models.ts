@@ -31,6 +31,46 @@ export const SAVINGS_GOAL_STATUSES: SavingsGoalStatus[] = ['Active', 'Paused', '
 export type LoanStatus = 'Active' | 'PaidOff' | 'Closed';
 export const LOAN_STATUSES: LoanStatus[] = ['Active', 'PaidOff', 'Closed'];
 
+export interface TaxHoldingRow {
+  account: string;
+  symbol: string;
+  name?: string | null;
+  quantity: number;
+  averageCost: number;
+  costBasis: number;
+  priceAtYearEnd?: number | null;
+  priceAsOf?: string | null;
+  priceIsStale: boolean;
+  estimatedValue?: number | null;
+  currency: string;
+}
+
+export interface TaxAccountBalanceRow {
+  account: string;
+  currency: string;
+  type: string;
+  balanceAtYearEnd: number;
+}
+
+export interface TaxCategoryTotalRow {
+  category: string;
+  amount: number;
+}
+
+export interface TaxExport {
+  year: number;
+  asOf: string;
+  holdings: TaxHoldingRow[];
+  totalSecuritiesValue: number;
+  accountBalances: TaxAccountBalanceRow[];
+  totalCashBalance: number;
+  income: TaxCategoryTotalRow[];
+  totalIncome: number;
+  expenses: TaxCategoryTotalRow[];
+  totalExpenses: number;
+  warnings: string[];
+}
+
 export interface FinanceAccount {
   id: number;
   name: string;
