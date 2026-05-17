@@ -1,10 +1,11 @@
-/// Best-effort receipt parser: takes the raw OCR'd text from Tesseract and pulls out
+/// Best-effort receipt parser: takes the raw OCR'd text from any source and pulls out
 /// a merchant guess, the total amount, and the transaction date. Designed for low-noise
 /// supermarket / restaurant / petrol receipts; results are *suggestions* meant to pre-fill
 /// the form the user is about to review and submit, not an authoritative extraction.
 ///
-/// The Tesseract.js model + WASM (~3 MB) is loaded lazily on first OCR call so the
-/// initial bundle isn't penalized for a feature most users invoke rarely.
+/// Deliberately framework-free and vendor-free: the actual OCR call lives behind the
+/// `ReceiptOcr` abstraction (see receipt-ocr.service.ts) so this module is pure logic
+/// and trivially unit-testable.
 
 export interface ParsedReceipt {
   payee: string | null;
@@ -146,20 +147,3 @@ function validDate(year: number, month: number, day: number) {
   return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
 }
 
-/// Lazy wrapper around tesseract.js. The library + English language pack weighs ~3 MB,
-/// so we dynamic-import it on first call to keep the initial bundle slim. Subsequent
-/// calls reuse the cached module via the bundler's import cache.
-export async function recognizeReceipt(
-  file: File,
-  onProgress?: (fraction: number) => void,
-): Promise<string> {
-  const { recognize } = await import('tesseract.js');
-  const result = await recognize(file, 'eng', {
-    logger: msg => {
-      if (onProgress && msg.status === 'recognizing text') {
-        onProgress(msg.progress ?? 0);
-      }
-    },
-  });
-  return result.data.text ?? '';
-}

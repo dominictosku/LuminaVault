@@ -24,7 +24,7 @@ public static class AuthEndpoints
             return Results.Ok(new { hasUser });
         });
 
-        g.MapPost("/register", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt) =>
+        g.MapPost("/register", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
         {
             if (await db.Users.AnyAsync())
                 return Problem.Conflict("A user already exists. This is a single-user app.");
@@ -34,17 +34,17 @@ public static class AuthEndpoints
             var user = new User
             {
                 Username = req.Username.Trim(),
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password)
+                PasswordHash = hasher.Hash(req.Password)
             };
             db.Users.Add(user);
             await db.SaveChangesAsync();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).RequireRateLimiting("auth");
 
-        g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt) =>
+        g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
         {
             var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username);
-            if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
+            if (user is null || !hasher.Verify(req.Password, user.PasswordHash))
                 return Results.Unauthorized();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).RequireRateLimiting("auth");
@@ -53,7 +53,8 @@ public static class AuthEndpoints
             HttpContext ctx,
             [FromBody] ChangePasswordRequest req,
             AppDbContext db,
-            JwtService jwt) =>
+            JwtService jwt,
+            IPasswordHasher hasher) =>
         {
             var username = ctx.User.Identity?.Name;
             if (string.IsNullOrWhiteSpace(username)) return Results.Unauthorized();
@@ -61,10 +62,10 @@ public static class AuthEndpoints
                 return Problem.BadRequest("New password must be at least 8 chars.");
 
             var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
-            if (user is null || !BCrypt.Net.BCrypt.Verify(req.CurrentPassword, user.PasswordHash))
+            if (user is null || !hasher.Verify(req.CurrentPassword, user.PasswordHash))
                 return Problem.BadRequest("Current password is incorrect.");
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+            user.PasswordHash = hasher.Hash(req.NewPassword);
             await db.SaveChangesAsync();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).RequireAuthorization();

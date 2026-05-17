@@ -5,6 +5,7 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth.interceptor';
 import { GlobalErrorHandler } from './core/global-error-handler';
+import { ReceiptOcr, TesseractReceiptOcr } from './core/receipt-ocr.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -12,5 +13,7 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(withInterceptors([authInterceptor])),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
+    // Local tesseract.js OCR; swap to a cloud adapter here if needed.
+    { provide: ReceiptOcr, useClass: TesseractReceiptOcr },
   ],
 };

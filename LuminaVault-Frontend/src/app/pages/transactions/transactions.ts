@@ -23,7 +23,8 @@ import {
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { tradeAmount } from '../../core/finance-math';
-import { parseReceipt, recognizeReceipt } from '../../core/receipt-ocr';
+import { parseReceipt } from '../../core/receipt-ocr';
+import { ReceiptOcr } from '../../core/receipt-ocr.service';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
@@ -48,6 +49,7 @@ export class TransactionsComponent {
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
+  private ocr = inject(ReceiptOcr);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   protected filters = inject<FilterStateController<TransactionFilters>>(FilterStateController);
@@ -533,7 +535,7 @@ export class TransactionsComponent {
     this.ocrRunning.set(true);
     this.ocrProgress.set(0);
     try {
-      const text = await recognizeReceipt(file, p => this.ocrProgress.set(p));
+      const text = await this.ocr.recognize(file, (p: number) => this.ocrProgress.set(p));
       const parsed = parseReceipt(text);
       if (!parsed.payee && parsed.amount == null && !parsed.date) {
         this.toast.warning('Could not read this receipt. Try a clearer photo.');

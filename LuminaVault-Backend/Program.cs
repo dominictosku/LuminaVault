@@ -70,6 +70,7 @@ if (string.IsNullOrWhiteSpace(jwtOpt.Key))
 }
 builder.Services.AddSingleton(jwtOpt);
 builder.Services.AddSingleton<JwtService>();
+builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 
 // --- DB ---
 // Tracking stays on by default so the common "load by id (incl. FindAsync), mutate,
