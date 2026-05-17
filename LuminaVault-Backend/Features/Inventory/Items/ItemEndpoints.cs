@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Storage;
 using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -105,16 +106,16 @@ public static class ItemEndpoints
             return Results.Ok(MapToDto(item));
         });
 
-        g.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        g.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var item = await db.Items
                 .Include(x => x.Photos)
                 .Include(x => x.Attachments)
                 .FirstOrDefaultAsync(x => x.Id == id);
             if (item is null) return Results.NotFound();
-            foreach (var p in item.Photos) DeleteUploadFile(env, p.FileName);
-            foreach (var attachment in item.Attachments) DeleteUploadFile(env, attachment.FileName);
-            if (item.ModelFileName != null) DeleteUploadFile(env, item.ModelFileName);
+            foreach (var p in item.Photos) DeleteUploadFile(storage, p.FileName);
+            foreach (var attachment in item.Attachments) DeleteUploadFile(storage, attachment.FileName);
+            if (item.ModelFileName != null) DeleteUploadFile(storage, item.ModelFileName);
             db.Items.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -122,7 +123,7 @@ public static class ItemEndpoints
 
         // Model upload (single .glb/.gltf per item)
         g.MapPost("/{id:int}/model", async (int id, IFormFile file,
-            AppDbContext db, IWebHostEnvironment env) =>
+            AppDbContext db, StoragePaths storage) =>
         {
             if (file is null || file.Length == 0) return Problem.BadRequest("No file.");
             if (file.Length > 50 * 1024 * 1024) return Problem.BadRequest("Max 50MB.");
@@ -133,14 +134,13 @@ public static class ItemEndpoints
             var item = await db.Items.FindAsync(id);
             if (item is null) return Results.NotFound();
 
-            var dir = Path.Combine(env.ContentRootPath, "uploads");
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(storage.UploadsDirectory);
             var name = $"{Guid.NewGuid():N}{ext}";
-            var path = Path.Combine(dir, name);
+            var path = storage.UploadPath(name);
             await using (var fs = File.Create(path)) await file.CopyToAsync(fs);
 
             // Replace previous model file if any
-            if (item.ModelFileName != null) DeleteUploadFile(env, item.ModelFileName);
+            if (item.ModelFileName != null) DeleteUploadFile(storage, item.ModelFileName);
 
             item.ModelFileName = name;
             item.ModelContentType = ext == ".glb" ? "model/gltf-binary" : "model/gltf+json";
@@ -149,11 +149,11 @@ public static class ItemEndpoints
             return Results.Ok(new { modelUrl = $"/api/items/{item.Id}/model" });
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
-        g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var item = await db.Items.FindAsync(id);
             if (item is null || item.ModelFileName is null) return Results.NotFound();
-            DeleteUploadFile(env, item.ModelFileName);
+            DeleteUploadFile(storage, item.ModelFileName);
             item.ModelFileName = null;
             item.ModelContentType = null;
             item.UpdatedAt = DateTime.UtcNow;
@@ -162,11 +162,11 @@ public static class ItemEndpoints
         });
 
         // Public model download (no auth required so <model-viewer>/loaders work without headers)
-        app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var item = await db.Items.FindAsync(id);
             if (item?.ModelFileName is null) return Results.NotFound();
-            var path = Path.Combine(env.ContentRootPath, "uploads", item.ModelFileName);
+            var path = storage.UploadPath(item.ModelFileName);
             if (!File.Exists(path)) return Results.NotFound();
             var bytes = await File.ReadAllBytesAsync(path);
             return Results.File(bytes, item.ModelContentType ?? "application/octet-stream");
@@ -238,11 +238,11 @@ public static class ItemEndpoints
             i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
     }
 
-    static void DeleteUploadFile(IWebHostEnvironment env, string fileName)
+    static void DeleteUploadFile(StoragePaths storage, string fileName)
     {
         try
         {
-            var path = Path.Combine(env.ContentRootPath, "uploads", fileName);
+            var path = storage.UploadPath(fileName);
             if (File.Exists(path)) File.Delete(path);
         }
         catch { /* best effort */ }

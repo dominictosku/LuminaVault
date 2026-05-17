@@ -126,6 +126,23 @@ npm start
 # App available at http://localhost:4200
 ```
 
+### Self-host with Docker
+
+For a one-command production deployment, the repo ships a [docker-compose.yml](docker-compose.yml) with two services: the .NET API and an nginx-fronted Angular SPA. The frontend container serves the static bundle and reverse-proxies `/api/*` to the backend, so the whole stack lives on a single port and origin (no CORS to configure).
+
+```bash
+cp .env.example .env
+# generate a 32+ char JWT key (any random secret works):
+openssl rand -base64 48 | tr -d '\n' > /tmp/k && echo LUMINA_JWT_KEY=$(cat /tmp/k) >> .env
+
+docker compose up -d --build
+# App available at http://localhost:8080
+```
+
+A single named volume (`luminavault-data`) holds the SQLite DB, `uploads/`, `logs/`, and (if enabled) `backups/`. Swap it for a host bind mount in `docker-compose.yml` if your backup tooling already covers a host path. The backend reads `LUMINA_DATA_DIR=/data` and writes everything under that one mount.
+
+The compose file does **not** include TLS. Front it with your favourite terminator (Caddy, Traefik, Cloudflare Tunnel, Nginx Proxy Manager) before exposing the port publicly. The bundled nginx already strips its own CORS concerns by serving SPA and API from the same origin.
+
 ### Tests
 
 ```bash

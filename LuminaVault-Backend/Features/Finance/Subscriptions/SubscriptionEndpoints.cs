@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Storage;
 using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -50,12 +51,12 @@ internal static class SubscriptionEndpoints
             return Results.Ok(MapSubscription(subscription));
         });
 
-        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var subscription = await db.Subscriptions.Include(s => s.Attachments).FirstOrDefaultAsync(s => s.Id == id);
             if (subscription is null) return Results.NotFound();
             foreach (var attachment in subscription.Attachments)
-                AttachmentEndpoints.DeleteUploadFile(env, attachment.FileName);
+                AttachmentEndpoints.DeleteUploadFile(storage, attachment.FileName);
             db.Subscriptions.Remove(subscription);
             await db.SaveChangesAsync();
             return Results.NoContent();

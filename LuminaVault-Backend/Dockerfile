@@ -1,29 +1,27 @@
-# Unter https://aka.ms/customizecontainer erfahren Sie, wie Sie Ihren Debugcontainer anpassen und wie Visual Studio dieses Dockerfile verwendet, um Ihre Images für ein schnelleres Debuggen zu erstellen.
-
-# Diese Stufe wird verwendet, wenn sie von VS im Schnellmodus ausgeführt wird (Standardeinstellung für Debugkonfiguration).
+# Base runtime image. /data is the canonical mount point for the SQLite DB,
+# uploads/, logs/ and optional backups/ — Program.cs honours LUMINA_DATA_DIR.
+# We pre-create it and chown to APP_UID so a fresh named volume is writable.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
 WORKDIR /app
+RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /data
+USER $APP_UID
 EXPOSE 8080
-EXPOSE 8081
 
-
-# Diese Stufe wird zum Erstellen des Dienstprojekts verwendet.
+# Build stage.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["LuminaVault-Backend.csproj", "."]
 RUN dotnet restore "./LuminaVault-Backend.csproj"
 COPY . .
-WORKDIR "/src/."
 RUN dotnet build "./LuminaVault-Backend.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# Diese Stufe wird verwendet, um das Dienstprojekt zu veröffentlichen, das in die letzte Phase kopiert werden soll.
+# Publish stage.
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./LuminaVault-Backend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# Diese Stufe wird in der Produktion oder bei Ausführung von VS im regulären Modus verwendet (Standard, wenn die Debugkonfiguration nicht verwendet wird).
+# Final runtime image.
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .

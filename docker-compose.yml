@@ -1,0 +1,62 @@
+# Self-host bundle for LuminaVault. One ASP.NET Core API + one nginx-fronted SPA.
+# Run from this directory:
+#
+#   cp .env.example .env       # then fill in LUMINA_JWT_KEY (32+ chars)
+#   docker compose up -d --build
+#
+# The SPA is reachable on http://localhost:8080 by default. Put this behind your
+# own TLS terminator (Caddy, Traefik, Cloudflare Tunnel, Nginx Proxy Manager…)
+# before exposing it to the public internet — there is no built-in HTTPS.
+
+services:
+  backend:
+    build:
+      context: ./LuminaVault-Backend
+      dockerfile: Dockerfile
+    image: luminavault-backend:latest
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      # Single mount point for the SQLite DB, uploaded photos/models/attachments,
+      # rolling Serilog files, and the `Backup` directory if scheduled backups are on.
+      LUMINA_DATA_DIR: /data
+      # Required: 32+ chars. The app refuses to use the dev fallback key under Production
+      # without warning loudly; set this to something long and random.
+      LUMINA_JWT_KEY: ${LUMINA_JWT_KEY:?Set LUMINA_JWT_KEY in .env before starting}
+      # Optional price-provider keys — Finnhub for stocks, CoinGecko works without a key.
+      # ASP.NET Core config maps double-underscore env vars to nested keys, so this
+      # overlays the empty `PriceProviders:Finnhub:ApiKey` slot in appsettings.json.
+      PriceProviders__Finnhub__ApiKey: ${LUMINA_FINNHUB_KEY:-}
+    volumes:
+      - luminavault-data:/data
+    expose:
+      - "8080"
+    healthcheck:
+      # Hits the DB-aware /api/health endpoint — returns 503 if SQLite is locked
+      # or the file is missing, which catches the "we're up but every request 500s" failure.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  web:
+    build:
+      context: ./LuminaVault-Frontend
+      dockerfile: Dockerfile
+    image: luminavault-web:latest
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # Change the host port if 8080 is taken. Same-origin nginx routes /api/* to
+      # the backend service, so there is no second port to expose.
+      - "${LUMINA_WEB_PORT:-8080}:80"
+
+volumes:
+  luminavault-data:
+    # Named volume keeps DB, uploads and logs across image rebuilds.
+    # Move to a host bind mount if you want backups handled by your existing
+    # filesystem-level tooling: replace this stanza with `driver_opts:` for a
+    # local path, or just bind `./data:/data` directly under the backend service.

@@ -29,3 +29,9 @@ Thumbs.db
 
 # Miscellaneous
 *.lscache
+
+# ── Docker / self-host ────────────────────────────────────────────────────────
+# Secrets live in .env (LUMINA_JWT_KEY, etc.); .env.example is the tracked template.
+.env
+# Optional bind-mount path if the user switches the named volume to ./data.
+/data/

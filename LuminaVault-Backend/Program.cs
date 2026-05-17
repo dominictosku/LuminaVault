@@ -5,6 +5,7 @@ using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Endpoints;
 using LuminaVault.Pricing;
+using LuminaVault.Storage;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.RateLimiting;
@@ -18,6 +19,16 @@ using Serilog.Events;
 const string DevFallbackJwtKey = "dev-only-key-change-me-please-this-must-be-32+chars-long!!";
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Resolve where stateful files (DB, uploads, logs) live. LUMINA_DATA_DIR lets containers
+// point everything at a single mounted volume; local dev keeps the per-project ContentRoot.
+var dataDirOverride = Environment.GetEnvironmentVariable("LUMINA_DATA_DIR");
+var storage = new StoragePaths(
+    string.IsNullOrWhiteSpace(dataDirOverride) ? builder.Environment.ContentRootPath : dataDirOverride);
+Directory.CreateDirectory(storage.DataDirectory);
+Directory.CreateDirectory(storage.UploadsDirectory);
+Directory.CreateDirectory(storage.LogsDirectory);
+builder.Services.AddSingleton(storage);
 
 // Replace the default ILogger pipeline with Serilog reading from configuration.
 // Hosts can override sinks/levels via appsettings.json without code changes.
@@ -33,7 +44,7 @@ builder.Host.UseSerilog((ctx, services, cfg) => cfg
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
     .WriteTo.Console()
     .WriteTo.File(
-        path: Path.Combine(ctx.HostingEnvironment.ContentRootPath, "logs", "luminavault-.log"),
+        path: Path.Combine(storage.LogsDirectory, "luminavault-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj} {Properties:j}{NewLine}{Exception}"));
@@ -64,9 +75,8 @@ builder.Services.AddSingleton<JwtService>();
 // Tracking stays on by default so the common "load by id (incl. FindAsync), mutate,
 // save" pattern keeps working. Hot read endpoints opt out per-query with
 // `.AsNoTracking()` — see TransactionEndpoints, FinanceSummaryEndpoints, etc.
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "luminavault.db");
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlite($"Data Source={dbPath}")
+    opt.UseSqlite($"Data Source={storage.DatabasePath}")
        .AddInterceptors(new SqlitePragmaInterceptor()));
 
 // --- Auth ---

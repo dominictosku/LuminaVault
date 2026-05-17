@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Storage;
 using LuminaVault.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,11 @@ public static class PhotoEndpoints
         var g = app.MapGroup("/api/photos").WithTags("Photos");
 
         // Public read so <img src> works without auth headers
-        g.MapGet("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        g.MapGet("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var p = await db.ItemPhotos.FindAsync(id);
             if (p is null) return Results.NotFound();
-            var path = Path.Combine(env.ContentRootPath, "uploads", p.FileName);
+            var path = storage.UploadPath(p.FileName);
             if (!File.Exists(path)) return Results.NotFound();
             var bytes = await File.ReadAllBytesAsync(path);
             return Results.File(bytes, p.ContentType);
@@ -28,7 +29,7 @@ public static class PhotoEndpoints
         var auth = app.MapGroup("/api/items").RequireAuthorization().WithTags("Photos");
 
         auth.MapPost("/{itemId:int}/photos", async (int itemId, IFormFile file,
-            AppDbContext db, IWebHostEnvironment env) =>
+            AppDbContext db, StoragePaths storage) =>
         {
             if (file is null || file.Length == 0) return Problem.BadRequest("No file.");
             if (file.Length > 10 * 1024 * 1024) return Problem.BadRequest("Max 10MB.");
@@ -37,11 +38,10 @@ public static class PhotoEndpoints
             var item = await db.Items.FindAsync(itemId);
             if (item is null) return Results.NotFound();
 
-            var dir = Path.Combine(env.ContentRootPath, "uploads");
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(storage.UploadsDirectory);
             var ext = Path.GetExtension(file.FileName);
             var name = $"{Guid.NewGuid():N}{ext}";
-            var path = Path.Combine(dir, name);
+            var path = storage.UploadPath(name);
             await using (var fs = File.Create(path)) await file.CopyToAsync(fs);
 
             var photo = new ItemPhoto { ItemId = itemId, FileName = name, ContentType = file.ContentType };
@@ -51,13 +51,13 @@ public static class PhotoEndpoints
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
         var del = app.MapGroup("/api/photos").RequireAuthorization();
-        del.MapDelete("/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        del.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var p = await db.ItemPhotos.FindAsync(id);
             if (p is null) return Results.NotFound();
             try
             {
-                var path = Path.Combine(env.ContentRootPath, "uploads", p.FileName);
+                var path = storage.UploadPath(p.FileName);
                 if (File.Exists(path)) File.Delete(path);
             }
             catch { }

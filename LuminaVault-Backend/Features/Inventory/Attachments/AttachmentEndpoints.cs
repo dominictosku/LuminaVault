@@ -1,5 +1,6 @@
 using LuminaVault.Data;
 using LuminaVault.Domain;
+using LuminaVault.Storage;
 using LuminaVault.Validation;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,20 +19,20 @@ public static class AttachmentEndpoints
 
     public static IEndpointRouteBuilder MapAttachments(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/attachments/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        app.MapGet("/api/attachments/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var attachment = await db.DocumentAttachments.FindAsync(id);
             if (attachment is null) return Results.NotFound();
-            var path = UploadPath(env, attachment.FileName);
+            var path = storage.UploadPath(attachment.FileName);
             if (!File.Exists(path)) return Results.NotFound();
             return Results.File(await File.ReadAllBytesAsync(path), attachment.ContentType, attachment.OriginalFileName);
         }).WithTags("Attachments");
 
         var items = app.MapGroup("/api/items").RequireAuthorization().WithTags("Attachments");
-        items.MapPost("/{itemId:int}/attachments", async (int itemId, IFormFile file, AppDbContext db, IWebHostEnvironment env) =>
+        items.MapPost("/{itemId:int}/attachments", async (int itemId, IFormFile file, AppDbContext db, StoragePaths storage) =>
         {
             if (!await db.Items.AnyAsync(i => i.Id == itemId)) return Results.NotFound();
-            var result = await SaveAttachment(file, env);
+            var result = await SaveAttachment(file, storage);
             if (result.Error is not null) return Problem.BadRequest(result.Error);
             var attachment = result.Attachment!;
             attachment.ItemId = itemId;
@@ -41,10 +42,10 @@ public static class AttachmentEndpoints
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
         var subscriptions = app.MapGroup("/api/finance/subscriptions").RequireAuthorization().WithTags("Attachments");
-        subscriptions.MapPost("/{subscriptionId:int}/attachments", async (int subscriptionId, IFormFile file, AppDbContext db, IWebHostEnvironment env) =>
+        subscriptions.MapPost("/{subscriptionId:int}/attachments", async (int subscriptionId, IFormFile file, AppDbContext db, StoragePaths storage) =>
         {
             if (!await db.Subscriptions.AnyAsync(s => s.Id == subscriptionId)) return Results.NotFound();
-            var result = await SaveAttachment(file, env);
+            var result = await SaveAttachment(file, storage);
             if (result.Error is not null) return Problem.BadRequest(result.Error);
             var attachment = result.Attachment!;
             attachment.SubscriptionId = subscriptionId;
@@ -53,11 +54,11 @@ public static class AttachmentEndpoints
             return Results.Ok(MapAttachment(attachment));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
-        app.MapDelete("/api/attachments/{id:int}", async (int id, AppDbContext db, IWebHostEnvironment env) =>
+        app.MapDelete("/api/attachments/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var attachment = await db.DocumentAttachments.FindAsync(id);
             if (attachment is null) return Results.NotFound();
-            DeleteUploadFile(env, attachment.FileName);
+            DeleteUploadFile(storage, attachment.FileName);
             db.DocumentAttachments.Remove(attachment);
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -70,17 +71,16 @@ public static class AttachmentEndpoints
         new(attachment.Id, attachment.OriginalFileName, $"/api/attachments/{attachment.Id}",
             attachment.ContentType, attachment.Size, attachment.UploadedAt);
 
-    static async Task<(DocumentAttachment? Attachment, string? Error)> SaveAttachment(IFormFile file, IWebHostEnvironment env)
+    static async Task<(DocumentAttachment? Attachment, string? Error)> SaveAttachment(IFormFile file, StoragePaths storage)
     {
         if (file is null || file.Length == 0) return (null, "No file.");
         if (file.Length > 25 * 1024 * 1024) return (null, "Max 25MB.");
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!AllowedExtensions.Contains(ext)) return (null, "Unsupported file type.");
 
-        var dir = Path.Combine(env.ContentRootPath, "uploads");
-        Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(storage.UploadsDirectory);
         var stored = $"{Guid.NewGuid():N}{ext}";
-        await using (var fs = File.Create(UploadPath(env, stored))) await file.CopyToAsync(fs);
+        await using (var fs = File.Create(storage.UploadPath(stored))) await file.CopyToAsync(fs);
         return (new DocumentAttachment
         {
             OriginalFileName = Path.GetFileName(file.FileName),
@@ -90,14 +90,11 @@ public static class AttachmentEndpoints
         }, null);
     }
 
-    public static string UploadPath(IWebHostEnvironment env, string fileName) =>
-        Path.Combine(env.ContentRootPath, "uploads", fileName);
-
-    public static void DeleteUploadFile(IWebHostEnvironment env, string fileName)
+    public static void DeleteUploadFile(StoragePaths storage, string fileName)
     {
         try
         {
-            var path = UploadPath(env, fileName);
+            var path = storage.UploadPath(fileName);
             if (File.Exists(path)) File.Delete(path);
         }
         catch { }
