@@ -5,26 +5,27 @@ import { forkJoin } from 'rxjs';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import { FinanceBudget, FinanceBudgetInput, FinanceBudgetOverview, FinanceCategory } from '../../core/models';
-import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 
 @Component({
   selector: 'app-budgets',
   imports: [FormsModule, CurrencyPipe, DecimalPipe],
   templateUrl: './budgets.html',
   styleUrl: './budgets.scss',
+  providers: [CrudFormController],
 })
 export class BudgetsComponent {
   private finance = inject(FinanceApi);
   private settings = inject(SettingsApi);
-  private confirmDialog = inject(ConfirmDialogService);
+  protected crud = inject<CrudFormController<FinanceBudgetInput, FinanceBudget>>(CrudFormController);
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
 
   month = signal(new Date().toISOString().substring(0, 7));
   overview = signal<FinanceBudgetOverview | null>(null);
   categories = signal<FinanceCategory[]>([]);
   loading = signal(true);
-  saving = signal(false);
-  error = signal<string | null>(null);
-  editingId = signal<number | null>(null);
   model: FinanceBudgetInput = this.defaultModel();
 
   categoryNames = computed(() => {
@@ -37,6 +38,13 @@ export class BudgetsComponent {
   });
 
   constructor() {
+    this.crud.configure({
+      create: input => this.finance.createBudget(input),
+      update: (id, input) => this.finance.updateBudget(id, input),
+      delete: id => this.finance.deleteBudget(id),
+      onSaved: () => { this.reset(); this.fetch(); },
+      onRemoved: () => { this.reset(); this.fetch(); },
+    });
     this.fetch();
   }
 
@@ -63,8 +71,7 @@ export class BudgetsComponent {
   }
 
   edit(row: FinanceBudget) {
-    this.editingId.set(row.id);
-    this.error.set(null);
+    this.crud.startEdit(row.id);
     this.model = {
       category: row.category,
       month: row.month,
@@ -75,42 +82,27 @@ export class BudgetsComponent {
 
   save() {
     if (!this.model.category) {
-      this.error.set('Choose a category.');
+      this.crud.error.set('Choose a category.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
     const input: FinanceBudgetInput = {
       ...this.model,
       month: this.monthStartIso(),
       limitAmount: Number(this.model.limitAmount) || 0,
     };
-    const op = this.editingId()
-      ? this.finance.updateBudget(this.editingId()!, input)
-      : this.finance.createBudget(input);
-    op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
-    });
+    this.crud.save(input);
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete budget?',
       message: 'This category budget will be removed for the selected month.',
       confirmText: 'Delete',
     });
-    if (!confirmed) return;
-    this.finance.deleteBudget(this.editingId()!).subscribe(() => {
-      this.reset();
-      this.fetch();
-    });
   }
 
   reset() {
-    this.editingId.set(null);
-    this.error.set(null);
+    this.crud.cancel();
     this.model = this.defaultModel();
     if (this.categories()[0]) this.model.category = this.categories()[0].name;
   }

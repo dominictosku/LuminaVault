@@ -10,23 +10,26 @@ import {
   SavingsGoalInput,
   SavingsGoalStatus,
 } from '../../core/models';
-import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 
 @Component({
   selector: 'app-goals',
   imports: [FormsModule, CurrencyPipe, DecimalPipe, DatePipe, NgClass],
   templateUrl: './goals.html',
+  providers: [CrudFormController],
 })
 export class GoalsComponent {
   private api = inject(FinanceApi);
-  private confirmDialog = inject(ConfirmDialogService);
+  protected crud = inject<CrudFormController<SavingsGoalInput, SavingsGoal>>(CrudFormController);
+  // Pass-through signals so the template keeps reading `editingId()`, `saving()`, `error()`
+  // unchanged — the controller is an implementation detail of the component.
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
 
   goals = signal<SavingsGoal[]>([]);
   accounts = signal<FinanceAccount[]>([]);
   loading = signal(true);
-  saving = signal(false);
-  error = signal<string | null>(null);
-  editingId = signal<number | null>(null);
   includeInactive = signal(false);
   targetDateValue = '';
   statuses = SAVINGS_GOAL_STATUSES;
@@ -46,6 +49,13 @@ export class GoalsComponent {
   });
 
   constructor() {
+    this.crud.configure({
+      create: input => this.api.createGoal(input),
+      update: (id, input) => this.api.updateGoal(id, input),
+      delete: id => this.api.deleteGoal(id),
+      onSaved: () => { this.reset(); this.fetch(); },
+      onRemoved: () => { this.reset(); this.fetch(); },
+    });
     this.fetch();
   }
 
@@ -70,8 +80,7 @@ export class GoalsComponent {
   }
 
   edit(goal: SavingsGoal) {
-    this.editingId.set(goal.id);
-    this.error.set(null);
+    this.crud.startEdit(goal.id);
     this.targetDateValue = goal.targetDate ? goal.targetDate.substring(0, 10) : '';
     this.model = {
       name: goal.name,
@@ -87,11 +96,9 @@ export class GoalsComponent {
 
   save() {
     if (!this.model.name.trim()) {
-      this.error.set('Goal name is required.');
+      this.crud.error.set('Goal name is required.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
     const account = this.accounts().find(a => a.id === this.model.accountId);
     const input: SavingsGoalInput = {
       ...this.model,
@@ -101,26 +108,14 @@ export class GoalsComponent {
       currentAmount: Number(this.model.currentAmount) || 0,
       targetDate: this.targetDateValue ? new Date(this.targetDateValue).toISOString() : null,
     };
-    const op = this.editingId()
-      ? this.api.updateGoal(this.editingId()!, input)
-      : this.api.createGoal(input);
-    op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
-    });
+    this.crud.save(input);
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete goal?',
       message: 'This savings goal will be removed.',
       confirmText: 'Delete',
-    });
-    if (!confirmed) return;
-    this.api.deleteGoal(this.editingId()!).subscribe(() => {
-      this.reset();
-      this.fetch();
     });
   }
 
@@ -130,8 +125,7 @@ export class GoalsComponent {
   }
 
   reset() {
-    this.editingId.set(null);
-    this.error.set(null);
+    this.crud.cancel();
     this.targetDateValue = '';
     this.model = this.defaultModel();
   }

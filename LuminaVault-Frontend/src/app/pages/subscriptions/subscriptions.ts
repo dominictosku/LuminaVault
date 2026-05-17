@@ -17,7 +17,7 @@ import {
   SubscriptionIntervalPreset,
   SubscriptionStatus,
 } from '../../core/models';
-import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 import { activeSubscriptionsMonthlyTotal } from '../../core/finance-math';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
@@ -43,26 +43,26 @@ const DEFAULT_FILTERS: SubscriptionFilters = {
   imports: [FormsModule, CurrencyPipe, DatePipe],
   templateUrl: './subscriptions.html',
   styleUrl: './subscriptions.scss',
-  providers: [FilterStateController],
+  providers: [FilterStateController, CrudFormController],
 })
 export class SubscriptionsComponent {
   protected api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
-  private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   protected filters = inject<FilterStateController<SubscriptionFilters>>(FilterStateController);
+  protected crud = inject<CrudFormController<SubscriptionInput, Subscription>>(CrudFormController);
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
   accounts = signal<FinanceAccount[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
   subscriptions = signal<Subscription[]>([]);
   loading = signal(true);
-  saving = signal(false);
   generatingTransaction = signal(false);
   generatingDue = signal(false);
   uploadingAttachment = signal(false);
-  error = signal<string | null>(null);
   automationMessage = signal<string | null>(null);
-  editingId = signal<number | null>(null);
 
   statuses = SUBSCRIPTION_STATUSES;
   intervalUnits = BILLING_INTERVAL_UNITS;
@@ -137,6 +137,13 @@ export class SubscriptionsComponent {
       write: values => this.applyFilters(values),
       onChange: () => this.syncFiltersToUrl(),
     });
+    this.crud.configure({
+      create: input => this.api.createSubscription(input),
+      update: (id, input) => this.api.updateSubscription(id, input),
+      delete: id => this.api.deleteSubscription(id),
+      onSaved: () => { this.reset(); this.fetchAll(); },
+      onRemoved: () => { this.reset(); this.fetchAll(); },
+    });
     const params = this.route.snapshot.queryParamMap;
     this.query.set(params.get('q') ?? '');
     this.statusFilter.set((params.get('status') as SubscriptionStatus | null) || null);
@@ -171,8 +178,7 @@ export class SubscriptionsComponent {
   }
 
   editSubscription(subscription: Subscription) {
-    this.editingId.set(subscription.id);
-    this.error.set(null);
+    this.crud.startEdit(subscription.id);
     this.startedOn = subscription.startedOn.substring(0, 10);
     this.nextDueOn = subscription.nextDueOn.substring(0, 10);
     this.model = {
@@ -197,11 +203,9 @@ export class SubscriptionsComponent {
 
   save() {
     if (!this.model.name.trim()) {
-      this.error.set('Name is required.');
+      this.crud.error.set('Name is required.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
     const input: SubscriptionInput = {
       ...this.model,
       amount: Number(this.model.amount) || 0,
@@ -212,26 +216,14 @@ export class SubscriptionsComponent {
       startedOn: new Date(this.startedOn).toISOString(),
       nextDueOn: new Date(this.nextDueOn).toISOString(),
     };
-    const op = this.editingId()
-      ? this.api.updateSubscription(this.editingId()!, input)
-      : this.api.createSubscription(input);
-    op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetchAll(); },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
-    });
+    this.crud.save(input);
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete subscription?',
       message: 'This recurring subscription record will be removed.',
       confirmText: 'Delete',
-    });
-    if (!confirmed) return;
-    this.api.deleteSubscription(this.editingId()!).subscribe(() => {
-      this.reset();
-      this.fetchAll();
     });
   }
 

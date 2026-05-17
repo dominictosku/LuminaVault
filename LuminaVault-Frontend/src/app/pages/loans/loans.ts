@@ -11,25 +11,26 @@ import {
   LoanStatus,
   LOAN_STATUSES,
 } from '../../core/models';
-import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 
 @Component({
   selector: 'app-loans',
   imports: [FormsModule, CurrencyPipe, DecimalPipe, DatePipe, NgClass],
   templateUrl: './loans.html',
+  providers: [CrudFormController],
 })
 export class LoansComponent {
   private api = inject(FinanceApi);
-  private confirmDialog = inject(ConfirmDialogService);
+  protected crud = inject<CrudFormController<LoanInput, Loan>>(CrudFormController);
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
 
   loans = signal<Loan[]>([]);
   accounts = signal<FinanceAccount[]>([]);
   schedule = signal<LoanSchedule | null>(null);
   loading = signal(true);
   scheduleLoading = signal(false);
-  saving = signal(false);
-  error = signal<string | null>(null);
-  editingId = signal<number | null>(null);
   selectedScheduleId = signal<number | null>(null);
   includeClosed = signal(false);
   startDateValue = '';
@@ -49,6 +50,25 @@ export class LoansComponent {
   baseCurrency = computed(() => this.activeLoans()[0]?.currency ?? 'CHF');
 
   constructor() {
+    this.crud.configure({
+      create: input => this.api.createLoan(input),
+      update: (id, input) => this.api.updateLoan(id, input),
+      delete: id => this.api.deleteLoan(id),
+      // Loans page refreshes its open schedule panel after a save so the chart reflects
+      // the new principal/rate/extra-payment values, not just the list row.
+      onSaved: () => {
+        const refreshId = this.selectedScheduleId();
+        this.reset();
+        this.fetch();
+        if (refreshId) this.api.loanSchedule(refreshId).subscribe(s => this.schedule.set(s));
+      },
+      onRemoved: () => {
+        this.reset();
+        this.selectedScheduleId.set(null);
+        this.schedule.set(null);
+        this.fetch();
+      },
+    });
     this.fetch();
   }
 
@@ -73,8 +93,7 @@ export class LoansComponent {
   }
 
   edit(loan: Loan) {
-    this.editingId.set(loan.id);
-    this.error.set(null);
+    this.crud.startEdit(loan.id);
     this.startDateValue = loan.startDate.substring(0, 10);
     this.model = {
       name: loan.name,
@@ -107,11 +126,9 @@ export class LoansComponent {
   }
 
   save() {
-    if (!this.model.name.trim()) { this.error.set('Loan name is required.'); return; }
-    if ((Number(this.model.principal) || 0) <= 0) { this.error.set('Principal must be greater than zero.'); return; }
-    if ((Number(this.model.termMonths) || 0) <= 0) { this.error.set('Term must be at least one month.'); return; }
-    this.saving.set(true);
-    this.error.set(null);
+    if (!this.model.name.trim()) { this.crud.error.set('Loan name is required.'); return; }
+    if ((Number(this.model.principal) || 0) <= 0) { this.crud.error.set('Principal must be greater than zero.'); return; }
+    if ((Number(this.model.termMonths) || 0) <= 0) { this.crud.error.set('Term must be at least one month.'); return; }
     const account = this.accounts().find(a => a.id === this.model.accountId);
     const input: LoanInput = {
       ...this.model,
@@ -124,36 +141,14 @@ export class LoansComponent {
       extraMonthlyPayment: Number(this.model.extraMonthlyPayment) || 0,
       startDate: this.startDateValue ? new Date(this.startDateValue).toISOString() : new Date().toISOString(),
     };
-    const op = this.editingId()
-      ? this.api.updateLoan(this.editingId()!, input)
-      : this.api.createLoan(input);
-    op.subscribe({
-      next: () => {
-        this.saving.set(false);
-        const refreshId = this.selectedScheduleId();
-        this.reset();
-        this.fetch();
-        if (refreshId) {
-          this.api.loanSchedule(refreshId).subscribe(s => this.schedule.set(s));
-        }
-      },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
-    });
+    this.crud.save(input);
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete loan?',
       message: 'The loan and its amortisation schedule will be removed.',
       confirmText: 'Delete',
-    });
-    if (!confirmed) return;
-    this.api.deleteLoan(this.editingId()!).subscribe(() => {
-      this.reset();
-      this.selectedScheduleId.set(null);
-      this.schedule.set(null);
-      this.fetch();
     });
   }
 
@@ -163,8 +158,7 @@ export class LoansComponent {
   }
 
   reset() {
-    this.editingId.set(null);
-    this.error.set(null);
+    this.crud.cancel();
     this.startDateValue = '';
     this.model = this.defaultModel();
   }
