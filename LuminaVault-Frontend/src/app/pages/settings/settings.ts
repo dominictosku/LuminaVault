@@ -14,6 +14,7 @@ import {
   ExchangeRateInput,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 type SettingsTab = 'assets' | 'finance' | 'rules' | 'rates' | 'security';
 type EditableCategory = AssetCategory | FinanceCategory;
@@ -29,6 +30,7 @@ export class SettingsComponent {
   private api = inject(SettingsApi);
   private auth = inject(AuthService);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
   tab = signal<SettingsTab>('assets');
   assetCategories = signal<AssetCategory[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
@@ -125,15 +127,22 @@ export class SettingsComponent {
       color: this.model.color || '#7c3aed',
       sortOrder: Number(this.model.sortOrder) || 0,
     };
+    const isUpdate = this.editingId() != null;
+    const subject = this.tab() === 'assets' ? 'Asset category' : 'Finance category';
     const op = this.tab() === 'assets'
-      ? (this.editingId()
+      ? (isUpdate
         ? this.api.updateAssetCategory(this.editingId()!, input)
         : this.api.createAssetCategory(input))
-      : (this.editingId()
+      : (isUpdate
         ? this.api.updateFinanceCategory(this.editingId()!, input)
         : this.api.createFinanceCategory(input));
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(`${subject} ${isUpdate ? 'updated' : 'created'}.`);
+        this.reset();
+        this.fetch();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -148,10 +157,12 @@ export class SettingsComponent {
       confirmText: 'Delete',
     });
     if (!confirmed) return;
+    const subject = this.tab() === 'assets' ? 'Asset category' : 'Finance category';
     const op = this.tab() === 'assets'
       ? this.api.deleteAssetCategory(this.editingId()!)
       : this.api.deleteFinanceCategory(this.editingId()!);
     op.subscribe(() => {
+      this.toast.success(`${subject} deleted.`);
       this.reset();
       this.fetch();
     });
@@ -199,11 +210,17 @@ export class SettingsComponent {
       category: this.ruleModel.category.trim(),
       priority: Number(this.ruleModel.priority) || 0,
     };
-    const op = this.editingRuleId()
+    const isUpdate = this.editingRuleId() != null;
+    const op = isUpdate
       ? this.api.updateFinanceCategoryRule(this.editingRuleId()!, input)
       : this.api.createFinanceCategoryRule(input);
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(isUpdate ? 'Rule updated.' : 'Rule created.');
+        this.reset();
+        this.fetch();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -217,6 +234,7 @@ export class SettingsComponent {
     });
     if (!confirmed) return;
     this.api.deleteFinanceCategoryRule(this.editingRuleId()!).subscribe(() => {
+      this.toast.success('Rule deleted.');
       this.reset();
       this.fetch();
     });
@@ -241,11 +259,17 @@ export class SettingsComponent {
       effectiveDate: new Date(this.rateEffectiveDate).toISOString(),
       rateToBase: Number(this.rateModel.rateToBase),
     };
-    const op = this.editingRateId()
+    const isUpdate = this.editingRateId() != null;
+    const op = isUpdate
       ? this.api.updateExchangeRate(this.editingRateId()!, input)
       : this.api.createExchangeRate(input);
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(isUpdate ? 'Exchange rate updated.' : 'Exchange rate added.');
+        this.reset();
+        this.fetch();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -259,6 +283,7 @@ export class SettingsComponent {
     });
     if (!confirmed) return;
     this.api.deleteExchangeRate(this.editingRateId()!).subscribe(() => {
+      this.toast.success('Exchange rate deleted.');
       this.reset();
       this.fetch();
     });
@@ -281,6 +306,7 @@ export class SettingsComponent {
         this.saving.set(false);
         this.passwordModel = { currentPassword: '', newPassword: '', confirmPassword: '' };
         this.passwordChanged.set(true);
+        this.toast.success('Password changed.');
       },
       error: e => {
         this.saving.set(false);

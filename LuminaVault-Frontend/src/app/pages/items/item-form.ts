@@ -6,6 +6,7 @@ import { InventoryApi } from '../../core/data-access/inventory-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import { AssetCategory, Container, Furniture, House, Item, Room } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-item-form',
@@ -19,17 +20,16 @@ export class ItemFormComponent {
   private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   id = signal<number | null>(null);
   current = signal<Item | null>(null);
   saving = signal(false);
-  saved = signal(false);
   uploading = signal(false);
   uploadingModel = signal(false);
   uploadingAttachment = signal(false);
   error = signal<string | null>(null);
   modelError = signal<string | null>(null);
-  private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   rooms = signal<Room[]>([]);
   furniture = signal<Furniture[]>([]);
@@ -149,20 +149,15 @@ export class ItemFormComponent {
       next: r => {
         this.saving.set(false);
         if (!isUpdate) {
+          this.toast.success('Asset created.');
           this.router.navigate(['/items', r.id]);
         } else {
           this.current.set(r);
-          this.flashSaved();
+          this.toast.success('Asset updated.');
         }
       },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
-  }
-
-  private flashSaved() {
-    this.saved.set(true);
-    if (this.savedTimer) clearTimeout(this.savedTimer);
-    this.savedTimer = setTimeout(() => this.saved.set(false), 2500);
   }
 
   async remove() {
@@ -174,7 +169,10 @@ export class ItemFormComponent {
       confirmText: 'Delete',
     });
     if (!confirmed) return;
-    this.api.deleteItem(this.id()!).subscribe(() => this.router.navigate(['/items']));
+    this.api.deleteItem(this.id()!).subscribe(() => {
+      this.toast.success('Asset deleted.');
+      this.router.navigate(['/items']);
+    });
   }
 
   onUpload(input: HTMLInputElement) {
@@ -185,6 +183,7 @@ export class ItemFormComponent {
       next: () => {
         this.uploading.set(false);
         input.value = '';
+        this.toast.success('Photo uploaded.');
         this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
       },
       error: () => { this.uploading.set(false); },
@@ -193,6 +192,7 @@ export class ItemFormComponent {
 
   removePhoto(id: number) {
     this.api.deletePhoto(id).subscribe(() => {
+      this.toast.success('Photo removed.');
       this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }
@@ -205,6 +205,7 @@ export class ItemFormComponent {
       next: () => {
         this.uploadingAttachment.set(false);
         input.value = '';
+        this.toast.success('Document uploaded.');
         this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
       },
       error: e => {
@@ -217,6 +218,7 @@ export class ItemFormComponent {
 
   removeAttachment(id: number) {
     this.api.deleteAttachment(id).subscribe(() => {
+      this.toast.success('Document removed.');
       if (this.id()) this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }
@@ -230,6 +232,7 @@ export class ItemFormComponent {
       next: () => {
         this.uploadingModel.set(false);
         input.value = '';
+        this.toast.success('3D model uploaded.');
         this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
       },
       error: e => {
@@ -243,6 +246,7 @@ export class ItemFormComponent {
   removeModel() {
     if (!this.id()) return;
     this.api.deleteItemModel(this.id()!).subscribe(() => {
+      this.toast.success('3D model removed.');
       this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }

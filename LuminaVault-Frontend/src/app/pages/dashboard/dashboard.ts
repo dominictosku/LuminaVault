@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FinanceApi } from '../../core/data-access/finance-api';
 import { FinanceSummary, NetWorthSnapshot } from '../../core/models';
+import { ToastService } from '../../shared/toast/toast.service';
 
 const CHART_WIDTH = 1000;
 const CHART_HEIGHT = 220;
@@ -17,6 +18,7 @@ const CHART_PAD_Y = 12;
 })
 export class DashboardComponent {
   private api = inject(FinanceApi);
+  private toast = inject(ToastService);
   summary = signal<FinanceSummary | null>(null);
   netWorthHistory = signal<NetWorthSnapshot[]>([]);
   netWorthLoading = signal(true);
@@ -87,6 +89,7 @@ export class DashboardComponent {
           return [...without, snapshot].sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
         });
         this.capturingSnapshot.set(false);
+        this.toast.success('Net worth snapshot captured.');
       },
       error: () => this.capturingSnapshot.set(false),
     });

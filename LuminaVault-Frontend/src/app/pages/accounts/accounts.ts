@@ -11,6 +11,7 @@ import {
   FinanceAccountType,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-accounts',
@@ -21,6 +22,7 @@ import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog
 export class AccountsComponent {
   private api = inject(FinanceApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
   accounts = signal<FinanceAccount[]>([]);
   snapshots = signal<AccountBalanceSnapshot[]>([]);
   loading = signal(true);
@@ -91,11 +93,17 @@ export class AccountsComponent {
       startingBalance: Number(this.model.startingBalance) || 0,
       balance: Number(this.model.balance) || 0,
     };
-    const op = this.editingId()
+    const isUpdate = this.editingId() != null;
+    const op = isUpdate
       ? this.api.updateFinanceAccount(this.editingId()!, input)
       : this.api.createFinanceAccount(input);
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(isUpdate ? 'Account updated.' : 'Account created.');
+        this.reset();
+        this.fetch();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -110,6 +118,7 @@ export class AccountsComponent {
     });
     if (!confirmed) return;
     this.api.deleteFinanceAccount(this.editingId()!).subscribe(() => {
+      this.toast.success('Account removed.');
       this.reset();
       this.fetch();
     });
@@ -136,6 +145,7 @@ export class AccountsComponent {
     this.api.createBalanceSnapshot(input).subscribe({
       next: () => {
         this.snapshotNotes = '';
+        this.toast.success('Balance snapshot saved.');
         this.fetch();
       },
       error: e => this.error.set(e?.error?.error ?? 'Could not save balance snapshot.'),
@@ -149,7 +159,10 @@ export class AccountsComponent {
       confirmText: 'Delete',
     });
     if (!confirmed) return;
-    this.api.deleteBalanceSnapshot(snapshot.id).subscribe(() => this.fetch());
+    this.api.deleteBalanceSnapshot(snapshot.id).subscribe(() => {
+      this.toast.success('Snapshot deleted.');
+      this.fetch();
+    });
   }
 
   private defaultModel(): FinanceAccountInput {

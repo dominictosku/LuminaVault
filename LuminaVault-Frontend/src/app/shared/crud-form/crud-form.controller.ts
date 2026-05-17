@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ConfirmDialogOptions, ConfirmDialogService } from '../confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../toast/toast.service';
 
 export interface CrudFormConfig<TInput, TEntity> {
   /// POST-style create. Called when there's no `editingId`.
@@ -15,6 +16,9 @@ export interface CrudFormConfig<TInput, TEntity> {
   onSaved?: (entity: TEntity) => void;
   /// Called after a successful delete — usually `() => { reset(); fetch(); }`.
   onRemoved?: () => void;
+  /// Capitalized entity name used in default success toasts ("{subject} created.",
+  /// "{subject} updated.", "{subject} deleted."). Omit to skip toast emission.
+  toastSubject?: string;
 }
 
 /// Per-page controller that owns the saving/error/editingId boilerplate every CRUD form
@@ -40,6 +44,7 @@ export interface CrudFormConfig<TInput, TEntity> {
 @Injectable()
 export class CrudFormController<TInput, TEntity> {
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
   readonly editingId = signal<number | null>(null);
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
@@ -65,10 +70,14 @@ export class CrudFormController<TInput, TEntity> {
     this.saving.set(true);
     this.error.set(null);
     const id = this.editingId();
-    const op = id != null ? this.config.update(id, input) : this.config.create(input);
+    const isUpdate = id != null;
+    const op = isUpdate ? this.config.update(id, input) : this.config.create(input);
     op.subscribe({
       next: entity => {
         this.saving.set(false);
+        if (this.config.toastSubject) {
+          this.toast.success(`${this.config.toastSubject} ${isUpdate ? 'updated' : 'created'}.`);
+        }
         this.config.onSaved?.(entity);
       },
       error: e => {
@@ -85,6 +94,9 @@ export class CrudFormController<TInput, TEntity> {
     if (!confirmed) return;
     this.config.delete(id).subscribe(() => {
       this.cancel();
+      if (this.config.toastSubject) {
+        this.toast.success(`${this.config.toastSubject} deleted.`);
+      }
       this.config.onRemoved?.();
     });
   }

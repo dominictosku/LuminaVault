@@ -53,6 +53,7 @@ export class GoalsComponent {
       create: input => this.api.createGoal(input),
       update: (id, input) => this.api.updateGoal(id, input),
       delete: id => this.api.deleteGoal(id),
+      toastSubject: 'Goal',
       onSaved: () => { this.reset(); this.fetch(); },
       onRemoved: () => { this.reset(); this.fetch(); },
     });

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { NotificationsApi } from '../../core/data-access/notifications-api';
 import { Notification, NotificationSeverity, NotificationStatus } from '../../core/models';
 import { NotificationCenterService } from '../../shared/notifications/notification-center.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 type Filter = 'unread' | 'all' | 'dismissed';
 
@@ -16,6 +17,7 @@ export class NotificationsComponent {
   private api = inject(NotificationsApi);
   private center = inject(NotificationCenterService);
   private router = inject(Router);
+  private toast = inject(ToastService);
 
   items = signal<Notification[]>([]);
   loading = signal(true);
@@ -82,12 +84,14 @@ export class NotificationsComponent {
     event.stopPropagation();
     this.api.remove(n.id).subscribe(() => {
       this.items.update(list => list.filter(item => item.id !== n.id));
+      this.toast.success('Notification removed.');
       this.center.refresh();
     });
   }
 
   markAllRead() {
     this.api.markAllRead().subscribe(() => {
+      this.toast.success('All notifications marked as read.');
       this.fetch();
       this.center.refresh();
     });
@@ -98,6 +102,7 @@ export class NotificationsComponent {
     this.api.scan().subscribe({
       next: () => {
         this.scanning.set(false);
+        this.toast.success('Rescan complete.');
         this.fetch();
         this.center.refresh();
       },

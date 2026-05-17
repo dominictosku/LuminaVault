@@ -54,6 +54,7 @@ export class LoansComponent {
       create: input => this.api.createLoan(input),
       update: (id, input) => this.api.updateLoan(id, input),
       delete: id => this.api.deleteLoan(id),
+      toastSubject: 'Loan',
       // Loans page refreshes its open schedule panel after a save so the chart reflects
       // the new principal/rate/extra-payment values, not just the list row.
       onSaved: () => {

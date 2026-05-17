@@ -42,6 +42,7 @@ export class BudgetsComponent {
       create: input => this.finance.createBudget(input),
       update: (id, input) => this.finance.updateBudget(id, input),
       delete: id => this.finance.deleteBudget(id),
+      toastSubject: 'Budget',
       onSaved: () => { this.reset(); this.fetch(); },
       onRemoved: () => { this.reset(); this.fetch(); },
     });

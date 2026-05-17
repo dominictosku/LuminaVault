@@ -18,6 +18,7 @@ import {
   SubscriptionStatus,
 } from '../../core/models';
 import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
+import { ToastService } from '../../shared/toast/toast.service';
 import { activeSubscriptionsMonthlyTotal } from '../../core/finance-math';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
@@ -52,6 +53,7 @@ export class SubscriptionsComponent {
   private router = inject(Router);
   protected filters = inject<FilterStateController<SubscriptionFilters>>(FilterStateController);
   protected crud = inject<CrudFormController<SubscriptionInput, Subscription>>(CrudFormController);
+  private toast = inject(ToastService);
   protected editingId = this.crud.editingId;
   protected saving = this.crud.saving;
   protected error = this.crud.error;
@@ -141,6 +143,7 @@ export class SubscriptionsComponent {
       create: input => this.api.createSubscription(input),
       update: (id, input) => this.api.updateSubscription(id, input),
       delete: id => this.api.deleteSubscription(id),
+      toastSubject: 'Subscription',
       onSaved: () => { this.reset(); this.fetchAll(); },
       onRemoved: () => { this.reset(); this.fetchAll(); },
     });
@@ -235,6 +238,7 @@ export class SubscriptionsComponent {
       next: () => {
         this.uploadingAttachment.set(false);
         input.value = '';
+        this.toast.success('Document uploaded.');
         this.fetchAll();
       },
       error: e => {
@@ -246,7 +250,10 @@ export class SubscriptionsComponent {
   }
 
   removeAttachment(id: number) {
-    this.api.deleteAttachment(id).subscribe(() => this.fetchAll());
+    this.api.deleteAttachment(id).subscribe(() => {
+      this.toast.success('Document removed.');
+      this.fetchAll();
+    });
   }
 
   generateTransaction(status: 'Pending' | 'Cleared') {
@@ -259,6 +266,7 @@ export class SubscriptionsComponent {
     }).subscribe({
       next: () => {
         this.generatingTransaction.set(false);
+        this.toast.success(`Transaction generated (${status}).`);
         this.fetchAll();
       },
       error: e => {
@@ -275,11 +283,11 @@ export class SubscriptionsComponent {
     this.api.generateDueSubscriptions(7).subscribe({
       next: result => {
         this.generatingDue.set(false);
-        this.automationMessage.set(
-          result.created === 0
-            ? 'No upcoming subscription forecasts were needed.'
-            : `Created ${result.created} forecast transaction${result.created === 1 ? '' : 's'} through ${new Date(result.throughDate).toLocaleDateString()}.`,
-        );
+        const message = result.created === 0
+          ? 'No upcoming subscription forecasts were needed.'
+          : `Created ${result.created} forecast transaction${result.created === 1 ? '' : 's'} through ${new Date(result.throughDate).toLocaleDateString()}.`;
+        this.automationMessage.set(message);
+        this.toast.success(message);
         this.fetchAll();
       },
       error: e => {

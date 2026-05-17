@@ -1,6 +1,6 @@
 import { NgClass } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { ToastService } from './toast.service';
+import { ToastKind, ToastService } from './toast.service';
 
 @Component({
   selector: 'app-toast-outlet',
@@ -24,16 +24,18 @@ import { ToastService } from './toast.service';
 export class ToastOutletComponent {
   protected toasts = inject(ToastService);
 
-  protected toneClass(kind: 'error' | 'warning' | 'info') {
+  protected toneClass(kind: ToastKind) {
     return {
+      'bg-emerald-950/80 border-emerald-500/40 text-emerald-100': kind === 'success',
       'bg-red-950/80 border-red-500/40 text-red-100': kind === 'error',
       'bg-amber-950/80 border-amber-500/40 text-amber-100': kind === 'warning',
       'bg-slate-900/80 border-slate-500/40 text-slate-100': kind === 'info',
     };
   }
 
-  protected iconFor(kind: 'error' | 'warning' | 'info') {
+  protected iconFor(kind: ToastKind) {
     return {
+      'pi pi-check-circle text-emerald-300': kind === 'success',
       'pi pi-exclamation-circle text-red-300': kind === 'error',
       'pi pi-exclamation-triangle text-amber-300': kind === 'warning',
       'pi pi-info-circle text-slate-300': kind === 'info',

@@ -11,6 +11,7 @@ import {
   OdsPreviewResult,
   OdsPreviewSheet,
 } from '../../core/models';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-data',
@@ -21,6 +22,7 @@ import {
 export class DataComponent {
   private api = inject(DataTransferApi);
   private financeApi = inject(FinanceApi);
+  private toast = inject(ToastService);
   exporting = signal(false);
   importing = signal(false);
   previewing = signal(false);
@@ -79,6 +81,7 @@ export class DataComponent {
         link.download = fileName;
         link.click();
         URL.revokeObjectURL(url);
+        this.toast.success(`Exported ${fileName}.`);
       },
       error: e => {
         this.exporting.set(false);

@@ -21,6 +21,7 @@ import {
   supportsSplits,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 import { tradeAmount } from '../../core/finance-math';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
@@ -45,6 +46,7 @@ export class TransactionsComponent {
   private api = inject(FinanceApi);
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   protected filters = inject<FilterStateController<TransactionFilters>>(FilterStateController);
@@ -368,11 +370,17 @@ export class TransactionsComponent {
           }))
         : null,
     };
-    const op = this.editingId()
+    const isUpdate = this.editingId() != null;
+    const op = isUpdate
       ? this.api.updateFinanceTransaction(this.editingId()!, input)
       : this.api.createFinanceTransaction(input);
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetch(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(isUpdate ? 'Transaction updated.' : 'Transaction added.');
+        this.reset();
+        this.fetch();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -386,6 +394,7 @@ export class TransactionsComponent {
     });
     if (!confirmed) return;
     this.api.deleteFinanceTransaction(this.editingId()!).subscribe(() => {
+      this.toast.success('Transaction deleted.');
       this.reset();
       this.fetch();
     });

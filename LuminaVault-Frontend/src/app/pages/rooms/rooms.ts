@@ -4,6 +4,7 @@ import { forkJoin, of, switchMap } from 'rxjs';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Container, FURNITURE_KINDS, Furniture, FurnitureKind, House, Room } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-rooms',
@@ -14,6 +15,7 @@ import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog
 export class RoomsComponent {
   private api = inject(InventoryApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
 
   kinds = FURNITURE_KINDS;
   house = signal<House | null>(null);
@@ -51,6 +53,7 @@ export class RoomsComponent {
   createHouse() {
     this.api.createHouse(this.newHouseName.trim()).subscribe(() => {
       this.newHouseName = '';
+      this.toast.success('House created.');
       this.refresh();
     });
   }
@@ -73,6 +76,7 @@ export class RoomsComponent {
     });
     if (!confirmed) return;
     this.api.deleteRoom(r.id).subscribe(() => {
+      this.toast.success('Room deleted.');
       this.selectedRoom.set(null);
       this.refresh();
     });
@@ -88,6 +92,7 @@ export class RoomsComponent {
       height: 2.6,
     }).subscribe(() => {
       this.newRoomName = '';
+      this.toast.success('Room created.');
       this.api.listRooms(this.house()!.id).subscribe(r => this.rooms.set(r));
     });
   }
@@ -114,6 +119,7 @@ export class RoomsComponent {
     });
     if (!confirmed) return;
     this.api.deleteFurniture(id).subscribe(() => {
+      this.toast.success('Furniture deleted.');
       if (this.selectedFurniture()?.id === id) {
         this.selectedFurniture.set(null);
         this.containers.set([]);
@@ -133,6 +139,7 @@ export class RoomsComponent {
     if (!f || !this.editFurnitureName.trim()) return;
     this.api.updateFurniture(f.id, { ...f, name: this.editFurnitureName.trim() }).subscribe(updated => {
       this.renamingFurniture.set(false);
+      this.toast.success('Furniture renamed.');
       const r = this.selectedRoom();
       if (r) this.api.listFurniture(r.id).subscribe(list => {
         this.furniture.set(list);
@@ -151,6 +158,7 @@ export class RoomsComponent {
       width: 0.8, depth: 0.5, height: 1.2, rotationY: 0,
     }).subscribe(() => {
       this.newFurniture.name = '';
+      this.toast.success('Furniture added.');
       this.api.listFurniture(r.id).subscribe(f => this.furniture.set(f));
     });
   }
@@ -160,6 +168,7 @@ export class RoomsComponent {
     if (!f) return;
     this.api.createContainer(f.id, this.newContainerName.trim()).subscribe(() => {
       this.newContainerName = '';
+      this.toast.success('Container added.');
       this.api.listContainers(f.id).subscribe(c => this.containers.set(c));
     });
   }
@@ -172,6 +181,7 @@ export class RoomsComponent {
     });
     if (!confirmed) return;
     this.api.deleteContainer(id).subscribe(() => {
+      this.toast.success('Container deleted.');
       const f = this.selectedFurniture();
       if (f) this.api.listContainers(f.id).subscribe(c => this.containers.set(c));
     });

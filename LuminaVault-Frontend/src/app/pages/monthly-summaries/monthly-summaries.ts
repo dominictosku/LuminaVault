@@ -9,6 +9,7 @@ import {
   MonthlyAccountSummaryInput,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-monthly-summaries',
@@ -19,6 +20,7 @@ import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog
 export class MonthlySummariesComponent {
   private api = inject(FinanceApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
   accounts = signal<FinanceAccount[]>([]);
   summaries = signal<MonthlyAccountSummary[]>([]);
   loading = signal(true);
@@ -104,11 +106,17 @@ export class MonthlySummariesComponent {
       openingBalance: this.model.openingBalance == null ? null : Number(this.model.openingBalance),
       closingBalance: this.model.closingBalance == null ? null : Number(this.model.closingBalance),
     };
-    const op = this.editingId()
+    const isUpdate = this.editingId() != null;
+    const op = isUpdate
       ? this.api.updateMonthlySummary(this.editingId()!, input)
       : this.api.createMonthlySummary(input);
     op.subscribe({
-      next: () => { this.saving.set(false); this.reset(); this.fetchSummaries(); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(isUpdate ? 'Monthly summary updated.' : 'Monthly summary created.');
+        this.reset();
+        this.fetchSummaries();
+      },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
@@ -122,6 +130,7 @@ export class MonthlySummariesComponent {
     });
     if (!confirmed) return;
     this.api.deleteMonthlySummary(this.editingId()!).subscribe(() => {
+      this.toast.success('Monthly summary deleted.');
       this.reset();
       this.fetchSummaries();
     });
@@ -139,6 +148,7 @@ export class MonthlySummariesComponent {
       next: summary => {
         this.reconciling.set(false);
         this.editingSummary.set(summary);
+        this.toast.success(isReconciled ? 'Summary reconciled.' : 'Reconciliation cleared.');
         this.fetchSummaries();
       },
       error: e => {

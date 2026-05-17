@@ -13,6 +13,7 @@ import {
   PriceProviderStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-holdings',
@@ -22,6 +23,7 @@ import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog
 export class HoldingsComponent {
   private api = inject(FinanceApi);
   private confirmDialog = inject(ConfirmDialogService);
+  private toast = inject(ToastService);
 
   holdings = signal<Holding[]>([]);
   analytics = signal<HoldingAnalytics | null>(null);
@@ -110,6 +112,7 @@ export class HoldingsComponent {
         this.holdings.update(list => list.map(h => h.id === updated.id ? updated : h));
         this.refreshAnalytics();
         this.cancelEdit();
+        this.toast.success('Holding updated.');
       },
       error: e => {
         this.saving.set(null);
@@ -126,6 +129,8 @@ export class HoldingsComponent {
       next: result => {
         this.lastRefresh.set(result);
         this.refreshing.set(false);
+        const updated = result.updated ?? 0;
+        this.toast.success(updated === 0 ? 'Prices already up to date.' : `Refreshed ${updated} price${updated === 1 ? '' : 's'}.`);
         forkJoin({
           holdings: this.api.listHoldings(),
           analytics: this.api.holdingAnalytics(),
@@ -153,6 +158,7 @@ export class HoldingsComponent {
     });
     if (!confirmed) return;
     this.api.deleteHolding(holding.id).subscribe(() => {
+      this.toast.success('Holding removed.');
       this.holdings.update(list => list.filter(h => h.id !== holding.id));
       this.refreshAnalytics();
       if (this.editingId() === holding.id) this.cancelEdit();
@@ -162,7 +168,10 @@ export class HoldingsComponent {
   recompute() {
     this.loading.set(true);
     this.api.recomputeHoldings().subscribe({
-      next: () => this.fetch(),
+      next: () => {
+        this.toast.success('Holdings recomputed from trades.');
+        this.fetch();
+      },
       error: () => this.loading.set(false),
     });
   }
