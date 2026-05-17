@@ -37,11 +37,7 @@ internal static class BalanceSnapshotEndpoints
             var snapshot = new AccountBalanceSnapshot();
             ApplyBalanceSnapshot(snapshot, input, expected);
             db.AccountBalanceSnapshots.Add(snapshot);
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             await db.Entry(snapshot).Reference(s => s.Account).LoadAsync();
             return Results.Created($"/api/finance/balance-snapshots/{snapshot.Id}", MapBalanceSnapshot(snapshot));
@@ -52,11 +48,7 @@ internal static class BalanceSnapshotEndpoints
             var snapshot = await db.AccountBalanceSnapshots.FindAsync(id);
             if (snapshot is null) return Results.NotFound();
             db.AccountBalanceSnapshots.Remove(snapshot);
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             return Results.NoContent();
         });

@@ -42,11 +42,7 @@ internal static class MonthlySummaryEndpoints
             var monthlySummary = new MonthlyAccountSummary();
             ApplyMonthlySummary(monthlySummary, input);
             db.MonthlyAccountSummaries.Add(monthlySummary);
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
             var expected = await ExpectedBalanceAt(db, monthlySummary.AccountId, MonthEnd(monthlySummary.Month));
@@ -71,11 +67,7 @@ internal static class MonthlySummaryEndpoints
 
             ApplyMonthlySummary(monthlySummary, input);
             monthlySummary.UpdatedAt = DateTime.UtcNow;
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             await db.Entry(monthlySummary).Reference(s => s.Account).LoadAsync();
             var expected = await ExpectedBalanceAt(db, monthlySummary.AccountId, MonthEnd(monthlySummary.Month));
@@ -87,11 +79,7 @@ internal static class MonthlySummaryEndpoints
             var monthlySummary = await db.MonthlyAccountSummaries.FindAsync(id);
             if (monthlySummary is null) return Results.NotFound();
             db.MonthlyAccountSummaries.Remove(monthlySummary);
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             return Results.NoContent();
         });
@@ -136,12 +124,9 @@ internal static class MonthlySummaryEndpoints
             }
 
             // Reconcile is a multi-step write: it updates the summary, creates/updates a
-            // balance snapshot, and then recomputes account balances. A crash between any
-            // two of these would leave the books inconsistent — wrap in a transaction.
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            // balance snapshot, and then recomputes account balances. Wrap so a crash
+            // between any two of these can't leave the books inconsistent.
+            await SaveAndRecalculateBalances(db);
 
             var refreshedExpected = await ExpectedBalanceAt(db, monthlySummary.AccountId, endOfMonth);
             return Results.Ok(MapMonthlySummary(monthlySummary, refreshedExpected));

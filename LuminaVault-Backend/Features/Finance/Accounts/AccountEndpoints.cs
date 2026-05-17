@@ -41,11 +41,7 @@ internal static class AccountEndpoints
             var account = await db.FinanceAccounts.FindAsync(id);
             if (account is null) return Results.NotFound();
             ApplyAccount(account, input);
-
-            await using var tx = await db.Database.BeginTransactionAsync();
-            await db.SaveChangesAsync();
-            await RecalculateBalances(db);
-            await tx.CommitAsync();
+            await SaveAndRecalculateBalances(db);
 
             await db.Entry(account).ReloadAsync();
             return Results.Ok(MapAccount(account));

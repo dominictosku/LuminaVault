@@ -18,6 +18,37 @@ internal static class FinanceHelpers
         await db.Entry(transaction).Reference(t => t.TransferAccount).LoadAsync();
     }
 
+    /// Wraps SaveChanges + RecalculateBalances in a single DB transaction. Use after any
+    /// write that affects an account's running balance — summary changes, snapshot ops,
+    /// reconciliation, subscription generate-transaction. Keeps the cached Balance column
+    /// in sync with the snapshots/summaries/transactions that feed it without leaving
+    /// half-applied state if RecalculateBalances throws.
+    public static async Task SaveAndRecalculateBalances(AppDbContext db)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.SaveChangesAsync();
+        await RecalculateBalances(db);
+        await tx.CommitAsync();
+    }
+
+    /// Same as SaveAndRecalculateBalances but also recomputes holdings for the touched
+    /// account(s). Use for FinanceTransaction writes where Buy/Sell trades may have
+    /// changed holdings. Pass `previousAccountId` on updates where the transaction's
+    /// account changed so the old account's holdings are recomputed too.
+    public static async Task SaveAndRecalculateForTransaction(
+        AppDbContext db,
+        int accountId,
+        int? previousAccountId = null)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.SaveChangesAsync();
+        if (previousAccountId.HasValue && previousAccountId.Value != accountId)
+            await RecalculateHoldings(db, previousAccountId.Value);
+        await RecalculateHoldings(db, accountId);
+        await RecalculateBalances(db);
+        await tx.CommitAsync();
+    }
+
     public static async Task RecalculateBalances(AppDbContext db)
     {
         var accounts = await db.FinanceAccounts.ToListAsync();

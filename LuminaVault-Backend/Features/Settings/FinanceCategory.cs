@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace LuminaVault.Domain;
 
-public class FinanceCategory
+public class FinanceCategory : INamedCategory
 {
     public int Id { get; set; }
     [Required, MaxLength(80)] public string Name { get; set; } = "";

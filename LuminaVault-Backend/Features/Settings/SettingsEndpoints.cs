@@ -36,111 +36,13 @@ public static class SettingsEndpoints
     {
         var g = app.MapGroup("/api/settings").RequireAuthorization().WithTags("Settings");
 
-        g.MapGet("/asset-categories", async (AppDbContext db) =>
-            await db.AssetCategories
-                .OrderBy(c => c.SortOrder)
-                .ThenBy(c => c.Name)
-                .Select(c => new AssetCategoryDto(c.Id, c.Name, c.Color, c.SortOrder, c.CreatedAt))
-                .ToListAsync());
+        MapNamedCategoryCrud(g, "asset-categories",
+            db => db.AssetCategories,
+            c => new AssetCategoryDto(c.Id, c.Name, c.Color, c.SortOrder, c.CreatedAt));
 
-        g.MapPost("/asset-categories", async ([FromBody] AssetCategoryInput input, AppDbContext db) =>
-        {
-            var name = input.Name.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                return Problem.BadRequest("Category name is required.");
-            if (await db.AssetCategories.AnyAsync(c => c.Name.ToLower() == name.ToLower()))
-                return Problem.Conflict("Category already exists.");
-
-            var category = new AssetCategory
-            {
-                Name = name,
-                Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim(),
-                SortOrder = input.SortOrder,
-            };
-            db.AssetCategories.Add(category);
-            await db.SaveChangesAsync();
-            return Results.Created($"/api/settings/asset-categories/{category.Id}",
-                new AssetCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
-        });
-
-        g.MapPut("/asset-categories/{id:int}", async (int id, [FromBody] AssetCategoryInput input, AppDbContext db) =>
-        {
-            var category = await db.AssetCategories.FindAsync(id);
-            if (category is null) return Results.NotFound();
-            var name = input.Name.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                return Problem.BadRequest("Category name is required.");
-            if (await db.AssetCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
-                return Problem.Conflict("Category already exists.");
-
-            category.Name = name;
-            category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();
-            category.SortOrder = input.SortOrder;
-            await db.SaveChangesAsync();
-            return Results.Ok(new AssetCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
-        });
-
-        g.MapDelete("/asset-categories/{id:int}", async (int id, AppDbContext db) =>
-        {
-            var category = await db.AssetCategories.FindAsync(id);
-            if (category is null) return Results.NotFound();
-            db.AssetCategories.Remove(category);
-            await db.SaveChangesAsync();
-            return Results.NoContent();
-        });
-
-        g.MapGet("/finance-categories", async (AppDbContext db) =>
-            await db.FinanceCategories
-                .OrderBy(c => c.SortOrder)
-                .ThenBy(c => c.Name)
-                .Select(c => new FinanceCategoryDto(c.Id, c.Name, c.Color, c.SortOrder, c.CreatedAt))
-                .ToListAsync());
-
-        g.MapPost("/finance-categories", async ([FromBody] FinanceCategoryInput input, AppDbContext db) =>
-        {
-            var name = input.Name.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                return Problem.BadRequest("Category name is required.");
-            if (await db.FinanceCategories.AnyAsync(c => c.Name.ToLower() == name.ToLower()))
-                return Problem.Conflict("Category already exists.");
-
-            var category = new FinanceCategory
-            {
-                Name = name,
-                Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim(),
-                SortOrder = input.SortOrder,
-            };
-            db.FinanceCategories.Add(category);
-            await db.SaveChangesAsync();
-            return Results.Created($"/api/settings/finance-categories/{category.Id}",
-                new FinanceCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
-        });
-
-        g.MapPut("/finance-categories/{id:int}", async (int id, [FromBody] FinanceCategoryInput input, AppDbContext db) =>
-        {
-            var category = await db.FinanceCategories.FindAsync(id);
-            if (category is null) return Results.NotFound();
-            var name = input.Name.Trim();
-            if (string.IsNullOrWhiteSpace(name))
-                return Problem.BadRequest("Category name is required.");
-            if (await db.FinanceCategories.AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
-                return Problem.Conflict("Category already exists.");
-
-            category.Name = name;
-            category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();
-            category.SortOrder = input.SortOrder;
-            await db.SaveChangesAsync();
-            return Results.Ok(new FinanceCategoryDto(category.Id, category.Name, category.Color, category.SortOrder, category.CreatedAt));
-        });
-
-        g.MapDelete("/finance-categories/{id:int}", async (int id, AppDbContext db) =>
-        {
-            var category = await db.FinanceCategories.FindAsync(id);
-            if (category is null) return Results.NotFound();
-            db.FinanceCategories.Remove(category);
-            await db.SaveChangesAsync();
-            return Results.NoContent();
-        });
+        MapNamedCategoryCrud(g, "finance-categories",
+            db => db.FinanceCategories,
+            c => new FinanceCategoryDto(c.Id, c.Name, c.Color, c.SortOrder, c.CreatedAt));
 
         g.MapGet("/finance-category-rules", async (AppDbContext db) =>
             await db.FinanceCategoryRules
@@ -299,6 +201,75 @@ public static class SettingsEndpoints
             Name = category,
             Color = "#7c3aed",
             SortOrder = maxSort + 1,
+        });
+    }
+
+    /// Internal payload shape for the shared category CRUD. The public records
+    /// (AssetCategoryInput / FinanceCategoryInput) have the same JSON shape and bind
+    /// to this one transparently; using a generic record here keeps the helper from
+    /// reading as if it only handled asset categories.
+    private record NamedCategoryInput(string Name, string Color, int SortOrder);
+
+    /// Standard list/create/update/delete CRUD for `INamedCategory` entities (AssetCategory,
+    /// FinanceCategory). Two settings endpoints used to copy-paste this routine; pulling it
+    /// here means a behavior tweak (e.g. case-insensitive dedup, default color) ships to both.
+    static void MapNamedCategoryCrud<TEntity, TDto>(
+        IEndpointRouteBuilder group,
+        string urlSegment,
+        Func<AppDbContext, DbSet<TEntity>> dbSet,
+        Func<TEntity, TDto> map)
+        where TEntity : class, INamedCategory, new()
+    {
+        group.MapGet($"/{urlSegment}", async (AppDbContext db) =>
+            await dbSet(db)
+                .OrderBy(c => c.SortOrder)
+                .ThenBy(c => c.Name)
+                .Select(c => map(c))
+                .ToListAsync());
+
+        group.MapPost($"/{urlSegment}", async ([FromBody] NamedCategoryInput input, AppDbContext db) =>
+        {
+            var name = input.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return Problem.BadRequest("Category name is required.");
+            if (await dbSet(db).AnyAsync(c => c.Name.ToLower() == name.ToLower()))
+                return Problem.Conflict("Category already exists.");
+
+            var category = new TEntity
+            {
+                Name = name,
+                Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim(),
+                SortOrder = input.SortOrder,
+            };
+            dbSet(db).Add(category);
+            await db.SaveChangesAsync();
+            return Results.Created($"/api/settings/{urlSegment}/{category.Id}", map(category));
+        });
+
+        group.MapPut($"/{urlSegment}/{{id:int}}", async (int id, [FromBody] NamedCategoryInput input, AppDbContext db) =>
+        {
+            var category = await dbSet(db).FindAsync(id);
+            if (category is null) return Results.NotFound();
+            var name = input.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return Problem.BadRequest("Category name is required.");
+            if (await dbSet(db).AnyAsync(c => c.Id != id && c.Name.ToLower() == name.ToLower()))
+                return Problem.Conflict("Category already exists.");
+
+            category.Name = name;
+            category.Color = string.IsNullOrWhiteSpace(input.Color) ? "#7c3aed" : input.Color.Trim();
+            category.SortOrder = input.SortOrder;
+            await db.SaveChangesAsync();
+            return Results.Ok(map(category));
+        });
+
+        group.MapDelete($"/{urlSegment}/{{id:int}}", async (int id, AppDbContext db) =>
+        {
+            var category = await dbSet(db).FindAsync(id);
+            if (category is null) return Results.NotFound();
+            dbSet(db).Remove(category);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
         });
     }
 }

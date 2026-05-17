@@ -14,36 +14,62 @@ namespace LuminaVault.Endpoints;
 /// to the shared list for rows skipped due to missing FKs or invalid data.
 internal static class OdsImport
 {
-    public static async Task<int> Accounts(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
-    {
-        if (!TryGetByAlias(tables, "Accounts", out var rows)) return 0;
+    /// Signature the per-entity build callbacks pass to ImportByName. Return null to
+    /// skip the row (the callback should also push a warning explaining why).
+    internal delegate T? RowToEntity<T>(List<string> row, Dictionary<string, int> headers, string name, List<string> warnings)
+        where T : class;
 
+    /// Common skeleton for "deduplicate by lowercased name and append new rows" entity importers.
+    /// Pulls existing rows once, indexes them case-insensitively, walks the sheet, and calls
+    /// `build` for each new row; the build callback owns all entity-specific field mapping.
+    private static async Task<int> ImportByName<T>(
+        Dictionary<string, List<List<string>>> tables,
+        AppDbContext db,
+        List<string> warnings,
+        string canonicalSheetName,
+        DbSet<T> dbSet,
+        Func<T, string> nameOf,
+        string[] nameHeaderAliases,
+        RowToEntity<T> build) where T : class
+    {
+        if (!TryGetByAlias(tables, canonicalSheetName, out var rows)) return 0;
         var (headers, data) = SplitHeader(rows);
-        var existing = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
+        var existing = await dbSet.ToListAsync();
+        var index = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in existing) index[nameOf(e)] = e;
         var count = 0;
         foreach (var row in data)
         {
-            var name = Get(row, headers, "Name");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
-            var account = new FinanceAccount
-            {
-                Name = name,
-                Institution = EmptyToNull(Get(row, headers, "Institution")),
-                Type = ParseEnum(Get(row, headers, "Type"), FinanceAccountType.Checking),
-                Currency = EmptyToNull(Get(row, headers, "Currency"))?.ToUpperInvariant() ?? "CHF",
-                StartingBalance = ParseDecimal(Get(row, headers, "Starting balance", "Start balance")),
-                Balance = ParseDecimal(Get(row, headers, "Balance")),
-                Color = EmptyToNull(Get(row, headers, "Color")) ?? "#7c3aed",
-                Notes = EmptyToNull(Get(row, headers, "Notes")),
-                IsArchived = ParseBool(Get(row, headers, "Archived")),
-            };
-            if (account.StartingBalance == 0) account.StartingBalance = account.Balance;
-            db.FinanceAccounts.Add(account);
-            existing[account.Name.ToLowerInvariant()] = account;
+            var name = Get(row, headers, nameHeaderAliases);
+            if (string.IsNullOrWhiteSpace(name) || index.ContainsKey(name)) continue;
+            var entity = build(row, headers, name, warnings);
+            if (entity is null) continue;
+            dbSet.Add(entity);
+            index[nameOf(entity)] = entity;
             count++;
         }
         return count;
     }
+
+    public static Task<int> Accounts(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings) =>
+        ImportByName(tables, db, warnings, "Accounts", db.FinanceAccounts, a => a.Name, ["Name"],
+            (row, headers, name, _) =>
+            {
+                var account = new FinanceAccount
+                {
+                    Name = name,
+                    Institution = EmptyToNull(Get(row, headers, "Institution")),
+                    Type = ParseEnum(Get(row, headers, "Type"), FinanceAccountType.Checking),
+                    Currency = EmptyToNull(Get(row, headers, "Currency"))?.ToUpperInvariant() ?? "CHF",
+                    StartingBalance = ParseDecimal(Get(row, headers, "Starting balance", "Start balance")),
+                    Balance = ParseDecimal(Get(row, headers, "Balance")),
+                    Color = EmptyToNull(Get(row, headers, "Color")) ?? "#7c3aed",
+                    Notes = EmptyToNull(Get(row, headers, "Notes")),
+                    IsArchived = ParseBool(Get(row, headers, "Archived")),
+                };
+                if (account.StartingBalance == 0) account.StartingBalance = account.Balance;
+                return account;
+            });
 
     public static async Task<int> Transactions(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
     {
@@ -266,225 +292,165 @@ internal static class OdsImport
         // `isBudgetSheet` preserves a historical quirk: when the sheet was named "Abos"
         // (the legacy German budget sheet), the importer forces AutoRenew=true regardless
         // of the cell value, because old sheets didn't include the column at all.
-        var isBudgetSheet = false;
-        if (!tables.TryGetValue("Subscriptions", out var rows))
-        {
-            isBudgetSheet = tables.TryGetValue("Abos", out rows!);
-            if (!isBudgetSheet) return 0;
-        }
-
-        var (headers, data) = SplitHeader(rows!);
+        var isBudgetSheet = !tables.ContainsKey("Subscriptions") && tables.ContainsKey("Abos");
         var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
         var financeCategories = await db.FinanceCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
-        var existing = await db.Subscriptions.ToDictionaryAsync(s => s.Name.ToLowerInvariant());
-        var count = 0;
-        foreach (var row in data)
-        {
-            var name = Get(row, headers, "Name", "Leistung");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
 
-            var accountName = Get(row, headers, "Account", "Konto");
-            accounts.TryGetValue((accountName ?? "").ToLowerInvariant(), out var account);
-            var category = EmptyToNull(Get(row, headers, "Category", "Kategorie")) ?? "Subscriptions";
-            if (!financeCategories.ContainsKey(category.ToLowerInvariant()))
+        return await ImportByName(tables, db, warnings, "Subscriptions", db.Subscriptions, s => s.Name,
+            ["Name", "Leistung"],
+            (row, headers, name, w) =>
             {
-                var financeCategory = new FinanceCategory
+                var accountName = Get(row, headers, "Account", "Konto");
+                accounts.TryGetValue((accountName ?? "").ToLowerInvariant(), out var account);
+                var category = EmptyToNull(Get(row, headers, "Category", "Kategorie")) ?? "Subscriptions";
+                if (!financeCategories.ContainsKey(category.ToLowerInvariant()))
                 {
-                    Name = category,
-                    Color = "#7c3aed",
-                    SortOrder = financeCategories.Count,
+                    var financeCategory = new FinanceCategory
+                    {
+                        Name = category,
+                        Color = "#7c3aed",
+                        SortOrder = financeCategories.Count,
+                    };
+                    db.FinanceCategories.Add(financeCategory);
+                    financeCategories[financeCategory.Name.ToLowerInvariant()] = financeCategory;
+                }
+
+                var interval = ParseDecimal(Get(row, headers, "Interval days", "Intervall in Tagen"));
+                var unitRaw = Get(row, headers, "Interval unit");
+                var countRaw = Get(row, headers, "Interval count");
+                // Prefer the unit+count columns from new exports; fall back to the legacy
+                // "Interval days" column so older spreadsheets keep importing unchanged.
+                BillingIntervalUnit intervalUnit;
+                int intervalCount;
+                if (!string.IsNullOrWhiteSpace(unitRaw))
+                {
+                    intervalUnit = ParseEnum(unitRaw, BillingIntervalUnit.Month);
+                    intervalCount = Math.Max(1, (int)Math.Round(ParseDecimal(string.IsNullOrWhiteSpace(countRaw) ? "1" : countRaw)));
+                }
+                else
+                {
+                    intervalUnit = BillingIntervalUnit.Day;
+                    intervalCount = Math.Max(1, (int)Math.Round(interval == 0 ? 30 : interval));
+                }
+                var subscription = new Subscription
+                {
+                    Name = name,
+                    Category = category,
+                    Provider = EmptyToNull(Get(row, headers, "Provider")),
+                    AccountId = account?.Id,
+                    Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount", "Preis"))),
+                    Currency = EmptyToNull(Get(row, headers, "Currency")) ?? "CHF",
+                    BillingIntervalUnit = intervalUnit,
+                    BillingIntervalCount = intervalCount,
+                    BillingIntervalDays = FinanceHelpers.BillingPeriodInDays(intervalUnit, intervalCount),
+                    StartedOn = ParseDate(Get(row, headers, "Started on", "Startdatum")) ?? DateTime.UtcNow.Date,
+                    NextDueOn = ParseDate(Get(row, headers, "Next due", "Nächstes Fälligkeitsdatum")) ?? DateTime.UtcNow.Date,
+                    AutoRenew = ParseBool(Get(row, headers, "Auto renew")) || isBudgetSheet,
+                    Status = ParseEnum(Get(row, headers, "Status"), SubscriptionStatus.Active),
+                    Notes = EmptyToNull(Get(row, headers, "Notes", "Notiz")),
                 };
-                db.FinanceCategories.Add(financeCategory);
-                financeCategories[financeCategory.Name.ToLowerInvariant()] = financeCategory;
-            }
-
-            var interval = ParseDecimal(Get(row, headers, "Interval days", "Intervall in Tagen"));
-            var unitRaw = Get(row, headers, "Interval unit");
-            var countRaw = Get(row, headers, "Interval count");
-            // Prefer the unit+count columns from new exports; fall back to the legacy
-            // "Interval days" column so older spreadsheets keep importing unchanged.
-            BillingIntervalUnit intervalUnit;
-            int intervalCount;
-            if (!string.IsNullOrWhiteSpace(unitRaw))
-            {
-                intervalUnit = ParseEnum(unitRaw, BillingIntervalUnit.Month);
-                intervalCount = Math.Max(1, (int)Math.Round(ParseDecimal(string.IsNullOrWhiteSpace(countRaw) ? "1" : countRaw)));
-            }
-            else
-            {
-                intervalUnit = BillingIntervalUnit.Day;
-                intervalCount = Math.Max(1, (int)Math.Round(interval == 0 ? 30 : interval));
-            }
-            var subscription = new Subscription
-            {
-                Name = name,
-                Category = category,
-                Provider = EmptyToNull(Get(row, headers, "Provider")),
-                AccountId = account?.Id,
-                Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount", "Preis"))),
-                Currency = EmptyToNull(Get(row, headers, "Currency")) ?? "CHF",
-                BillingIntervalUnit = intervalUnit,
-                BillingIntervalCount = intervalCount,
-                BillingIntervalDays = FinanceHelpers.BillingPeriodInDays(intervalUnit, intervalCount),
-                StartedOn = ParseDate(Get(row, headers, "Started on", "Startdatum")) ?? DateTime.UtcNow.Date,
-                NextDueOn = ParseDate(Get(row, headers, "Next due", "Nächstes Fälligkeitsdatum")) ?? DateTime.UtcNow.Date,
-                AutoRenew = ParseBool(Get(row, headers, "Auto renew")) || isBudgetSheet,
-                Status = ParseEnum(Get(row, headers, "Status"), SubscriptionStatus.Active),
-                Notes = EmptyToNull(Get(row, headers, "Notes", "Notiz")),
-            };
-            if (subscription.Amount <= 0)
-            {
-                warnings.Add($"Skipped subscription without price: {name}");
-                continue;
-            }
-            db.Subscriptions.Add(subscription);
-            existing[subscription.Name.ToLowerInvariant()] = subscription;
-            count++;
-        }
-        return count;
+                if (subscription.Amount <= 0)
+                {
+                    w.Add($"Skipped subscription without price: {name}");
+                    return null;
+                }
+                return subscription;
+            });
     }
 
-    public static async Task<int> FinanceCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
-    {
-        if (!TryGetByAlias(tables, "Finance categories", out var rows)) return 0;
-
-        var (headers, data) = SplitHeader(rows);
-        var existing = await db.FinanceCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
-        var count = 0;
-        foreach (var row in data)
-        {
-            var name = Get(row, headers, "Name", "Category", "Kategorie");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
-            var category = new FinanceCategory
+    public static Task<int> FinanceCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings) =>
+        ImportByName(tables, db, warnings, "Finance categories", db.FinanceCategories, c => c.Name,
+            ["Name", "Category", "Kategorie"],
+            (row, headers, name, _) => new FinanceCategory
             {
                 Name = name.Trim(),
                 Color = EmptyToNull(Get(row, headers, "Color", "Farbe")) ?? "#7c3aed",
                 SortOrder = (int)Math.Round(ParseDecimal(Get(row, headers, "Sort order", "Sortierung"))),
-            };
-            db.FinanceCategories.Add(category);
-            existing[category.Name.ToLowerInvariant()] = category;
-            count++;
-        }
-        return count;
-    }
+            });
 
-    public static async Task<int> AssetCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
-    {
-        if (!TryGetByAlias(tables, "Asset categories", out var rows)) return 0;
-
-        var (headers, data) = SplitHeader(rows);
-        var existing = await db.AssetCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
-        var count = 0;
-        foreach (var row in data)
-        {
-            var name = Get(row, headers, "Name", "Category", "Kategorie");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
-            var category = new AssetCategory
+    public static Task<int> AssetCategories(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings) =>
+        ImportByName(tables, db, warnings, "Asset categories", db.AssetCategories, c => c.Name,
+            ["Name", "Category", "Kategorie"],
+            (row, headers, name, _) => new AssetCategory
             {
                 Name = name.Trim(),
                 Color = EmptyToNull(Get(row, headers, "Color", "Farbe")) ?? "#7c3aed",
                 SortOrder = (int)Math.Round(ParseDecimal(Get(row, headers, "Sort order", "Sortierung"))),
-            };
-            db.AssetCategories.Add(category);
-            existing[category.Name.ToLowerInvariant()] = category;
-            count++;
-        }
-        return count;
-    }
+            });
 
     public static async Task<int> Loans(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
     {
-        if (!TryGetByAlias(tables, "Loans", out var rows)) return 0;
-
-        var (headers, data) = SplitHeader(rows);
         var accounts = await db.FinanceAccounts.ToDictionaryAsync(a => a.Name.ToLowerInvariant());
-        var existing = await db.Loans.ToDictionaryAsync(l => l.Name.ToLowerInvariant());
-        var count = 0;
-        foreach (var row in data)
-        {
-            var name = Get(row, headers, "Name");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
-
-            FinanceAccount? account = null;
-            var accountName = Get(row, headers, "Account");
-            if (!string.IsNullOrWhiteSpace(accountName))
-                accounts.TryGetValue(accountName.ToLowerInvariant(), out account);
-
-            var principal = Math.Abs(ParseDecimal(Get(row, headers, "Principal")));
-            if (principal <= 0)
+        return await ImportByName(tables, db, warnings, "Loans", db.Loans, l => l.Name, ["Name"],
+            (row, headers, name, w) =>
             {
-                warnings.Add($"Skipped loan with non-positive principal: {name}");
-                continue;
-            }
-            var termRaw = ParseDecimal(Get(row, headers, "Term months", "Term"));
-            var term = (int)Math.Round(termRaw <= 0 ? 1 : termRaw);
-            var loan = new Loan
-            {
-                Name = name.Trim(),
-                Lender = EmptyToNull(Get(row, headers, "Lender")),
-                AccountId = account?.Id,
-                Currency = (EmptyToNull(Get(row, headers, "Currency")) ?? "CHF").ToUpperInvariant(),
-                Principal = principal,
-                AnnualInterestRate = Math.Max(0m, ParseDecimal(Get(row, headers, "Annual interest rate", "Interest rate", "Rate"))),
-                TermMonths = term,
-                StartDate = ParseDate(Get(row, headers, "Start date", "Started on")) ?? DateTime.UtcNow.Date,
-                ExtraMonthlyPayment = Math.Max(0m, ParseDecimal(Get(row, headers, "Extra monthly payment", "Extra payment"))),
-                Status = ParseEnum(Get(row, headers, "Status"), LoanStatus.Active),
-                Notes = EmptyToNull(Get(row, headers, "Notes")),
-            };
-            db.Loans.Add(loan);
-            existing[loan.Name.ToLowerInvariant()] = loan;
-            count++;
-        }
-        return count;
+                FinanceAccount? account = null;
+                var accountName = Get(row, headers, "Account");
+                if (!string.IsNullOrWhiteSpace(accountName))
+                    accounts.TryGetValue(accountName.ToLowerInvariant(), out account);
+
+                var principal = Math.Abs(ParseDecimal(Get(row, headers, "Principal")));
+                if (principal <= 0)
+                {
+                    w.Add($"Skipped loan with non-positive principal: {name}");
+                    return null;
+                }
+                var termRaw = ParseDecimal(Get(row, headers, "Term months", "Term"));
+                var term = (int)Math.Round(termRaw <= 0 ? 1 : termRaw);
+                return new Loan
+                {
+                    Name = name.Trim(),
+                    Lender = EmptyToNull(Get(row, headers, "Lender")),
+                    AccountId = account?.Id,
+                    Currency = (EmptyToNull(Get(row, headers, "Currency")) ?? "CHF").ToUpperInvariant(),
+                    Principal = principal,
+                    AnnualInterestRate = Math.Max(0m, ParseDecimal(Get(row, headers, "Annual interest rate", "Interest rate", "Rate"))),
+                    TermMonths = term,
+                    StartDate = ParseDate(Get(row, headers, "Start date", "Started on")) ?? DateTime.UtcNow.Date,
+                    ExtraMonthlyPayment = Math.Max(0m, ParseDecimal(Get(row, headers, "Extra monthly payment", "Extra payment"))),
+                    Status = ParseEnum(Get(row, headers, "Status"), LoanStatus.Active),
+                    Notes = EmptyToNull(Get(row, headers, "Notes")),
+                };
+            });
     }
 
     public static async Task<int> Assets(Dictionary<string, List<List<string>>> tables, AppDbContext db, List<string> warnings)
     {
-        if (!TryGetByAlias(tables, "Assets", out var rows)) return 0;
-
-        var (headers, data) = SplitHeader(rows);
-        var existing = await db.Items.ToDictionaryAsync(i => i.Name.ToLowerInvariant());
         var categories = await db.AssetCategories.ToDictionaryAsync(c => c.Name.ToLowerInvariant());
-        var count = 0;
-        foreach (var row in data)
-        {
-            var name = Get(row, headers, "Name", "Bezeichnung");
-            if (string.IsNullOrWhiteSpace(name) || existing.ContainsKey(name.ToLowerInvariant())) continue;
-
-            var category = Get(row, headers, "Category", "Kategorie");
-            if (!string.IsNullOrWhiteSpace(category) && !categories.ContainsKey(category.ToLowerInvariant()))
+        return await ImportByName(tables, db, warnings, "Assets", db.Items, i => i.Name,
+            ["Name", "Bezeichnung"],
+            (row, headers, name, _) =>
             {
-                var assetCategory = new AssetCategory
+                var category = Get(row, headers, "Category", "Kategorie");
+                if (!string.IsNullOrWhiteSpace(category) && !categories.ContainsKey(category.ToLowerInvariant()))
                 {
-                    Name = category.Trim(),
-                    Color = "#7c3aed",
-                    SortOrder = categories.Count,
+                    var assetCategory = new AssetCategory
+                    {
+                        Name = category.Trim(),
+                        Color = "#7c3aed",
+                        SortOrder = categories.Count,
+                    };
+                    db.AssetCategories.Add(assetCategory);
+                    categories[assetCategory.Name.ToLowerInvariant()] = assetCategory;
+                }
+                var tags = EmptyToNull(Get(row, headers, "Tags")) ?? category ?? "";
+                var quantityRaw = ParseDecimal(Get(row, headers, "Quantity"));
+                return new Item
+                {
+                    Name = name,
+                    Category = EmptyToNull(category),
+                    Description = EmptyToNull(Get(row, headers, "Description")),
+                    Brand = EmptyToNull(Get(row, headers, "Brand")),
+                    Model = EmptyToNull(Get(row, headers, "Model")),
+                    SerialNumber = EmptyToNull(Get(row, headers, "Serial number", "Seriennummer")),
+                    Value = ParseNullableDecimal(Get(row, headers, "Value", "Kosten")),
+                    PurchaseDate = ParseDate(Get(row, headers, "Purchase date", "Kaufdatum")),
+                    WarrantyUntil = ParseDate(Get(row, headers, "Warranty until")),
+                    Quantity = Math.Max(1, (int)Math.Round(quantityRaw == 0 ? 1 : quantityRaw)),
+                    Notes = EmptyToNull(Get(row, headers, "Notes", "Notizen")),
+                    TagsCsv = tags,
                 };
-                db.AssetCategories.Add(assetCategory);
-                categories[assetCategory.Name.ToLowerInvariant()] = assetCategory;
-            }
-            var tags = EmptyToNull(Get(row, headers, "Tags")) ?? category ?? "";
-            var item = new Item
-            {
-                Name = name,
-                Category = EmptyToNull(category),
-                Description = EmptyToNull(Get(row, headers, "Description")),
-                Brand = EmptyToNull(Get(row, headers, "Brand")),
-                Model = EmptyToNull(Get(row, headers, "Model")),
-                SerialNumber = EmptyToNull(Get(row, headers, "Serial number", "Seriennummer")),
-                Value = ParseNullableDecimal(Get(row, headers, "Value", "Kosten")),
-                PurchaseDate = ParseDate(Get(row, headers, "Purchase date", "Kaufdatum")),
-                WarrantyUntil = ParseDate(Get(row, headers, "Warranty until")),
-                Quantity = Math.Max(1, (int)Math.Round(ParseDecimal(Get(row, headers, "Quantity")) == 0 ? 1 : ParseDecimal(Get(row, headers, "Quantity")))),
-                Notes = EmptyToNull(Get(row, headers, "Notes", "Notizen")),
-                TagsCsv = tags,
-            };
-            db.Items.Add(item);
-            existing[item.Name.ToLowerInvariant()] = item;
-            count++;
-        }
-        return count;
+            });
     }
 
     /// Builds an artificial single-sheet table dictionary for the mapped-import flow:
