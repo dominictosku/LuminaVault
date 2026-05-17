@@ -24,14 +24,16 @@ public class CashFlowForecastService
 
         var rates = await CurrencyConversion.LoadRates(db);
 
-        var accountsQuery = db.FinanceAccounts.Where(a => !a.IsArchived);
+        // Forecast is a read-only projection — AsNoTracking everywhere so we don't
+        // build change-tracker entries we'll throw away after rendering the chart.
+        var accountsQuery = db.FinanceAccounts.AsNoTracking().Where(a => !a.IsArchived);
         if (accountId.HasValue) accountsQuery = accountsQuery.Where(a => a.Id == accountId.Value);
         var accounts = await accountsQuery.ToListAsync(ct);
         var accountsById = accounts.ToDictionary(a => a.Id);
         var startingBalance = accounts.Sum(a => CurrencyConversion.ToBase(a.Balance, a.Currency, rates));
 
         // Pending tx in window. Filter on relevant accounts only (covers transfer destination too).
-        var pending = await db.FinanceTransactions
+        var pending = await db.FinanceTransactions.AsNoTracking()
             .Include(t => t.Account)
             .Include(t => t.TransferAccount)
             .Where(t => t.Status == FinanceTransactionStatus.Pending)
@@ -45,7 +47,7 @@ public class CashFlowForecastService
             .SelectMany(t => t.TagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries))
             .ToHashSet();
 
-        var subscriptions = await db.Subscriptions
+        var subscriptions = await db.Subscriptions.AsNoTracking()
             .Include(s => s.Account)
             .Where(s => s.Status == SubscriptionStatus.Active && s.AutoRenew && s.AccountId != null)
             .Where(s => !accountId.HasValue || s.AccountId == accountId.Value)

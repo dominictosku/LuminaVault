@@ -259,6 +259,13 @@ export const SPLITTABLE_TRANSACTION_KINDS: FinanceTransactionKind[] = ['Income',
 export const supportsSplits = (kind: FinanceTransactionKind | null | undefined) =>
   kind === 'Income' || kind === 'Expense';
 
+/// Wire shape of GET /api/finance/transactions — items + a base64 cursor for the next page,
+/// null when the server has nothing further to send for the current filters.
+export interface FinanceTransactionPage {
+  items: FinanceTransaction[];
+  nextCursor: string | null;
+}
+
 export interface FinanceTransaction {
   id: number;
   accountId: number;

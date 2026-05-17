@@ -14,6 +14,7 @@ import {
   FinanceTransaction,
   FinanceTransactionInput,
   FinanceTransactionKind,
+  FinanceTransactionPage,
   Holding,
   HoldingAnalytics,
   CashFlowForecast,
@@ -212,6 +213,8 @@ export class FinanceApi {
     kind?: FinanceTransactionKind;
     from?: string;
     to?: string;
+    cursor?: string | null;
+    pageSize?: number;
   } = {}) {
     let params = new HttpParams();
     if (opts.q) params = params.set('q', opts.q);
@@ -220,7 +223,9 @@ export class FinanceApi {
     if (opts.kind) params = params.set('kind', opts.kind);
     if (opts.from) params = params.set('from', opts.from);
     if (opts.to) params = params.set('to', opts.to);
-    return this.http.get<FinanceTransaction[]>(`${API_BASE}/api/finance/transactions`, { params });
+    if (opts.cursor) params = params.set('cursor', opts.cursor);
+    if (opts.pageSize) params = params.set('pageSize', opts.pageSize);
+    return this.http.get<FinanceTransactionPage>(`${API_BASE}/api/finance/transactions`, { params });
   }
 
   createFinanceTransaction(input: FinanceTransactionInput) {

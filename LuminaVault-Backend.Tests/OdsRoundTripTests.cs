@@ -129,9 +129,10 @@ public class OdsRoundTripTests : IClassFixture<LuminaVaultFactory>
         // (transactions don't dedupe). Both should carry the same 2-row split set.
         var listResp = await _api.Raw.GetAsync("/api/finance/transactions/?q=Split-RT-Grocery");
         listResp.EnsureSuccessStatusCode();
-        var list = await listResp.Content.ReadFromJsonAsync<TransactionDto[]>();
-        Assert.NotNull(list);
-        Assert.True(list!.Length >= 2, $"expected at least 2 round-tripped rows, got {list.Length}");
+        var page = await listResp.Content.ReadFromJsonAsync<TransactionPage>();
+        Assert.NotNull(page);
+        var list = page!.Items;
+        Assert.True(list.Length >= 2, $"expected at least 2 round-tripped rows, got {list.Length}");
         foreach (var tx in list)
         {
             Assert.Equal(2, tx.Splits.Length);
@@ -169,10 +170,12 @@ public class OdsRoundTripTests : IClassFixture<LuminaVaultFactory>
         Assert.Contains(result!.Warnings, w => w.Contains("Bad-Sum-Tx") && w.Contains("90"));
         // Transaction is still inserted, just without splits.
         var listResp = await _api.Raw.GetAsync("/api/finance/transactions/?q=Bad-Sum-Tx");
-        var list = await listResp.Content.ReadFromJsonAsync<TransactionDto[]>();
-        Assert.Single(list!);
-        Assert.Empty(list![0].Splits);
+        var page = await listResp.Content.ReadFromJsonAsync<TransactionPage>();
+        Assert.Single(page!.Items);
+        Assert.Empty(page.Items[0].Splits);
     }
+
+    private record TransactionPage(TransactionDto[] Items, string? NextCursor);
 
     async Task<AccountDto> SeedNamedAccount(string name)
     {

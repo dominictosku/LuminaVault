@@ -372,9 +372,11 @@ public class FinanceFlowsTests : IClassFixture<LuminaVaultFactory>
         Assert.Equal("Expense", result.Transactions.Single().Kind);
         Assert.Equal(dueDate.AddDays(30), result.Subscriptions.Single().NextDueOn.Date);
 
-        var tx = await _api.GetAsync<TransactionDto[]>("/api/finance/transactions/?q=subscription");
-        Assert.Single(tx!);
+        var tx = await _api.GetAsync<TransactionPage>("/api/finance/transactions/?q=subscription");
+        Assert.Single(tx!.Items);
     }
+
+    private record TransactionPage(TransactionDto[] Items, string? NextCursor);
 
     [Fact]
     public async Task Summary_converts_account_balances_to_base_currency()

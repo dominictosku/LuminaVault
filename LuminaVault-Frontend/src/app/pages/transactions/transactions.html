@@ -120,6 +120,14 @@
               </button>
             }
           </div>
+          @if (nextCursor()) {
+            <div class="px-4 py-3 border-t border-white/5 flex justify-center">
+              <button type="button" class="btn btn-ghost text-sm" (click)="loadMore()" [disabled]="loadingMore()">
+                @if (loadingMore()) { <i class="pi pi-spin pi-spinner"></i> Loading… }
+                @else { <i class="pi pi-arrow-down"></i> Load older transactions }
+              </button>
+            </div>
+          }
         </div>
       }
     </section>

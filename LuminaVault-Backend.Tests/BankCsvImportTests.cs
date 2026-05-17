@@ -56,10 +56,12 @@ Date;Payee;Amount;Category;Description
         var accounts = await _api.GetAsync<AccountDto[]>("/api/finance/accounts/");
         Assert.Equal(2557.50m, accounts!.Single(a => a.Id == account.Id).Balance);
 
-        var transactions = await _api.GetAsync<TransactionDto[]>($"/api/finance/transactions?accountId={account.Id}");
-        Assert.Contains(transactions!, t => t.Payee == "Migros" && t.Kind == "Expense" && t.Amount == 42.50m);
-        Assert.Contains(transactions!, t => t.Payee == "Salary" && t.Kind == "Income" && t.Amount == 2500m);
+        var transactions = await _api.GetAsync<TransactionPage>($"/api/finance/transactions?accountId={account.Id}");
+        Assert.Contains(transactions!.Items, t => t.Payee == "Migros" && t.Kind == "Expense" && t.Amount == 42.50m);
+        Assert.Contains(transactions.Items, t => t.Payee == "Salary" && t.Kind == "Income" && t.Amount == 2500m);
     }
+
+    private record TransactionPage(TransactionDto[] Items, string? NextCursor);
 
     [Fact]
     public async Task Bank_csv_preview_returns_headers_samples_and_suggested_mapping()

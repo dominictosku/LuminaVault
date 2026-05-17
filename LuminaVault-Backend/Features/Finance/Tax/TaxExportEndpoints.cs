@@ -79,7 +79,8 @@ internal static class TaxExportEndpoints
         var nextYear = yearStart.AddYears(1);
         var warnings = new List<string>();
 
-        var accounts = await db.FinanceAccounts.OrderBy(a => a.Name).ToListAsync();
+        // Tax export is read-only; opt out of change tracking on every load.
+        var accounts = await db.FinanceAccounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync();
 
         var holdings = await BuildYearEndHoldings(db, accounts, yearEnd, warnings);
         var balances = await BuildAccountBalances(db, accounts, yearEnd);
@@ -105,14 +106,14 @@ internal static class TaxExportEndpoints
         List<string> warnings)
     {
         var accountsById = accounts.ToDictionary(a => a.Id);
-        var trades = await db.FinanceTransactions
+        var trades = await db.FinanceTransactions.AsNoTracking()
             .Where(t => t.OccurredOn <= yearEnd)
             .Where(t => t.Kind == FinanceTransactionKind.Buy || t.Kind == FinanceTransactionKind.Sell)
             .Where(t => t.Status != FinanceTransactionStatus.Pending)
             .Where(t => t.Symbol != null && t.Symbol != "")
             .OrderBy(t => t.OccurredOn).ThenBy(t => t.Id)
             .ToListAsync();
-        var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
+        var holdings = await db.Holdings.AsNoTracking().Include(h => h.Account).ToListAsync();
         var holdingByKey = holdings.ToDictionary(h => Key(h.AccountId, h.Symbol), StringComparer.OrdinalIgnoreCase);
 
         var rows = new List<TaxHoldingRow>();
@@ -192,7 +193,7 @@ internal static class TaxExportEndpoints
         DateTime from,
         DateTime toExclusive)
     {
-        var tx = await db.FinanceTransactions
+        var tx = await db.FinanceTransactions.AsNoTracking()
             .Include(t => t.Splits)
             .Where(t => t.Kind == kind)
             .Where(t => t.OccurredOn >= from && t.OccurredOn < toExclusive)

@@ -56,6 +56,10 @@ export class TransactionsComponent {
   saving = signal(false);
   error = signal<string | null>(null);
   editingId = signal<number | null>(null);
+  /// Base64 cursor for the next page of older transactions, or null when the
+  /// server has nothing more to send for the current filters.
+  nextCursor = signal<string | null>(null);
+  loadingMore = signal(false);
 
   query = '';
   accountFilter: number | null = null;
@@ -140,7 +144,8 @@ export class TransactionsComponent {
     }).subscribe({
       next: r => {
         this.accounts.set(r.accounts);
-        this.transactions.set(r.transactions);
+        this.transactions.set(r.transactions.items);
+        this.nextCursor.set(r.transactions.nextCursor);
         this.financeCategories.set(r.financeCategories);
         this.loading.set(false);
         if (r.accounts[0]) this.model.accountId = r.accounts[0].id;
@@ -159,8 +164,35 @@ export class TransactionsComponent {
       kind: this.kindFilter || undefined,
       ...this.monthRange(),
     }).subscribe({
-      next: tx => { this.transactions.set(tx); this.loading.set(false); },
+      next: page => {
+        this.transactions.set(page.items);
+        this.nextCursor.set(page.nextCursor);
+        this.loading.set(false);
+      },
       error: () => this.loading.set(false),
+    });
+  }
+
+  /// Loads the next page using the cursor returned with the previous page. Filter
+  /// changes reset `nextCursor` to null via `fetch()`, so this only fires while the
+  /// user is scrolling backward through the currently filtered window.
+  loadMore() {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loadingMore()) return;
+    this.loadingMore.set(true);
+    this.api.listFinanceTransactions({
+      q: this.query.trim() || undefined,
+      accountId: this.accountFilter || undefined,
+      kind: this.kindFilter || undefined,
+      ...this.monthRange(),
+      cursor,
+    }).subscribe({
+      next: page => {
+        this.transactions.update(existing => [...existing, ...page.items]);
+        this.nextCursor.set(page.nextCursor);
+        this.loadingMore.set(false);
+      },
+      error: () => this.loadingMore.set(false),
     });
   }
 

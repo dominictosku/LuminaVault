@@ -24,17 +24,21 @@ internal static class FinanceSummaryEndpoints
             var seriesStart = monthStart.AddMonths(-5);
             var rates = await CurrencyConversion.LoadRates(db);
             var rateHistory = await CurrencyConversion.LoadRateHistory(db);
-            var activeAccounts = await db.FinanceAccounts.Where(a => !a.IsArchived).ToListAsync();
+            // /summary is a read-only dashboard fetch — AsNoTracking on every load
+            // skips the change-tracker entries we'd otherwise build and immediately discard.
+            var activeAccounts = await db.FinanceAccounts.AsNoTracking().Where(a => !a.IsArchived).ToListAsync();
 
             // Pull a 6-month sliding window once so the dashboard's chart series and the
             // current-month totals can both feed off the same query result.
             var windowedTransactions = await db.FinanceTransactions
+                .AsNoTracking()
                 .Include(t => t.Account)
                 .Include(t => t.Splits)
                 .Where(t => t.OccurredOn >= seriesStart && t.OccurredOn < nextMonth)
                 .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
             var windowedSummaries = await db.MonthlyAccountSummaries
+                .AsNoTracking()
                 .Include(s => s.Account)
                 .Where(s => s.Month >= seriesStart && s.Month < nextMonth)
                 .ToListAsync();
@@ -47,6 +51,7 @@ internal static class FinanceSummaryEndpoints
                 .ToList();
 
             var allRecentTransactions = await db.FinanceTransactions
+                .AsNoTracking()
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
                 .OrderByDescending(t => t.OccurredOn)
@@ -54,13 +59,15 @@ internal static class FinanceSummaryEndpoints
                 .Take(7)
                 .ToListAsync();
             var activeSubscriptions = await db.Subscriptions
+                .AsNoTracking()
                 .Include(s => s.Account)
                 .Where(s => s.Status == SubscriptionStatus.Active)
                 .ToListAsync();
             var inventoryValue = await db.Items
+                .AsNoTracking()
                 .Select(i => new { i.Value, i.Quantity })
                 .ToListAsync();
-            var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
+            var holdings = await db.Holdings.AsNoTracking().Include(h => h.Account).ToListAsync();
 
             var income = SumKindWithSummaries(currentMonthTransactions, FinanceTransactionKind.Income,
                 currentMonthSummaries, s => s.Income, rateHistory);
@@ -156,11 +163,14 @@ internal static class FinanceSummaryEndpoints
             var rates = await CurrencyConversion.LoadRates(db);
             var rateHistory = await CurrencyConversion.LoadRateHistory(db);
 
+            // Pure read endpoint — see the matching AsNoTracking pass on /summary above.
             var accounts = await db.FinanceAccounts
+                .AsNoTracking()
                 .Where(a => !a.IsArchived)
                 .OrderByDescending(a => a.Balance)
                 .ToListAsync();
             var transactions = await db.FinanceTransactions
+                .AsNoTracking()
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
                 .Include(t => t.Splits)
@@ -168,6 +178,7 @@ internal static class FinanceSummaryEndpoints
                 .Where(t => t.Status != FinanceTransactionStatus.Pending)
                 .ToListAsync();
             var monthlySummaries = await db.MonthlyAccountSummaries
+                .AsNoTracking()
                 .Include(s => s.Account)
                 .Where(s => s.Month >= fromMonth && s.Month < nextMonth)
                 .ToListAsync();
@@ -176,10 +187,11 @@ internal static class FinanceSummaryEndpoints
                 .Where(t => !HasSummaryFor(t.AccountId, t.OccurredOn, summaryKeys))
                 .ToList();
             var activeSubscriptions = await db.Subscriptions
+                .AsNoTracking()
                 .Include(s => s.Account)
                 .Where(s => s.Status == SubscriptionStatus.Active)
                 .ToListAsync();
-            var assets = await db.Items.ToListAsync();
+            var assets = await db.Items.AsNoTracking().ToListAsync();
 
             var assetCategoryBreakdown = assets
                 .GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Uncategorized" : i.Category!)

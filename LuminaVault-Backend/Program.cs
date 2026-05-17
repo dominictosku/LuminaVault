@@ -61,6 +61,9 @@ builder.Services.AddSingleton(jwtOpt);
 builder.Services.AddSingleton<JwtService>();
 
 // --- DB ---
+// Tracking stays on by default so the common "load by id (incl. FindAsync), mutate,
+// save" pattern keeps working. Hot read endpoints opt out per-query with
+// `.AsNoTracking()` — see TransactionEndpoints, FinanceSummaryEndpoints, etc.
 var dbPath = Path.Combine(builder.Environment.ContentRootPath, "luminavault.db");
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite($"Data Source={dbPath}")

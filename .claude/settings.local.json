@@ -30,7 +30,10 @@
       "Bash(npm run *)",
       "Bash(npx --no-install ng build --configuration production)",
       "Bash(npx --no-install vitest run finance-math)",
-      "Bash(npx --no-install vitest run)"
+      "Bash(npx --no-install vitest run)",
+      "Bash(sed -n '50,60p;85,95p' /home/dominic/Development/MyProjects/LuminaVault/LuminaVault-Backend/Features/Finance/Loans/LoanEndpoints.cs)",
+      "Bash(sed -n '120,130p' /home/dominic/Development/MyProjects/LuminaVault/LuminaVault-Backend/Features/Finance/Holdings/HoldingEndpoints.cs)",
+      "Bash(grep -nB1 -E \"\\\\.Include.*\\\\.FirstOrDefaultAsync\" /home/dominic/Development/MyProjects/LuminaVault/LuminaVault-Backend/Features/Finance/Transactions/TransactionEndpoints.cs /home/dominic/Development/MyProjects/LuminaVault/LuminaVault-Backend/Features/Finance/MonthlySummaries/MonthlySummaryEndpoints.cs /home/dominic/Development/MyProjects/LuminaVault/LuminaVault-Backend/Features/Inventory/Items/ItemEndpoints.cs)"
     ]
   }
 }

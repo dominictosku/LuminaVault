@@ -16,9 +16,13 @@ internal static class TransactionEndpoints
 
         transactions.MapGet("/", async (
             AppDbContext db, string? q, int? accountId, string? category,
-            FinanceTransactionKind? kind, DateTime? from, DateTime? to) =>
+            FinanceTransactionKind? kind, DateTime? from, DateTime? to,
+            string? cursor, int? pageSize) =>
         {
+            // Read-only list: opt out of change tracking so we don't pay the per-row tax
+            // on what's frequently the largest result set in the app.
             var query = db.FinanceTransactions
+                .AsNoTracking()
                 .Include(t => t.Account)
                 .Include(t => t.TransferAccount)
                 .Include(t => t.Splits)
@@ -45,12 +49,36 @@ internal static class TransactionEndpoints
             if (to.HasValue)
                 query = query.Where(t => t.OccurredOn <= to.Value.Date);
 
-            var result = await query
+            // Keyset pagination on (OccurredOn DESC, Id DESC). The cursor encodes the last
+            // row of the prior page; everything strictly older comes next. Avoids OFFSET's
+            // O(N) skip cost and stays stable if rows are inserted while paging.
+            if (TransactionCursor.TryDecode(cursor, out var cursorDate, out var cursorId))
+            {
+                query = query.Where(t =>
+                    t.OccurredOn < cursorDate ||
+                    (t.OccurredOn == cursorDate && t.Id < cursorId));
+            }
+
+            var size = Math.Clamp(pageSize ?? 250, 1, 1000);
+            var page = await query
                 .OrderByDescending(t => t.OccurredOn)
                 .ThenByDescending(t => t.Id)
-                .Take(800)
+                // +1 to detect whether more rows exist beyond this page without a separate count.
+                .Take(size + 1)
                 .ToListAsync();
-            return Results.Ok(result.Select(MapTransaction));
+
+            string? nextCursor = null;
+            if (page.Count > size)
+            {
+                page.RemoveAt(page.Count - 1);
+                var last = page[^1];
+                nextCursor = TransactionCursor.Encode(last.OccurredOn, last.Id);
+            }
+            return Results.Ok(new
+            {
+                items = page.Select(MapTransaction),
+                nextCursor,
+            });
         });
 
         transactions.MapPost("/", async ([FromBody] FinanceTransactionInput input, AppDbContext db) =>
@@ -203,5 +231,37 @@ internal static class TransactionEndpoints
                 return Problem.BadRequest($"Splits must sum to {Math.Abs(input.Amount):F2}; got {splitTotal:F2}.");
         }
         return null;
+    }
+}
+
+/// Opaque base64 cursor that pins keyset pagination to (OccurredOn, Id). Format is
+/// kept simple + debuggable on purpose — base64-decoded, it reads as "yyyy-MM-dd|123".
+/// Bad cursors decode to no-op rather than 400, so a client that hands us a stale or
+/// fabricated cursor just gets the first page instead of a hard error.
+internal static class TransactionCursor
+{
+    public static string Encode(DateTime occurredOn, int id) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+            $"{occurredOn:yyyy-MM-dd}|{id}"));
+
+    public static bool TryDecode(string? cursor, out DateTime occurredOn, out int id)
+    {
+        occurredOn = default;
+        id = 0;
+        if (string.IsNullOrWhiteSpace(cursor)) return false;
+        try
+        {
+            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            var parts = decoded.Split('|', 2);
+            if (parts.Length != 2) return false;
+            if (!DateTime.TryParseExact(parts[0], "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out occurredOn)) return false;
+            return int.TryParse(parts[1], out id);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
