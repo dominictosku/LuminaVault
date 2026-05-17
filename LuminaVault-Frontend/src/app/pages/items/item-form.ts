@@ -23,11 +23,13 @@ export class ItemFormComponent {
   id = signal<number | null>(null);
   current = signal<Item | null>(null);
   saving = signal(false);
+  saved = signal(false);
   uploading = signal(false);
   uploadingModel = signal(false);
   uploadingAttachment = signal(false);
   error = signal<string | null>(null);
   modelError = signal<string | null>(null);
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   rooms = signal<Room[]>([]);
   furniture = signal<Furniture[]>([]);
@@ -141,15 +143,26 @@ export class ItemFormComponent {
       purchaseDate: this.model.purchaseDate ? new Date(this.model.purchaseDate).toISOString() : null,
       warrantyUntil: this.model.warrantyUntil ? new Date(this.model.warrantyUntil).toISOString() : null,
     };
-    const op = this.id() ? this.api.updateItem(this.id()!, input) : this.api.createItem(input);
+    const isUpdate = this.id() != null;
+    const op = isUpdate ? this.api.updateItem(this.id()!, input) : this.api.createItem(input);
     op.subscribe({
       next: r => {
         this.saving.set(false);
-        if (!this.id()) this.router.navigate(['/items', r.id]);
-        else this.current.set(r);
+        if (!isUpdate) {
+          this.router.navigate(['/items', r.id]);
+        } else {
+          this.current.set(r);
+          this.flashSaved();
+        }
       },
       error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
+  }
+
+  private flashSaved() {
+    this.saved.set(true);
+    if (this.savedTimer) clearTimeout(this.savedTimer);
+    this.savedTimer = setTimeout(() => this.saved.set(false), 2500);
   }
 
   async remove() {

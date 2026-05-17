@@ -250,6 +250,11 @@
           {{ error() }}
         </div>
       }
+      @if (saved()) {
+        <div class="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 flex items-center gap-2">
+          <i class="pi pi-check-circle"></i> Changes saved.
+        </div>
+      }
     </div>
   </form>
 </div>
