@@ -166,7 +166,7 @@
             @for (a of accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
           </select>
         </div>
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label">Price</label>
             <input class="input" type="number" step="0.01" min="0" name="amount" [(ngModel)]="model.amount" required />
@@ -175,14 +175,36 @@
             <label class="label">Currency</label>
             <input class="input" name="currency" maxlength="8" [(ngModel)]="model.currency" />
           </div>
-          <div>
-            <label class="label">Interval</label>
-            <select class="select" name="interval" [(ngModel)]="model.billingIntervalDays">
-              <option [ngValue]="30">Monthly</option>
-              <option [ngValue]="90">Quarterly</option>
-              <option [ngValue]="182">Half-year</option>
-              <option [ngValue]="365">Yearly</option>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="label !mb-0">Billing interval</label>
+            <div class="text-xs text-slate-400">Every {{ model.billingIntervalCount }} {{ model.billingIntervalUnit.toLowerCase() }}{{ model.billingIntervalCount > 1 ? 's' : '' }}</div>
+          </div>
+          <div class="grid grid-cols-[5rem_1fr] gap-2">
+            <input class="input" type="number" min="1" step="1" name="intervalCount"
+                   [(ngModel)]="model.billingIntervalCount" aria-label="Billing interval count" />
+            <select class="select" name="intervalUnit" [(ngModel)]="model.billingIntervalUnit"
+                    aria-label="Billing interval unit">
+              @for (u of intervalUnits; track u) {
+                <option [ngValue]="u">{{ u }}{{ model.billingIntervalCount > 1 ? 's' : '' }}</option>
+              }
             </select>
+          </div>
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            @for (preset of intervalPresets; track preset.label) {
+              <button type="button"
+                      class="text-xs px-2.5 py-1 rounded-full border transition"
+                      [class.border-violet-400]="intervalPresetMatches(preset)"
+                      [class.bg-violet-400/20]="intervalPresetMatches(preset)"
+                      [class.text-violet-100]="intervalPresetMatches(preset)"
+                      [class.border-white/10]="!intervalPresetMatches(preset)"
+                      [class.text-slate-300]="!intervalPresetMatches(preset)"
+                      [class.hover:bg-white/5]="!intervalPresetMatches(preset)"
+                      (click)="applyIntervalPreset(preset)">
+                {{ preset.label }}
+              </button>
+            }
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">

@@ -61,7 +61,7 @@ internal static class FinanceSummaryEndpoints
                 + monthlySummaryRows.Sum(s => CurrencyConversion.ToBase(s.Expenses, s.Account?.Currency, s.Month, rateHistory));
             var cashFlow = income - expenses;
             var recurringMonthly = activeSubscriptions.Sum(s =>
-                CurrencyConversion.ToBase(ToMonthlyAmount(s.Amount, s.BillingIntervalDays), s.Currency, rates));
+                CurrencyConversion.ToBase(ToMonthlyAmount(s), s.Currency, rates));
             var accountNetWorth = activeAccounts.Sum(a => CurrencyConversion.ToBase(a.Balance, a.Currency, rates));
             var assetValue = inventoryValue.Sum(i => (i.Value ?? 0m) * i.Quantity);
             var holdings = await db.Holdings.Include(h => h.Account).ToListAsync();
@@ -143,7 +143,7 @@ internal static class FinanceSummaryEndpoints
                     s.NextDueOn,
                     s.Amount,
                     s.Currency,
-                    monthlyAmount = ToMonthlyAmount(s.Amount, s.BillingIntervalDays)
+                    monthlyAmount = ToMonthlyAmount(s)
                 });
 
             return Results.Ok(new
@@ -236,7 +236,7 @@ internal static class FinanceSummaryEndpoints
                 .Select(g =>
                 {
                     var monthly = g.Sum(s => CurrencyConversion.ToBase(
-                        ToMonthlyAmount(s.Amount, s.BillingIntervalDays),
+                        ToMonthlyAmount(s),
                         s.Currency,
                         rates));
                     return new
@@ -401,7 +401,7 @@ internal static class FinanceSummaryEndpoints
                         accountName = t.Account?.Name
                     }),
                 subscriptionRunway = activeSubscriptions
-                    .OrderByDescending(s => CurrencyConversion.ToBase(ToMonthlyAmount(s.Amount, s.BillingIntervalDays), s.Currency, rates))
+                    .OrderByDescending(s => CurrencyConversion.ToBase(ToMonthlyAmount(s), s.Currency, rates))
                     .Take(10)
                     .Select(s => new
                     {
@@ -410,9 +410,9 @@ internal static class FinanceSummaryEndpoints
                         s.Category,
                         s.Amount,
                         s.Currency,
-                        monthlyAmount = ToMonthlyAmount(s.Amount, s.BillingIntervalDays),
-                        monthlyAmountBase = CurrencyConversion.ToBase(ToMonthlyAmount(s.Amount, s.BillingIntervalDays), s.Currency, rates),
-                        annualAmount = Math.Round(ToMonthlyAmount(s.Amount, s.BillingIntervalDays) * 12, 2),
+                        monthlyAmount = ToMonthlyAmount(s),
+                        monthlyAmountBase = CurrencyConversion.ToBase(ToMonthlyAmount(s), s.Currency, rates),
+                        annualAmount = Math.Round(ToMonthlyAmount(s) * 12, 2),
                         s.NextDueOn
                     })
             });

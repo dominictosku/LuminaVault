@@ -299,6 +299,22 @@ internal static class OdsImport
             }
 
             var interval = ParseDecimal(Get(row, headers, "Interval days", "Intervall in Tagen"));
+            var unitRaw = Get(row, headers, "Interval unit");
+            var countRaw = Get(row, headers, "Interval count");
+            // Prefer the unit+count columns from new exports; fall back to the legacy
+            // "Interval days" column so older spreadsheets keep importing unchanged.
+            BillingIntervalUnit intervalUnit;
+            int intervalCount;
+            if (!string.IsNullOrWhiteSpace(unitRaw))
+            {
+                intervalUnit = ParseEnum(unitRaw, BillingIntervalUnit.Month);
+                intervalCount = Math.Max(1, (int)Math.Round(ParseDecimal(string.IsNullOrWhiteSpace(countRaw) ? "1" : countRaw)));
+            }
+            else
+            {
+                intervalUnit = BillingIntervalUnit.Day;
+                intervalCount = Math.Max(1, (int)Math.Round(interval == 0 ? 30 : interval));
+            }
             var subscription = new Subscription
             {
                 Name = name,
@@ -307,7 +323,9 @@ internal static class OdsImport
                 AccountId = account?.Id,
                 Amount = Math.Abs(ParseDecimal(Get(row, headers, "Amount", "Preis"))),
                 Currency = EmptyToNull(Get(row, headers, "Currency")) ?? "CHF",
-                BillingIntervalDays = Math.Max(1, (int)Math.Round(interval == 0 ? 30 : interval)),
+                BillingIntervalUnit = intervalUnit,
+                BillingIntervalCount = intervalCount,
+                BillingIntervalDays = FinanceHelpers.BillingPeriodInDays(intervalUnit, intervalCount),
                 StartedOn = ParseDate(Get(row, headers, "Started on", "Startdatum")) ?? DateTime.UtcNow.Date,
                 NextDueOn = ParseDate(Get(row, headers, "Next due", "Nächstes Fälligkeitsdatum")) ?? DateTime.UtcNow.Date,
                 AutoRenew = ParseBool(Get(row, headers, "Auto renew")) || isBudgetSheet,

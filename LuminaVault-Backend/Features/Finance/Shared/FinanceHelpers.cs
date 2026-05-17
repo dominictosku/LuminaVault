@@ -257,13 +257,66 @@ internal static class FinanceHelpers
         yield return (fallback, t.Amount);
     }
 
-    public static decimal ToMonthlyAmount(decimal amount, int billingIntervalDays) =>
-        billingIntervalDays <= 0 ? amount : Math.Round(amount * 30.4375m / billingIntervalDays, 2);
+    /// Average month length in days — 365.25/12. Used only for Day/Week intervals
+    /// where there's no calendar-aligned "month" to ride; Month/Year intervals
+    /// compute their monthly cost directly without this approximation.
+    public const decimal DaysPerMonth = 30.4375m;
 
-    public static DateTime AdvanceDueDate(DateTime currentDueDate, int intervalDays)
+    /// Average weeks per month — 52/12.
+    public const decimal WeeksPerMonth = 52m / 12m;
+
+    /// Computes the per-month cost of a recurring charge given the billing period.
+    /// Calendar-aligned units (Month, Year) are exact (no 30-day approximation);
+    /// Day/Week use the standard 30.4375-day / 4.333-week month average.
+    public static decimal ToMonthlyAmount(decimal amount, BillingIntervalUnit unit, int count)
     {
-        var days = Math.Max(1, intervalDays);
-        return currentDueDate.Date.AddDays(days);
+        var n = Math.Max(1, count);
+        return unit switch
+        {
+            BillingIntervalUnit.Day => Math.Round(amount * DaysPerMonth / n, 2),
+            BillingIntervalUnit.Week => Math.Round(amount * WeeksPerMonth / n, 2),
+            BillingIntervalUnit.Month => Math.Round(amount / n, 2),
+            BillingIntervalUnit.Year => Math.Round(amount / (12m * n), 2),
+            _ => amount,
+        };
+    }
+
+    public static decimal ToMonthlyAmount(Subscription subscription) =>
+        ToMonthlyAmount(subscription.Amount, subscription.BillingIntervalUnit, subscription.BillingIntervalCount);
+
+    /// Calendar-aware due-date advance. Month/Year ride the calendar so a 15th-of-month
+    /// subscription always lands on the 15th (and Feb 29 lands on Feb 28 in non-leap years);
+    /// Day/Week fall back to plain day arithmetic.
+    public static DateTime AdvanceDueDate(DateTime currentDueDate, BillingIntervalUnit unit, int count)
+    {
+        var n = Math.Max(1, count);
+        return unit switch
+        {
+            BillingIntervalUnit.Day => currentDueDate.Date.AddDays(n),
+            BillingIntervalUnit.Week => currentDueDate.Date.AddDays(n * 7),
+            BillingIntervalUnit.Month => currentDueDate.Date.AddMonths(n),
+            BillingIntervalUnit.Year => currentDueDate.Date.AddYears(n),
+            _ => currentDueDate.Date.AddDays(n),
+        };
+    }
+
+    public static DateTime AdvanceDueDate(Subscription subscription) =>
+        AdvanceDueDate(subscription.NextDueOn, subscription.BillingIntervalUnit, subscription.BillingIntervalCount);
+
+    /// Day-equivalent of one billing period — used by code that still wants a "step by N days"
+    /// approximation (ODS export round-trip, legacy clients). Authoritative billing math uses
+    /// Unit + Count directly.
+    public static int BillingPeriodInDays(BillingIntervalUnit unit, int count)
+    {
+        var n = Math.Max(1, count);
+        return unit switch
+        {
+            BillingIntervalUnit.Day => n,
+            BillingIntervalUnit.Week => n * 7,
+            BillingIntervalUnit.Month => (int)Math.Round(n * (decimal)DaysPerMonth, MidpointRounding.AwayFromZero),
+            BillingIntervalUnit.Year => n * 365,
+            _ => n,
+        };
     }
 
     public static string SubscriptionTransactionTag(int subscriptionId, DateTime dueDate) =>

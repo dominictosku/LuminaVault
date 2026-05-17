@@ -45,6 +45,8 @@ function subscription(partial: Partial<Subscription>): Subscription {
     accountName: 'Checking',
     amount: 17.9,
     currency: 'CHF',
+    billingIntervalUnit: 'Month',
+    billingIntervalCount: 1,
     billingIntervalDays: 30,
     startedOn: '2026-01-01',
     nextDueOn: '2026-02-01',

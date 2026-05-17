@@ -129,7 +129,7 @@ internal static class SubscriptionEndpoints
 
             if (input.AdvanceNextDueOn || input.Status == FinanceTransactionStatus.Cleared)
             {
-                subscription.NextDueOn = AdvanceDueDate(subscription.NextDueOn, subscription.BillingIntervalDays);
+                subscription.NextDueOn = AdvanceDueDate(subscription);
                 subscription.UpdatedAt = DateTime.UtcNow;
             }
 
@@ -160,12 +160,26 @@ internal static class SubscriptionEndpoints
         subscription.AccountId = input.AccountId;
         subscription.Amount = Math.Abs(input.Amount);
         subscription.Currency = Clean(input.Currency)?.ToUpperInvariant() ?? "CHF";
-        subscription.BillingIntervalDays = Math.Max(1, input.BillingIntervalDays);
+        // Prefer the semantic Unit+Count when the client sends them. Old clients still
+        // send only BillingIntervalDays — treat that as N days. Either way, we keep
+        // BillingIntervalDays in sync so legacy code paths still get a sensible value.
+        var (unit, count) = ResolveInterval(input);
+        subscription.BillingIntervalUnit = unit;
+        subscription.BillingIntervalCount = Math.Max(1, count);
+        subscription.BillingIntervalDays = BillingPeriodInDays(unit, subscription.BillingIntervalCount);
         subscription.StartedOn = input.StartedOn.Date;
         subscription.NextDueOn = input.NextDueOn.Date;
         subscription.AutoRenew = input.AutoRenew;
         subscription.Status = input.Status;
         subscription.Notes = Clean(input.Notes);
+    }
+
+    static (BillingIntervalUnit Unit, int Count) ResolveInterval(SubscriptionInput input)
+    {
+        if (input.BillingIntervalUnit.HasValue)
+            return (input.BillingIntervalUnit.Value, input.BillingIntervalCount ?? 1);
+        var days = input.BillingIntervalDays ?? 30;
+        return (BillingIntervalUnit.Day, Math.Max(1, days));
     }
 
     static async Task<IResult?> ValidateSubscription(SubscriptionInput input, AppDbContext db)

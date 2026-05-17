@@ -182,6 +182,7 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         b.Entity<Subscription>().Property(s => s.Amount).HasColumnType("decimal(18,2)");
+        b.Entity<Subscription>().Property(s => s.BillingIntervalUnit).HasConversion<int>();
         b.Entity<Subscription>().HasIndex(s => s.NextDueOn);
 
         b.Entity<NetWorthSnapshot>().Property(s => s.AccountNetWorth).HasColumnType("decimal(18,2)");

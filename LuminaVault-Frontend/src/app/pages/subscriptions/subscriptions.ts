@@ -7,10 +7,14 @@ import { FinanceApi } from '../../core/data-access/finance-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   SUBSCRIPTION_STATUSES,
+  BILLING_INTERVAL_UNITS,
+  SUBSCRIPTION_INTERVAL_PRESETS,
+  BillingIntervalUnit,
   FinanceAccount,
   FinanceCategory,
   Subscription,
   SubscriptionInput,
+  SubscriptionIntervalPreset,
   SubscriptionStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
@@ -61,6 +65,8 @@ export class SubscriptionsComponent {
   editingId = signal<number | null>(null);
 
   statuses = SUBSCRIPTION_STATUSES;
+  intervalUnits = BILLING_INTERVAL_UNITS;
+  intervalPresets = SUBSCRIPTION_INTERVAL_PRESETS;
   query = signal('');
   statusFilter = signal<SubscriptionStatus | null>(null);
   categoryFilter = signal<string | null>(null);
@@ -176,7 +182,8 @@ export class SubscriptionsComponent {
       accountId: subscription.accountId ?? null,
       amount: subscription.amount,
       currency: subscription.currency,
-      billingIntervalDays: subscription.billingIntervalDays,
+      billingIntervalUnit: subscription.billingIntervalUnit,
+      billingIntervalCount: subscription.billingIntervalCount,
       startedOn: subscription.startedOn,
       nextDueOn: subscription.nextDueOn,
       autoRenew: subscription.autoRenew,
@@ -198,7 +205,8 @@ export class SubscriptionsComponent {
     const input: SubscriptionInput = {
       ...this.model,
       amount: Number(this.model.amount) || 0,
-      billingIntervalDays: Number(this.model.billingIntervalDays) || 30,
+      billingIntervalUnit: this.model.billingIntervalUnit,
+      billingIntervalCount: Math.max(1, Number(this.model.billingIntervalCount) || 1),
       currency: (this.model.currency || 'CHF').toUpperCase(),
       category: this.model.category || 'Subscriptions',
       startedOn: new Date(this.startedOn).toISOString(),
@@ -348,6 +356,22 @@ export class SubscriptionsComponent {
       ?? this.financeCategories()[0]?.name;
   }
 
+  applyIntervalPreset(preset: SubscriptionIntervalPreset) {
+    this.model.billingIntervalUnit = preset.unit;
+    this.model.billingIntervalCount = preset.count;
+  }
+
+  intervalPresetMatches(preset: SubscriptionIntervalPreset) {
+    return this.model.billingIntervalUnit === preset.unit
+      && Number(this.model.billingIntervalCount) === preset.count;
+  }
+
+  formatIntervalSummary(unit: BillingIntervalUnit, count: number) {
+    const n = Math.max(1, Number(count) || 1);
+    if (n === 1) return `every ${unit.toLowerCase()}`;
+    return `every ${n} ${unit.toLowerCase()}s`;
+  }
+
   private defaultModel(): SubscriptionInput {
     return {
       name: '',
@@ -356,7 +380,8 @@ export class SubscriptionsComponent {
       accountId: null,
       amount: 0,
       currency: 'CHF',
-      billingIntervalDays: 30,
+      billingIntervalUnit: 'Month',
+      billingIntervalCount: 1,
       startedOn: new Date().toISOString(),
       nextDueOn: new Date().toISOString(),
       autoRenew: true,

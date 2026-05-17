@@ -435,6 +435,23 @@ export interface MonthlyReconciliationInput {
   notes?: string | null;
 }
 
+export type BillingIntervalUnit = 'Day' | 'Week' | 'Month' | 'Year';
+export const BILLING_INTERVAL_UNITS: BillingIntervalUnit[] = ['Day', 'Week', 'Month', 'Year'];
+
+export interface SubscriptionIntervalPreset {
+  label: string;
+  unit: BillingIntervalUnit;
+  count: number;
+}
+
+export const SUBSCRIPTION_INTERVAL_PRESETS: SubscriptionIntervalPreset[] = [
+  { label: 'Weekly', unit: 'Week', count: 1 },
+  { label: 'Monthly', unit: 'Month', count: 1 },
+  { label: 'Quarterly', unit: 'Month', count: 3 },
+  { label: 'Half-year', unit: 'Month', count: 6 },
+  { label: 'Yearly', unit: 'Year', count: 1 },
+];
+
 export interface Subscription {
   id: number;
   name: string;
@@ -444,6 +461,8 @@ export interface Subscription {
   accountName?: string | null;
   amount: number;
   currency: string;
+  billingIntervalUnit: BillingIntervalUnit;
+  billingIntervalCount: number;
   billingIntervalDays: number;
   startedOn: string;
   nextDueOn: string;
@@ -463,7 +482,9 @@ export interface SubscriptionInput {
   accountId?: number | null;
   amount: number;
   currency: string;
-  billingIntervalDays: number;
+  billingIntervalUnit: BillingIntervalUnit;
+  billingIntervalCount: number;
+  billingIntervalDays?: number;
   startedOn: string;
   nextDueOn: string;
   autoRenew: boolean;

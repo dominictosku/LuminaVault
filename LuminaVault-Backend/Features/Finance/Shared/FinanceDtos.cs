@@ -97,13 +97,16 @@ public record MonthlyReconciliationInput(bool IsReconciled, string? Notes);
 
 public record SubscriptionDto(
     int Id, string Name, string Category, string? Provider, int? AccountId, string? AccountName,
-    decimal Amount, string Currency, int BillingIntervalDays, DateTime StartedOn,
+    decimal Amount, string Currency,
+    BillingIntervalUnit BillingIntervalUnit, int BillingIntervalCount, int BillingIntervalDays,
+    DateTime StartedOn,
     DateTime NextDueOn, bool AutoRenew, SubscriptionStatus Status, string? Notes,
     decimal MonthlyAmount, DocumentAttachmentDto[] Attachments, DateTime CreatedAt, DateTime UpdatedAt);
 
 public record SubscriptionInput(
     string Name, string Category, string? Provider, int? AccountId, decimal Amount, string Currency,
-    int BillingIntervalDays, DateTime StartedOn, DateTime NextDueOn, bool AutoRenew,
+    BillingIntervalUnit? BillingIntervalUnit, int? BillingIntervalCount, int? BillingIntervalDays,
+    DateTime StartedOn, DateTime NextDueOn, bool AutoRenew,
     SubscriptionStatus Status, string? Notes);
 
 public record FinanceBudgetDto(

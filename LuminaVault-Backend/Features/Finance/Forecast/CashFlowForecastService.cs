@@ -87,10 +87,9 @@ public class CashFlowForecastService
         foreach (var sub in subscriptions)
         {
             if (!accountsById.TryGetValue(sub.AccountId!.Value, out var account)) continue;
-            var interval = Math.Max(1, sub.BillingIntervalDays);
             var dueDate = sub.NextDueOn.Date;
             // Catch up if NextDueOn drifted into the past (e.g. user paused syncing).
-            while (dueDate < today) dueDate = dueDate.AddDays(interval);
+            while (dueDate < today) dueDate = AdvanceDueDate(dueDate, sub.BillingIntervalUnit, sub.BillingIntervalCount);
 
             var cycles = 0;
             while (dueDate <= to && cycles < 366)
@@ -109,7 +108,7 @@ public class CashFlowForecastService
                         sub.Currency,
                         -CurrencyConversion.ToBase(sub.Amount, sub.Currency, rates)));
                 }
-                dueDate = dueDate.AddDays(interval);
+                dueDate = AdvanceDueDate(dueDate, sub.BillingIntervalUnit, sub.BillingIntervalCount);
             }
         }
 

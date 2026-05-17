@@ -71,10 +71,13 @@ internal static class OdsExport
 
     public static OdsSheet Subscriptions(IEnumerable<Subscription> subscriptions) =>
         Sheet("Subscriptions",
-            new[] { Row("Name", "Category", "Provider", "Account", "Amount", "Currency", "Interval days", "Started on", "Next due", "Auto renew", "Status", "Notes") }
+            new[] { Row("Name", "Category", "Provider", "Account", "Amount", "Currency",
+                "Interval unit", "Interval count", "Interval days",
+                "Started on", "Next due", "Auto renew", "Status", "Notes") }
                 .Concat(subscriptions.Select(s => Row(
                     s.Name, s.Category, s.Provider, s.Account?.Name, s.Amount, s.Currency,
-                    s.BillingIntervalDays, DateOnly.FromDateTime(s.StartedOn), DateOnly.FromDateTime(s.NextDueOn),
+                    s.BillingIntervalUnit, s.BillingIntervalCount, s.BillingIntervalDays,
+                    DateOnly.FromDateTime(s.StartedOn), DateOnly.FromDateTime(s.NextDueOn),
                     s.AutoRenew, s.Status, s.Notes))));
 
     public static OdsSheet AssetCategories(IEnumerable<AssetCategory> categories) =>

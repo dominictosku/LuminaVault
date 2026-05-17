@@ -65,9 +65,10 @@ internal static class FinanceMappers
     public static SubscriptionDto MapSubscription(Subscription subscription) =>
         new(subscription.Id, subscription.Name, subscription.Category, subscription.Provider,
             subscription.AccountId, subscription.Account?.Name, subscription.Amount, subscription.Currency,
-            subscription.BillingIntervalDays, subscription.StartedOn, subscription.NextDueOn,
+            subscription.BillingIntervalUnit, subscription.BillingIntervalCount, subscription.BillingIntervalDays,
+            subscription.StartedOn, subscription.NextDueOn,
             subscription.AutoRenew, subscription.Status, subscription.Notes,
-            ToMonthlyAmount(subscription.Amount, subscription.BillingIntervalDays),
+            ToMonthlyAmount(subscription),
             subscription.Attachments.Select(AttachmentEndpoints.MapAttachment).ToArray(),
             subscription.CreatedAt, subscription.UpdatedAt);
 

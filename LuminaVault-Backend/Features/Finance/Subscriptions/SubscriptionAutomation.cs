@@ -74,7 +74,7 @@ internal sealed class SubscriptionAutomationService(SubscriptionAutomationOption
                     created.Add(transaction);
                 }
 
-                subscription.NextDueOn = AdvanceDueDate(subscription.NextDueOn, subscription.BillingIntervalDays);
+                subscription.NextDueOn = AdvanceDueDate(subscription);
                 subscription.UpdatedAt = DateTime.UtcNow;
                 touchedSubscriptions.Add(subscription);
             }
