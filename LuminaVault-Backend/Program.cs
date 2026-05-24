@@ -21,13 +21,9 @@ const string DevFallbackJwtKey = "dev-only-key-change-me-please-this-must-be-32+
 var builder = WebApplication.CreateBuilder(args);
 
 // Resolve where stateful files (DB, uploads, logs) live. LUMINA_DATA_DIR lets containers
-// point everything at a single mounted volume; local dev keeps the per-project ContentRoot.
+// point everything at a single mounted volume; local dev uses ./data under the backend.
 var dataDirOverride = Environment.GetEnvironmentVariable("LUMINA_DATA_DIR");
-var storage = new StoragePaths(
-    string.IsNullOrWhiteSpace(dataDirOverride) ? builder.Environment.ContentRootPath : dataDirOverride);
-Directory.CreateDirectory(storage.DataDirectory);
-Directory.CreateDirectory(storage.UploadsDirectory);
-Directory.CreateDirectory(storage.LogsDirectory);
+var storage = StorageBootstrap.Resolve(builder.Environment.ContentRootPath, dataDirOverride);
 builder.Services.AddSingleton(storage);
 
 // Replace the default ILogger pipeline with Serilog reading from configuration.

@@ -111,9 +111,9 @@ dotnet run
 # API available at http://localhost:5256
 ```
 
-The SQLite database (`luminavault.db`) and an `uploads/` folder are created automatically on first run. The backend uses **EF Core Migrations** — `db.Database.Migrate()` runs on startup and applies any pending migrations idempotently. Default asset and finance categories are seeded the first time the app starts.
+The SQLite database (`data/luminavault.db`), uploads (`data/uploads/`), logs (`data/logs/`), and optional scheduled backups (`data/backups/`) are created automatically on first run. The backend uses **EF Core Migrations** — `db.Database.Migrate()` runs on startup and applies any pending migrations idempotently. Default asset and finance categories are seeded the first time the app starts.
 
-> **Upgrading from a pre-migrations build?** This branch switches from `EnsureCreated` + hand-rolled `ALTER TABLE` patches to real EF migrations. The first migration is `Initial`, which models the full current schema. Existing dev databases were created without an `__EFMigrationsHistory` row, so EF won't recognise them. **Move your old `luminavault.db` aside** (e.g. `mv luminavault.db luminavault.db.old`) and let the app create a fresh schema on next start. Open an issue if you need a data-preserving upgrade path.
+> **Upgrading from a pre-migrations build?** This branch switches from `EnsureCreated` + hand-rolled `ALTER TABLE` patches to real EF migrations. The first migration is `Initial`, which models the full current schema. Existing dev databases were created without an `__EFMigrationsHistory` row, so EF won't recognise them. **Move your old database aside** (root-level `luminavault.db` or `data/luminavault.db`) and let the app create a fresh schema on next start. Open an issue if you need a data-preserving upgrade path.
 
 To add a schema change later: `cd LuminaVault-Backend && dotnet ef migrations add YourChangeName`. The new migration is applied automatically on the next `dotnet run`.
 
@@ -162,9 +162,9 @@ git config core.hooksPath .githooks
 
 ### Backups
 
-LuminaVault is self-hosted, so backup is your responsibility — but the app helps. Hit `GET /api/data/backup` (authenticated) to download a zip containing a consistent snapshot of `luminavault.db` plus the entire `uploads/` folder (item photos, glTF models, document attachments). The endpoint runs a `PRAGMA wal_checkpoint(TRUNCATE)` first so the snapshot is point-in-time consistent even under writes.
+LuminaVault is self-hosted, so backup is your responsibility — but the app helps. Hit `GET /api/data/backup` (authenticated) to download a zip containing a consistent SQLite snapshot of `luminavault.db` plus the entire `uploads/` folder (item photos, glTF models, document attachments).
 
-To restore: stop the backend, delete the existing `luminavault.db` and `uploads/`, unzip the backup into `LuminaVault-Backend/`, and restart.
+To restore locally: stop the backend, delete the existing `data/luminavault.db` and `data/uploads/`, unzip the backup into `LuminaVault-Backend/data/`, and restart. In Docker, restore into the path mounted as `LUMINA_DATA_DIR`.
 
 For routine backups, point your favourite scheduler at this endpoint:
 
@@ -303,7 +303,7 @@ LuminaVault/
 │   ├── Infrastructure/
 │   │   ├── Data/                       # AppDbContext + Seeder + Migrations/
 │   │   └── Validation/                 # Problem + Validate helpers
-│   ├── uploads/                        # Photos, glTF models and documents (gitignored)
+│   ├── data/                           # SQLite DB, uploads, logs and backups (gitignored)
 │   └── Program.cs                      # App bootstrap, migrations & middleware
 │
 ├── LuminaVault-Backend.Tests/          # xUnit + WebApplicationFactory integration tests

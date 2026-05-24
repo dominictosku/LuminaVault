@@ -8,6 +8,7 @@ LuminaVault-Backend/*.db.backup*
 LuminaVault-Backend/uploads/
 LuminaVault-Backend/logs/
 LuminaVault-Backend/backups/
+LuminaVault-Backend/data/
 LuminaVault-Backend/appsettings.*.json
 !LuminaVault-Backend/appsettings.json
 LuminaVault-Backend/*.user

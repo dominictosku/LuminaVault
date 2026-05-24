@@ -1,7 +1,7 @@
 namespace LuminaVault.Storage;
 
 /// Resolves on-disk paths for the SQLite DB, uploads, and logs.
-/// Defaults to ContentRoot for local dev; container deployments set LUMINA_DATA_DIR
+/// Defaults to ContentRoot/data for local dev; container deployments set LUMINA_DATA_DIR
 /// to a mounted volume so all stateful files live in one place that survives image rebuilds.
 public sealed class StoragePaths
 {

@@ -119,4 +119,8 @@ src/.vs/config/applicationhost.config
 .idea/
 
 # Database
-luminavault.db
+/data/
+/uploads/
+/logs/
+/backups/
+/luminavault.db*
