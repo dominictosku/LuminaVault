@@ -1,3 +1,4 @@
+import { HttpResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataTransferApi } from '../../core/data-access/data-transfer-api';
@@ -24,6 +25,7 @@ export class DataComponent {
   private financeApi = inject(FinanceApi);
   private toast = inject(ToastService);
   exporting = signal(false);
+  backingUp = signal(false);
   importing = signal(false);
   previewing = signal(false);
   error = signal<string | null>(null);
@@ -71,21 +73,34 @@ export class DataComponent {
     this.api.exportOds().subscribe({
       next: response => {
         this.exporting.set(false);
-        const blob = response.body;
-        if (!blob) return;
-        const contentDisposition = response.headers.get('content-disposition') ?? '';
-        const fileName = /filename="?([^"]+)"?/i.exec(contentDisposition)?.[1] ?? `LuminaVault-export-${new Date().toISOString().substring(0, 10)}.ods`;
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        URL.revokeObjectURL(url);
-        this.toast.success(`Exported ${fileName}.`);
+        const fileName = this.downloadResponse(
+          response,
+          `LuminaVault-export-${new Date().toISOString().substring(0, 10)}.ods`,
+        );
+        if (fileName) this.toast.success(`Exported ${fileName}.`);
       },
       error: e => {
         this.exporting.set(false);
         this.error.set(e?.error?.error ?? 'Export failed.');
+      },
+    });
+  }
+
+  downloadBackup() {
+    this.backingUp.set(true);
+    this.error.set(null);
+    this.api.downloadBackup().subscribe({
+      next: response => {
+        this.backingUp.set(false);
+        const fileName = this.downloadResponse(
+          response,
+          `luminavault-backup-${new Date().toISOString().substring(0, 10)}.zip`,
+        );
+        if (fileName) this.toast.success(`Downloaded ${fileName}.`);
+      },
+      error: e => {
+        this.backingUp.set(false);
+        this.error.set(e?.error?.error ?? 'Backup download failed.');
       },
     });
   }
@@ -233,5 +248,39 @@ export class DataComponent {
 
   private normalize(value: string) {
     return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  private downloadResponse(response: HttpResponse<Blob>, fallbackFileName: string) {
+    const blob = response.body;
+    if (!blob) return null;
+
+    const fileName = this.fileNameFromContentDisposition(
+      response.headers.get('content-disposition'),
+      fallbackFileName,
+    );
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    return fileName;
+  }
+
+  private fileNameFromContentDisposition(contentDisposition: string | null, fallback: string) {
+    if (!contentDisposition) return fallback;
+
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition)?.[1];
+    if (encoded) {
+      try {
+        return decodeURIComponent(encoded);
+      } catch {
+        return encoded;
+      }
+    }
+
+    return /filename="([^"]+)"/i.exec(contentDisposition)?.[1]
+      ?? /filename=([^;]+)/i.exec(contentDisposition)?.[1]?.trim()
+      ?? fallback;
   }
 }

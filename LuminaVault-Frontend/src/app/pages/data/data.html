@@ -4,7 +4,7 @@
     <p class="text-slate-400 text-sm mt-1">Move LuminaVault data through OpenDocument spreadsheets.</p>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+  <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
     <section class="surface p-5">
       <div class="flex items-start gap-3">
         <div class="w-10 h-10 rounded-xl bg-violet-500/15 grid place-items-center shrink-0">
@@ -20,6 +20,24 @@
       <button class="btn btn-primary mt-5" (click)="export()" [disabled]="exporting()">
         @if (exporting()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-file-export"></i> }
         Export .ods
+      </button>
+    </section>
+
+    <section class="surface p-5">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-sky-500/15 grid place-items-center shrink-0">
+          <i class="pi pi-database text-sky-300"></i>
+        </div>
+        <div>
+          <h2 class="font-medium">Full backup</h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Downloads a ZIP with the SQLite database and uploaded attachments for restore-grade backups.
+          </p>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-5" (click)="downloadBackup()" [disabled]="backingUp()">
+        @if (backingUp()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-cloud-download"></i> }
+        Download backup
       </button>
     </section>
 

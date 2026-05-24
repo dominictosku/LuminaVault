@@ -21,6 +21,13 @@ export class DataTransferApi {
     });
   }
 
+  downloadBackup() {
+    return this.http.get(`${API_BASE}/api/data/backup`, {
+      observe: 'response',
+      responseType: 'blob',
+    });
+  }
+
   importOds(file: File) {
     const fd = new FormData();
     fd.append('file', file);
