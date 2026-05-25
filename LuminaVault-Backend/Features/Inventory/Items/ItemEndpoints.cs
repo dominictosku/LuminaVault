@@ -161,7 +161,8 @@ public static class ItemEndpoints
             return Results.NoContent();
         });
 
-        // Public model download (no auth required so <model-viewer>/loaders work without headers)
+        // Authenticated model download. Three.js callers need to attach the JWT
+        // header when loading this URL.
         app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var item = await db.Items.FindAsync(id);
@@ -170,7 +171,7 @@ public static class ItemEndpoints
             if (!File.Exists(path)) return Results.NotFound();
             var bytes = await File.ReadAllBytesAsync(path);
             return Results.File(bytes, item.ModelContentType ?? "application/octet-stream");
-        }).WithTags("Items");
+        }).RequireAuthorization().WithTags("Items");
 
         // Stats
         g.MapGet("/stats/summary", async (AppDbContext db) =>

@@ -1,11 +1,13 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Net;
 using System.Threading.RateLimiting;
 using LuminaVault.Auth;
 using LuminaVault.Data;
 using LuminaVault.Endpoints;
 using LuminaVault.Pricing;
 using LuminaVault.Storage;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.RateLimiting;
@@ -64,6 +66,11 @@ if (string.IsNullOrWhiteSpace(jwtOpt.Key))
         jwtOpt.Key = DevFallbackJwtKey;
     }
 }
+if (Encoding.UTF8.GetByteCount(jwtOpt.Key) < 32)
+{
+    throw new InvalidOperationException(
+        "JWT signing key must be at least 32 UTF-8 bytes. Set Jwt:Key or LUMINA_JWT_KEY to a long random value.");
+}
 builder.Services.AddSingleton(jwtOpt);
 builder.Services.AddSingleton<JwtService>();
 builder.Services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
@@ -92,7 +99,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(2)
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(o =>
+{
+    var authenticatedUsersOnly = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+    o.DefaultPolicy = authenticatedUsersOnly;
+    o.FallbackPolicy = authenticatedUsersOnly;
+});
 
 // --- CORS for Angular dev server ---
 const string DevCors = "DevCors";
@@ -230,9 +244,11 @@ if (jwtOpt.Key == DevFallbackJwtKey)
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
     if (!app.Environment.IsDevelopment())
     {
-        startupLogger.LogError(
+        startupLogger.LogCritical(
             "LuminaVault is running with the built-in dev JWT key in a non-Development environment. " +
             "Set Jwt:Key in appsettings.json or the LUMINA_JWT_KEY env var before exposing this instance.");
+        throw new InvalidOperationException(
+            "Refusing to start outside Development with the built-in dev JWT key. Set Jwt:Key or LUMINA_JWT_KEY.");
     }
     else
     {
@@ -295,24 +311,26 @@ app.UseAuthorization();
 app.UseRateLimiter();
 app.UseRequestTimeouts();
 
-app.MapGet("/", () => Results.Ok(new { app = "LuminaVault", version = "1.0" }));
+app.MapGet("/", () => Results.Ok(new { app = "LuminaVault", version = "1.0" }))
+    .RequireAuthorization();
 
-// Healthcheck for reverse proxies, uptime monitors, and `docker healthcheck`.
+// Authenticated API healthcheck for operators.
 // Verifies the DB is reachable so a stale-NFS / locked-file scenario is reported as unhealthy
 // rather than as "we're up, but every request returns 500".
 app.MapGet("/api/health", async (AppDbContext db, CancellationToken ct) =>
+    await HealthEndpoint.Check(db, ct))
+.WithTags("Health")
+.RequireAuthorization();
+
+// Unauthenticated container-only healthcheck. The public nginx config does not proxy
+// /internal/*, and the endpoint refuses non-loopback callers even on the Docker network.
+app.MapGet("/internal/health", async (HttpContext ctx, AppDbContext db, CancellationToken ct) =>
 {
-    try
-    {
-        await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
-        return Results.Ok(new { status = "ok", database = "ok" });
-    }
-    catch (Exception ex)
-    {
-        return Results.Json(
-            new { status = "degraded", database = "error", message = ex.Message },
-            statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
+    var remoteIp = ctx.Connection.RemoteIpAddress;
+    if (remoteIp is null || !IPAddress.IsLoopback(remoteIp))
+        return Results.NotFound();
+
+    return await HealthEndpoint.Check(db, ct);
 })
 .WithTags("Health")
 .AllowAnonymous();
@@ -346,3 +364,21 @@ catch (Exception ex) when (ex is not HostAbortedException)
 // Expose the implicit Program class so WebApplicationFactory<Program> in the test project
 // can boot the same composition root.
 public partial class Program;
+
+internal static class HealthEndpoint
+{
+    public static async Task<IResult> Check(AppDbContext db, CancellationToken ct)
+    {
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
+            return Results.Ok(new { status = "ok", database = "ok" });
+        }
+        catch (Exception ex)
+        {
+            return Results.Json(
+                new { status = "degraded", database = "error", message = ex.Message },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+}

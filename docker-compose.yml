@@ -32,9 +32,9 @@ services:
     expose:
       - "8080"
     healthcheck:
-      # Hits the DB-aware /api/health endpoint — returns 503 if SQLite is locked
+      # Hits the DB-aware loopback-only health endpoint — returns 503 if SQLite is locked
       # or the file is missing, which catches the "we're up but every request 500s" failure.
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/api/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/internal/health"]
       interval: 30s
       timeout: 5s
       retries: 5

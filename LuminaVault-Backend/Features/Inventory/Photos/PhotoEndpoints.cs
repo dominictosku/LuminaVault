@@ -13,9 +13,10 @@ public static class PhotoEndpoints
 
     public static IEndpointRouteBuilder MapPhotos(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/photos").WithTags("Photos");
+        var g = app.MapGroup("/api/photos").RequireAuthorization().WithTags("Photos");
 
-        // Public read so <img src> works without auth headers
+        // Authenticated media download. The frontend must fetch photos with the JWT
+        // header and render them from object URLs.
         g.MapGet("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var p = await db.ItemPhotos.FindAsync(id);
@@ -50,8 +51,7 @@ public static class PhotoEndpoints
             return Results.Ok(new ItemPhotoDto(photo.Id, $"/api/photos/{photo.Id}", photo.ContentType));
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
-        var del = app.MapGroup("/api/photos").RequireAuthorization();
-        del.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
+        g.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
         {
             var p = await db.ItemPhotos.FindAsync(id);
             if (p is null) return Results.NotFound();

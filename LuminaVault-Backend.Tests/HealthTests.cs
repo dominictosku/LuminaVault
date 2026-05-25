@@ -3,25 +3,32 @@ using System.Net.Http.Json;
 
 namespace LuminaVault.Tests;
 
-/// `/api/health` is the hook reverse proxies, uptime monitors, and docker healthcheck
-/// rely on. Pin its wire shape so a well-meaning refactor doesn't quietly break
-/// monitoring.
+/// `/api/health` is useful operationally, but it still exposes app/database state.
+/// Keep it behind auth; Docker uses `/internal/health`, which is loopback-only.
 public class HealthTests : IClassFixture<LuminaVaultFactory>
 {
-    private readonly HttpClient _http;
+    private readonly ApiClient _api;
 
     public HealthTests(LuminaVaultFactory factory)
     {
-        _http = factory.CreateClient();
+        _api = new ApiClient(factory.CreateClient());
     }
 
     private record HealthBody(string Status, string Database);
 
     [Fact]
-    public async Task Health_is_anonymous_and_returns_ok_with_db_ping()
+    public async Task Health_rejects_anonymous_requests()
     {
-        // No auth header attached — anonymous access is intentional so dumb monitors work.
-        var resp = await _http.GetAsync("/api/health");
+        var resp = await _api.Raw.GetAsync("/api/health");
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Health_returns_ok_with_db_ping_when_authenticated()
+    {
+        await _api.EnsureAuthedAsync();
+
+        var resp = await _api.Raw.GetAsync("/api/health");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<HealthBody>();
         Assert.Equal("ok", body!.Status);

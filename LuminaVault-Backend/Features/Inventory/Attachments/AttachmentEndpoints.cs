@@ -26,7 +26,7 @@ public static class AttachmentEndpoints
             var path = storage.UploadPath(attachment.FileName);
             if (!File.Exists(path)) return Results.NotFound();
             return Results.File(await File.ReadAllBytesAsync(path), attachment.ContentType, attachment.OriginalFileName);
-        }).WithTags("Attachments");
+        }).RequireAuthorization().WithTags("Attachments");
 
         var items = app.MapGroup("/api/items").RequireAuthorization().WithTags("Attachments");
         items.MapPost("/{itemId:int}/attachments", async (int itemId, IFormFile file, AppDbContext db, StoragePaths storage) =>

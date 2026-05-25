@@ -339,7 +339,7 @@ The backend uses **vertical-slice architecture**: each feature folder owns its e
 
 ## Configuration
 
-The backend reads JWT settings from `appsettings.json`. For development the key falls back to an environment variable `LUMINA_JWT_KEY`, or a hardcoded dev-only key if neither is set.
+The backend reads JWT settings from `appsettings.json`. For development the key falls back to an environment variable `LUMINA_JWT_KEY`, or a hardcoded dev-only key if neither is set. Outside Development, the app refuses to start without a real 32+ byte signing key.
 
 ```jsonc
 // LuminaVault-Backend/appsettings.json

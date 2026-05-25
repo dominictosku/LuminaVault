@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LuminaVault.Endpoints;
 
-public record AuthRequest(string Username, string Password);
+public record AuthRequest(string? Username, string? Password);
 public record AuthResponse(string Token, string Username);
-public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
 public static class AuthEndpoints
 {
@@ -22,14 +22,14 @@ public static class AuthEndpoints
         {
             var hasUser = await db.Users.AnyAsync();
             return Results.Ok(new { hasUser });
-        });
+        }).AllowAnonymous();
 
         g.MapPost("/register", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
         {
             if (await db.Users.AnyAsync())
                 return Problem.Conflict("A user already exists. This is a single-user app.");
-            if (string.IsNullOrWhiteSpace(req.Username) || req.Password.Length < 6)
-                return Problem.BadRequest("Username required and password must be at least 6 chars.");
+            if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
+                return Problem.BadRequest("Username required and password must be at least 8 chars.");
 
             var user = new User
             {
@@ -39,15 +39,19 @@ public static class AuthEndpoints
             db.Users.Add(user);
             await db.SaveChangesAsync();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
-        }).RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("auth");
 
         g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == req.Username);
+            if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrEmpty(req.Password))
+                return Results.Unauthorized();
+
+            var username = req.Username.Trim();
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
             if (user is null || !hasher.Verify(req.Password, user.PasswordHash))
                 return Results.Unauthorized();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
-        }).RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("auth");
 
         g.MapPost("/change-password", async (
             HttpContext ctx,
@@ -58,6 +62,8 @@ public static class AuthEndpoints
         {
             var username = ctx.User.Identity?.Name;
             if (string.IsNullOrWhiteSpace(username)) return Results.Unauthorized();
+            if (string.IsNullOrEmpty(req.CurrentPassword) || string.IsNullOrEmpty(req.NewPassword))
+                return Problem.BadRequest("Current password and new password are required.");
             if (req.NewPassword.Length < 8)
                 return Problem.BadRequest("New password must be at least 8 chars.");
 

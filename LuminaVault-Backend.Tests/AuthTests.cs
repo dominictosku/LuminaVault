@@ -35,12 +35,50 @@ public class AuthTests
     }
 
     [Fact]
+    public async Task Register_rejects_missing_password_without_500()
+    {
+        using var factory = new LuminaVaultFactory();
+        var http = factory.CreateClient();
+
+        var resp = await http.PostAsJsonAsync("/api/auth/register", new { username = "alice" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    [Fact]
     public async Task Protected_endpoint_rejects_request_without_token()
     {
         using var factory = new LuminaVaultFactory();
         var http = factory.CreateClient();
         var resp = await http.GetAsync("/api/finance/accounts");
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/api/health")]
+    [InlineData("/api/photos/1")]
+    [InlineData("/api/attachments/1")]
+    [InlineData("/api/items/1/model")]
+    public async Task Non_auth_endpoints_reject_request_without_token(string path)
+    {
+        using var factory = new LuminaVaultFactory();
+        var http = factory.CreateClient();
+
+        var resp = await http.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Auth_status_remains_public_for_login_setup_flow()
+    {
+        using var factory = new LuminaVaultFactory();
+        var http = factory.CreateClient();
+
+        var resp = await http.GetAsync("/api/auth/status");
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
     [Fact]
