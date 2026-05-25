@@ -15,5 +15,11 @@ public sealed class StoragePaths
         DataDirectory = dataDirectory;
     }
 
-    public string UploadPath(string fileName) => Path.Combine(UploadsDirectory, fileName);
+    public string UploadPath(string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safeFileName))
+            throw new ArgumentException("Upload file name is required.", nameof(fileName));
+        return Path.Combine(UploadsDirectory, safeFileName);
+    }
 }

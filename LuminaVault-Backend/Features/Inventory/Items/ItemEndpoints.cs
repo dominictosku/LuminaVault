@@ -29,6 +29,16 @@ public record ItemInput(
 
 public static class ItemEndpoints
 {
+    static readonly UploadSaveOptions ModelUploadOptions = new()
+    {
+        MaxBytes = 50 * 1024 * 1024,
+        MaxSizeMessage = "Max 50MB.",
+        AllowedExtensions = new[] { ".glb", ".gltf" },
+        UnsupportedTypeMessage = "Only .glb or .gltf files are allowed.",
+        ContentTypeForExtension = (extension, _) =>
+            extension == ".glb" ? "model/gltf-binary" : "model/gltf+json"
+    };
+
     public static IEndpointRouteBuilder MapItems(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/items").RequireAuthorization().WithTags("Items");
@@ -106,16 +116,16 @@ public static class ItemEndpoints
             return Results.Ok(MapToDto(item));
         });
 
-        g.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
+        g.MapDelete("/{id:int}", async (int id, AppDbContext db, UploadStorage uploads) =>
         {
             var item = await db.Items
                 .Include(x => x.Photos)
                 .Include(x => x.Attachments)
                 .FirstOrDefaultAsync(x => x.Id == id);
             if (item is null) return Results.NotFound();
-            foreach (var p in item.Photos) DeleteUploadFile(storage, p.FileName);
-            foreach (var attachment in item.Attachments) DeleteUploadFile(storage, attachment.FileName);
-            if (item.ModelFileName != null) DeleteUploadFile(storage, item.ModelFileName);
+            foreach (var p in item.Photos) uploads.DeleteIfExists(p.FileName);
+            foreach (var attachment in item.Attachments) uploads.DeleteIfExists(attachment.FileName);
+            uploads.DeleteIfExists(item.ModelFileName);
             db.Items.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -123,37 +133,30 @@ public static class ItemEndpoints
 
         // Model upload (single .glb/.gltf per item)
         g.MapPost("/{id:int}/model", async (int id, IFormFile file,
-            AppDbContext db, StoragePaths storage) =>
+            AppDbContext db, UploadStorage uploads, CancellationToken ct) =>
         {
-            if (file is null || file.Length == 0) return Problem.BadRequest("No file.");
-            if (file.Length > 50 * 1024 * 1024) return Problem.BadRequest("Max 50MB.");
-            var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant();
-            if (ext != ".glb" && ext != ".gltf")
-                return Problem.BadRequest("Only .glb or .gltf files are allowed.");
-
             var item = await db.Items.FindAsync(id);
             if (item is null) return Results.NotFound();
 
-            Directory.CreateDirectory(storage.UploadsDirectory);
-            var name = $"{Guid.NewGuid():N}{ext}";
-            var path = storage.UploadPath(name);
-            await using (var fs = File.Create(path)) await file.CopyToAsync(fs);
+            var saved = await uploads.SaveAsync(file, ModelUploadOptions, ct);
+            if (saved.Error is not null) return Problem.BadRequest(saved.Error);
 
             // Replace previous model file if any
-            if (item.ModelFileName != null) DeleteUploadFile(storage, item.ModelFileName);
+            uploads.DeleteIfExists(item.ModelFileName);
 
-            item.ModelFileName = name;
-            item.ModelContentType = ext == ".glb" ? "model/gltf-binary" : "model/gltf+json";
+            var upload = saved.Upload!;
+            item.ModelFileName = upload.FileName;
+            item.ModelContentType = upload.ContentType;
             item.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             return Results.Ok(new { modelUrl = $"/api/items/{item.Id}/model" });
         }).DisableAntiforgery().WithRequestTimeout("upload");
 
-        g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, StoragePaths storage) =>
+        g.MapDelete("/{id:int}/model", async (int id, AppDbContext db, UploadStorage uploads) =>
         {
             var item = await db.Items.FindAsync(id);
             if (item is null || item.ModelFileName is null) return Results.NotFound();
-            DeleteUploadFile(storage, item.ModelFileName);
+            uploads.DeleteIfExists(item.ModelFileName);
             item.ModelFileName = null;
             item.ModelContentType = null;
             item.UpdatedAt = DateTime.UtcNow;
@@ -163,13 +166,12 @@ public static class ItemEndpoints
 
         // Authenticated model download. Three.js callers need to attach the JWT
         // header when loading this URL.
-        app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, StoragePaths storage) =>
+        app.MapGet("/api/items/{id:int}/model", async (int id, AppDbContext db, UploadStorage uploads, CancellationToken ct) =>
         {
             var item = await db.Items.FindAsync(id);
             if (item?.ModelFileName is null) return Results.NotFound();
-            var path = storage.UploadPath(item.ModelFileName);
-            if (!File.Exists(path)) return Results.NotFound();
-            var bytes = await File.ReadAllBytesAsync(path);
+            var bytes = await uploads.ReadAsync(item.ModelFileName, ct);
+            if (bytes is null) return Results.NotFound();
             return Results.File(bytes, item.ModelContentType ?? "application/octet-stream");
         }).RequireAuthorization().WithTags("Items");
 
@@ -239,13 +241,4 @@ public static class ItemEndpoints
             i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
     }
 
-    static void DeleteUploadFile(StoragePaths storage, string fileName)
-    {
-        try
-        {
-            var path = storage.UploadPath(fileName);
-            if (File.Exists(path)) File.Delete(path);
-        }
-        catch { /* best effort */ }
-    }
 }

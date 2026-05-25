@@ -90,9 +90,9 @@ public static class OdsEndpoints
         // Big sheets can take a real moment to parse + insert; bump from the 30s default.
         g.MapPost("/import/ods", async ([FromForm] IFormFile file, AppDbContext db) =>
         {
-            if (file.Length == 0) return Problem.BadRequest("Choose an ODS file.");
-            if (!Path.GetExtension(file.FileName).Equals(".ods", StringComparison.OrdinalIgnoreCase))
-                return Problem.BadRequest("Only .ods files are supported.");
+            if (FormFileValidation.RequireExtension(file, ".ods", "Choose an ODS file.",
+                    "Only .ods files are supported.") is { } fileFailure)
+                return fileFailure;
 
             await using var stream = file.OpenReadStream();
             var tables = OdsReader.ReadTables(stream);
@@ -123,9 +123,9 @@ public static class OdsEndpoints
 
         g.MapPost("/import/ods/preview", ([FromForm] IFormFile file) =>
         {
-            if (file.Length == 0) return Problem.BadRequest("Choose an ODS file.");
-            if (!Path.GetExtension(file.FileName).Equals(".ods", StringComparison.OrdinalIgnoreCase))
-                return Problem.BadRequest("Only .ods files are supported.");
+            if (FormFileValidation.RequireExtension(file, ".ods", "Choose an ODS file.",
+                    "Only .ods files are supported.") is { } fileFailure)
+                return fileFailure;
             using var stream = file.OpenReadStream();
             var tables = OdsReader.ReadTables(stream);
             var sheets = tables.Select(kv =>
@@ -144,7 +144,9 @@ public static class OdsEndpoints
 
         g.MapPost("/import/ods/mapped", async ([FromForm] IFormFile file, [FromForm] string mappingJson, AppDbContext db) =>
         {
-            if (file.Length == 0) return Problem.BadRequest("Choose an ODS file.");
+            if (FormFileValidation.RequireExtension(file, ".ods", "Choose an ODS file.",
+                    "Only .ods files are supported.") is { } fileFailure)
+                return fileFailure;
             var mapping = System.Text.Json.JsonSerializer.Deserialize<OdsMappedImportRequest>(mappingJson,
                 new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (mapping is null || string.IsNullOrWhiteSpace(mapping.SheetName) || string.IsNullOrWhiteSpace(mapping.Target))

@@ -50,9 +50,9 @@ internal static class BankCsvEndpoints
 
         g.MapPost("/preview", ([FromForm] IFormFile file) =>
         {
-            if (file.Length == 0) return Problem.BadRequest("Choose a CSV file.");
-            if (!Path.GetExtension(file.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
-                return Problem.BadRequest("Only .csv files are supported.");
+            if (FormFileValidation.RequireExtension(file, ".csv", "Choose a CSV file.",
+                    "Only .csv files are supported.") is { } fileFailure)
+                return fileFailure;
 
             using var stream = file.OpenReadStream();
             var table = BankCsvReader.Read(stream);
@@ -70,9 +70,9 @@ internal static class BankCsvEndpoints
             [FromForm] string mappingJson,
             AppDbContext db) =>
         {
-            if (file.Length == 0) return Problem.BadRequest("Choose a CSV file.");
-            if (!Path.GetExtension(file.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
-                return Problem.BadRequest("Only .csv files are supported.");
+            if (FormFileValidation.RequireExtension(file, ".csv", "Choose a CSV file.",
+                    "Only .csv files are supported.") is { } fileFailure)
+                return fileFailure;
 
             BankCsvImportRequest? request;
             try

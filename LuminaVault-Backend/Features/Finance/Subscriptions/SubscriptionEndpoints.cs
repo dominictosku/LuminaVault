@@ -51,12 +51,12 @@ internal static class SubscriptionEndpoints
             return Results.Ok(MapSubscription(subscription));
         });
 
-        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db, StoragePaths storage) =>
+        subscriptions.MapDelete("/{id:int}", async (int id, AppDbContext db, UploadStorage uploads) =>
         {
             var subscription = await db.Subscriptions.Include(s => s.Attachments).FirstOrDefaultAsync(s => s.Id == id);
             if (subscription is null) return Results.NotFound();
             foreach (var attachment in subscription.Attachments)
-                AttachmentEndpoints.DeleteUploadFile(storage, attachment.FileName);
+                uploads.DeleteIfExists(attachment.FileName);
             db.Subscriptions.Remove(subscription);
             await db.SaveChangesAsync();
             return Results.NoContent();
