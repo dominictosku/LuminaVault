@@ -35,6 +35,7 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().HasIndex(u => u.Username).IsUnique();
+        b.Entity<User>().Property(u => u.SecurityStamp).HasMaxLength(64);
 
         b.Entity<Room>()
             .HasOne(r => r.House)

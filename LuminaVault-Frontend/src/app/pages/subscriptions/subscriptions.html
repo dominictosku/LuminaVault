@@ -278,9 +278,9 @@
                 @for (attachment of selectedSubscription()!.attachments; track attachment.id) {
                   <div class="flex items-center gap-2 text-sm">
                     <i class="pi pi-file text-amber-300"></i>
-                    <a class="flex-1 truncate hover:text-amber-300" [href]="api.attachmentUrl(attachment)" target="_blank">
+                    <button type="button" class="flex-1 truncate hover:text-amber-300 text-left" (click)="openAttachment(attachment)">
                       {{ attachment.originalFileName }}
-                    </a>
+                    </button>
                     <button type="button" class="btn btn-danger !py-1 !px-2 text-xs" (click)="removeAttachment(attachment.id)">
                       <i class="pi pi-trash"></i>
                     </button>

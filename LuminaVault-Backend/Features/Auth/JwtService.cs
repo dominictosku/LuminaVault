@@ -16,6 +16,8 @@ public class JwtOptions
 
 public class JwtService
 {
+    public const string SecurityStampClaim = "sst";
+
     private readonly JwtOptions _opt;
     public JwtService(JwtOptions opt) { _opt = opt; }
 
@@ -25,6 +27,7 @@ public class JwtService
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.UniqueName, user.Username),
+            new Claim(SecurityStampClaim, user.SecurityStamp),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opt.Key));

@@ -134,6 +134,8 @@ For a one-command production deployment, the repo ships a [docker-compose.yml](d
 cp .env.example .env
 # generate a 32+ char JWT key (any random secret works):
 openssl rand -base64 48 | tr -d '\n' > /tmp/k && echo LUMINA_JWT_KEY=$(cat /tmp/k) >> .env
+# first-user registration secret for Production:
+openssl rand -base64 32 | tr -d '\n' > /tmp/s && echo LUMINA_SETUP_SECRET=$(cat /tmp/s) >> .env
 
 docker compose up -d --build
 # App available at http://localhost:8080
@@ -339,7 +341,7 @@ The backend uses **vertical-slice architecture**: each feature folder owns its e
 
 ## Configuration
 
-The backend reads JWT settings from `appsettings.json`. For development the key falls back to an environment variable `LUMINA_JWT_KEY`, or a hardcoded dev-only key if neither is set. Outside Development, the app refuses to start without a real 32+ byte signing key.
+The backend reads JWT settings from `appsettings.json`. For development the key falls back to an environment variable `LUMINA_JWT_KEY`, or a hardcoded dev-only key if neither is set. Outside Development, the app refuses to start without a real 32+ byte signing key. First-user registration in non-development also requires `LUMINA_SETUP_SECRET` (or `Setup:RegistrationSecret`) so a fresh public instance cannot be claimed by a stranger.
 
 ```jsonc
 // LuminaVault-Backend/appsettings.json

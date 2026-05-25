@@ -474,6 +474,7 @@ export function loadModelForKind(kind: FurnitureKind): Promise<THREE.Object3D | 
     .then(async r => {
       if (!r.ok) return null;
       const loader = await ensureGltfLoader();
+      loader.setRequestHeader({});
       return new Promise<THREE.Object3D | null>((resolve) => {
         loader.load(url, gltf => resolve(gltf.scene), undefined, () => resolve(null));
       });
@@ -484,8 +485,12 @@ export function loadModelForKind(kind: FurnitureKind): Promise<THREE.Object3D | 
 }
 
 /** Load a glTF/glb from an arbitrary URL (no caching — caller decides). */
-export async function loadModelFromUrl(url: string): Promise<THREE.Object3D | null> {
+export async function loadModelFromUrl(
+  url: string,
+  requestHeader?: Record<string, string>,
+): Promise<THREE.Object3D | null> {
   const loader = await ensureGltfLoader();
+  loader.setRequestHeader(requestHeader ?? {});
   return new Promise(resolve => {
     loader.load(url, gltf => resolve(gltf.scene), undefined, () => resolve(null));
   });

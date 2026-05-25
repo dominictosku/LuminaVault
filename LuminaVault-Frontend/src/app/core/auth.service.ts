@@ -21,8 +21,8 @@ export class AuthService {
   login(username: string, password: string) {
     return this.api.login(username, password).pipe(tap(r => this.persist(r.token, r.username)));
   }
-  register(username: string, password: string) {
-    return this.api.register(username, password).pipe(tap(r => this.persist(r.token, r.username)));
+  register(username: string, password: string, setupSecret?: string) {
+    return this.api.register(username, password, setupSecret).pipe(tap(r => this.persist(r.token, r.username)));
   }
   changePassword(currentPassword: string, newPassword: string) {
     return this.api.changePassword(currentPassword, newPassword).pipe(tap(r => this.persist(r.token, r.username)));

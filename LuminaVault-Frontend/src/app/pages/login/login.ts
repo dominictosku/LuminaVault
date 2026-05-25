@@ -17,13 +17,18 @@ export class LoginComponent {
 
   username = '';
   password = '';
+  setupSecret = '';
   loading = signal(false);
   error = signal<string | null>(null);
   mode = signal<'login' | 'register'>('login');
+  requiresSetupSecret = signal(false);
 
   constructor() {
     this.api.authStatus().subscribe({
-      next: s => this.mode.set(s.hasUser ? 'login' : 'register'),
+      next: s => {
+        this.mode.set(s.hasUser ? 'login' : 'register');
+        this.requiresSetupSecret.set(s.requiresSetupSecret);
+      },
       error: () => this.error.set('Cannot reach the server. Is the backend running?'),
     });
   }
@@ -34,7 +39,7 @@ export class LoginComponent {
     this.loading.set(true);
     const op = this.mode() === 'login'
       ? this.auth.login(this.username, this.password)
-      : this.auth.register(this.username, this.password);
+      : this.auth.register(this.username, this.password, this.setupSecret);
     op.subscribe({
       next: () => {
         this.loading.set(false);

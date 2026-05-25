@@ -10,6 +10,7 @@ import {
   BILLING_INTERVAL_UNITS,
   SUBSCRIPTION_INTERVAL_PRESETS,
   BillingIntervalUnit,
+  DocumentAttachment,
   FinanceAccount,
   FinanceCategory,
   Subscription,
@@ -20,6 +21,7 @@ import {
 import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 import { ToastService } from '../../shared/toast/toast.service';
 import { activeSubscriptionsMonthlyTotal } from '../../core/finance-math';
+import { ProtectedMediaService } from '../../core/protected-media.service';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 
@@ -54,6 +56,7 @@ export class SubscriptionsComponent {
   protected filters = inject<FilterStateController<SubscriptionFilters>>(FilterStateController);
   protected crud = inject<CrudFormController<SubscriptionInput, Subscription>>(CrudFormController);
   private toast = inject(ToastService);
+  private media = inject(ProtectedMediaService);
   protected editingId = this.crud.editingId;
   protected saving = this.crud.saving;
   protected error = this.crud.error;
@@ -254,6 +257,10 @@ export class SubscriptionsComponent {
       this.toast.success('Document removed.');
       this.fetchAll();
     });
+  }
+
+  openAttachment(attachment: DocumentAttachment) {
+    this.media.open(this.api.attachmentUrl(attachment));
   }
 
   generateTransaction(status: 'Pending' | 'Cleared') {

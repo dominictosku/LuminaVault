@@ -85,7 +85,7 @@
               <button class="w-full text-left px-3 py-2.5 rounded-lg border border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 transition flex items-center gap-3" (click)="openItem(it)">
                 <div class="w-9 h-9 rounded-lg overflow-hidden bg-pink-500/10 grid place-items-center shrink-0">
                   @if (it.photos[0]) {
-                    <img [src]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
+                    <img [appProtectedSrc]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
                   } @else {
                     <i class="pi pi-box text-pink-300"></i>
                   }
@@ -111,7 +111,7 @@
           <button class="w-full text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-3" (click)="openItem(it)">
             <div class="w-10 h-10 rounded-lg overflow-hidden bg-violet-500/10 grid place-items-center shrink-0">
               @if (it.photos[0]) {
-                <img [src]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
+                <img [appProtectedSrc]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
               } @else {
                 <i class="pi pi-box text-violet-300"></i>
               }
@@ -142,7 +142,7 @@
       <div class="flex items-center gap-3">
         <div class="w-12 h-12 rounded-lg overflow-hidden bg-violet-500/10 grid place-items-center shrink-0">
           @if (hovered()!.photos[0]) {
-            <img [src]="api.photoUrl(hovered()!.photos[0])" class="w-full h-full object-cover" />
+            <img [appProtectedSrc]="api.photoUrl(hovered()!.photos[0])" class="w-full h-full object-cover" />
           } @else {
             <i class="pi pi-box text-violet-300"></i>
           }

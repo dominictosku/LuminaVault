@@ -1,2 +1,2 @@
 export interface AuthResponse { token: string; username: string; }
-export interface AuthStatus { hasUser: boolean; }
+export interface AuthStatus { hasUser: boolean; requiresSetupSecret: boolean; }

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LuminaVault.Endpoints;
 
-public record AuthRequest(string? Username, string? Password);
+public record AuthRequest(string? Username, string? Password, string? SetupSecret);
 public record AuthResponse(string Token, string Username);
 public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
@@ -18,16 +18,33 @@ public static class AuthEndpoints
     {
         var g = app.MapGroup("/api/auth").WithTags("Auth");
 
-        g.MapGet("/status", async (AppDbContext db) =>
+        g.MapGet("/status", async (AppDbContext db, AuthSetupOptions setup, IHostEnvironment env) =>
         {
             var hasUser = await db.Users.AnyAsync();
-            return Results.Ok(new { hasUser });
+            return Results.Ok(new
+            {
+                hasUser,
+                requiresSetupSecret = !hasUser && setup.RequiresRegistrationSecret(env)
+            });
         }).AllowAnonymous();
 
-        g.MapPost("/register", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
+        g.MapPost("/register", async (
+            [FromBody] AuthRequest req,
+            AppDbContext db,
+            JwtService jwt,
+            IPasswordHasher hasher,
+            AuthSetupOptions setup,
+            IHostEnvironment env) =>
         {
             if (await db.Users.AnyAsync())
                 return Problem.Conflict("A user already exists. This is a single-user app.");
+            if (setup.RequiresRegistrationSecret(env))
+            {
+                if (!setup.HasRegistrationSecret)
+                    return Problem.BadRequest("Set LUMINA_SETUP_SECRET before registering the first user.");
+                if (!setup.VerifyRegistrationSecret(req.SetupSecret))
+                    return Problem.BadRequest("Setup secret is incorrect.");
+            }
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrEmpty(req.Password) || req.Password.Length < 8)
                 return Problem.BadRequest("Username required and password must be at least 8 chars.");
 
@@ -72,6 +89,7 @@ public static class AuthEndpoints
                 return Problem.BadRequest("Current password is incorrect.");
 
             user.PasswordHash = hasher.Hash(req.NewPassword);
+            user.SecurityStamp = Guid.NewGuid().ToString("N");
             await db.SaveChangesAsync();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).RequireAuthorization();

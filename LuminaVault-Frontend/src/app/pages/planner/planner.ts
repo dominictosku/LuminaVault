@@ -6,16 +6,19 @@ import { Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Furniture, Item, Room } from '../../core/models';
+import { AuthService } from '../../core/auth.service';
+import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.directive';
 import { PlannerScene, PlannerState } from './scene';
 
 @Component({
   selector: 'app-planner',
-  imports: [RouterLink],
+  imports: [RouterLink, ProtectedMediaSrcDirective],
   templateUrl: './planner.html',
   styleUrl: './planner.scss'
 })
 export class PlannerComponent implements AfterViewInit, OnDestroy {
   protected api = inject(InventoryApi);
+  private auth = inject(AuthService);
   private router = inject(Router);
 
   @ViewChild('host', { static: true }) host!: ElementRef<HTMLDivElement>;
@@ -35,6 +38,7 @@ export class PlannerComponent implements AfterViewInit, OnDestroy {
       onSelectItem: (i) => this.openItem(i),
       onHoverItem: (i) => this.hovered.set(i),
       onMoveFurniture: (f, x, z) => this.persistFurniturePosition(f, x, z),
+      authToken: () => this.auth.token(),
     });
     this.refresh();
   }

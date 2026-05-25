@@ -191,7 +191,7 @@
             <div class="grid grid-cols-3 gap-2 mt-3">
               @for (p of current()!.photos; track p.id) {
                 <div class="relative group aspect-square rounded-lg overflow-hidden bg-white/5">
-                  <img [src]="api.photoUrl(p)" class="w-full h-full object-cover" />
+                  <img [appProtectedSrc]="api.photoUrl(p)" class="w-full h-full object-cover" />
                   <button type="button" (click)="removePhoto(p.id)"
                           class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition w-6 h-6 grid place-items-center rounded-full bg-black/60 hover:bg-red-500/70">
                     <i class="pi pi-times text-xs"></i>
@@ -222,9 +222,9 @@
               @for (attachment of current()!.attachments; track attachment.id) {
                 <div class="surface-muted p-3 flex items-center gap-3">
                   <i class="pi pi-file text-violet-300"></i>
-                  <a class="text-sm flex-1 truncate hover:text-violet-300" [href]="api.attachmentUrl(attachment)" target="_blank">
+                  <button type="button" class="text-sm flex-1 truncate hover:text-violet-300 text-left" (click)="openAttachment(attachment)">
                     {{ attachment.originalFileName }}
-                  </a>
+                  </button>
                   <button type="button" class="btn btn-danger !py-1 !px-2 text-xs" (click)="removeAttachment(attachment.id)">
                     <i class="pi pi-trash"></i>
                   </button>

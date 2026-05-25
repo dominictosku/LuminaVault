@@ -23,6 +23,9 @@ services:
       # Required: 32+ chars. The app refuses to use the dev fallback key under Production
       # without warning loudly; set this to something long and random.
       LUMINA_JWT_KEY: ${LUMINA_JWT_KEY:?Set LUMINA_JWT_KEY in .env before starting}
+      # Required only for first-user registration in Production. Once a user exists,
+      # normal login does not use this value.
+      LUMINA_SETUP_SECRET: ${LUMINA_SETUP_SECRET:-}
       # Optional price-provider keys — Finnhub for stocks, CoinGecko works without a key.
       # ASP.NET Core config maps double-underscore env vars to nested keys, so this
       # overlays the empty `PriceProviders:Finnhub:ApiKey` slot in appsettings.json.

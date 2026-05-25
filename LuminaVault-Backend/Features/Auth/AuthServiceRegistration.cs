@@ -1,6 +1,9 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using LuminaVault.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace LuminaVault.Auth;
@@ -16,14 +19,17 @@ public static class AuthServiceRegistration
         IConfiguration configuration)
     {
         var jwtOptions = ResolveJwtOptions(configuration, out var loadedFromEnvironment);
+        var setupOptions = ResolveSetupOptions(configuration);
 
         services.AddSingleton(jwtOptions);
+        services.AddSingleton(setupOptions);
         services.AddSingleton<JwtService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(o =>
             {
+                o.MapInboundClaims = false;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = jwtOptions.Issuer,
@@ -33,7 +39,30 @@ public static class AuthServiceRegistration
                     ValidateAudience = true,
                     ValidateIssuerSigningKey = true,
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.FromMinutes(2)
+                    ClockSkew = TimeSpan.FromMinutes(2),
+                    NameClaimType = JwtRegisteredClaimNames.UniqueName
+                };
+                o.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async ctx =>
+                    {
+                        var userId = ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                        var tokenStamp = ctx.Principal?.FindFirst(JwtService.SecurityStampClaim)?.Value;
+                        if (!int.TryParse(userId, out var id) || string.IsNullOrWhiteSpace(tokenStamp))
+                        {
+                            ctx.Fail("Token is missing user identity metadata.");
+                            return;
+                        }
+
+                        var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                        var currentStamp = await db.Users
+                            .Where(u => u.Id == id)
+                            .Select(u => u.SecurityStamp)
+                            .FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
+
+                        if (currentStamp is null || !string.Equals(currentStamp, tokenStamp, StringComparison.Ordinal))
+                            ctx.Fail("Token has been revoked.");
+                    }
                 };
             });
 
@@ -100,5 +129,17 @@ public static class AuthServiceRegistration
         }
 
         return jwtOptions;
+    }
+
+    private static AuthSetupOptions ResolveSetupOptions(IConfiguration configuration)
+    {
+        var setupOptions = new AuthSetupOptions();
+        configuration.GetSection("Setup").Bind(setupOptions);
+
+        var envSecret = Environment.GetEnvironmentVariable("LUMINA_SETUP_SECRET");
+        if (!string.IsNullOrWhiteSpace(envSecret))
+            setupOptions.RegistrationSecret = envSecret;
+
+        return setupOptions;
     }
 }

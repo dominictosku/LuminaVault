@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import gsap from 'gsap';
 import { Furniture, Item, Room } from '../../core/models';
+import { API_BASE } from '../../core/api-base';
 import { applyFurnitureId, BuiltFurniture, buildFurnitureMesh, fitCentered, fitInto, loadModelForKind, loadModelFromUrl, OpenTransform } from './furniture-models';
-
-const API_BASE = 'http://localhost:5256';
 
 export type PlannerMode = 'overview' | 'room' | 'furniture';
 
@@ -20,6 +19,7 @@ export interface SceneCallbacks {
   onSelectItem: (i: Item) => void;
   onHoverItem: (i: Item | null) => void;
   onMoveFurniture: (f: Furniture, x: number, z: number) => void;
+  authToken: () => string | null;
 }
 
 interface RoomMesh {
@@ -299,7 +299,9 @@ export class PlannerScene {
     if (item.modelUrl) {
       const cacheBust = encodeURIComponent(item.updatedAt ?? '');
       const url = `${API_BASE}${item.modelUrl}?t=${cacheBust}`;
-      loadModelFromUrl(url).then(loaded => {
+      const token = this.cb.authToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      loadModelFromUrl(url, headers).then(loaded => {
         if (!loaded) return;
         const root = loaded;
         fitCentered(root, opts.modelMaxDim);

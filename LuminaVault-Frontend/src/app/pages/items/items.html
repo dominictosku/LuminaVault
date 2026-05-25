@@ -39,7 +39,7 @@
           <div class="flex items-start gap-3">
             <div class="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-violet-500/20 to-pink-500/20 grid place-items-center shrink-0">
               @if (item.photos[0]) {
-                <img [src]="api.photoUrl(item.photos[0])" class="w-full h-full object-cover" />
+                <img [appProtectedSrc]="api.photoUrl(item.photos[0])" class="w-full h-full object-cover" />
               } @else {
                 <i class="pi pi-box text-2xl text-violet-300"></i>
               }

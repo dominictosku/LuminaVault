@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using LuminaVault.Auth;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 
 namespace LuminaVault.Tests;
 
@@ -82,6 +85,19 @@ public class AuthTests
     }
 
     [Fact]
+    public void Setup_secret_is_required_when_configured_or_outside_development()
+    {
+        var setup = new AuthSetupOptions();
+        Assert.False(setup.RequiresRegistrationSecret(new TestEnvironment("Development")));
+        Assert.True(setup.RequiresRegistrationSecret(new TestEnvironment("Production")));
+
+        setup.RegistrationSecret = "open-the-vault";
+        Assert.True(setup.RequiresRegistrationSecret(new TestEnvironment("Development")));
+        Assert.True(setup.VerifyRegistrationSecret("open-the-vault"));
+        Assert.False(setup.VerifyRegistrationSecret("wrong"));
+    }
+
+    [Fact]
     public async Task Change_password_rotates_password_and_returns_new_token()
     {
         using var factory = new LuminaVaultFactory();
@@ -103,8 +119,20 @@ public class AuthTests
             new { username = "changer", password = "password123" });
         Assert.Equal(HttpStatusCode.Unauthorized, oldLogin.StatusCode);
 
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", firstToken.Token);
+        var oldTokenRequest = await http.GetAsync("/api/finance/accounts");
+        Assert.Equal(HttpStatusCode.Unauthorized, oldTokenRequest.StatusCode);
+
         var newLogin = await http.PostAsJsonAsync("/api/auth/login",
             new { username = "changer", password = "better-password" });
         newLogin.EnsureSuccessStatusCode();
+    }
+
+    private sealed class TestEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "LuminaVault.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

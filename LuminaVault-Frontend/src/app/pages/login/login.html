@@ -25,8 +25,16 @@
             <label class="label">Password</label>
             <input class="input" type="password" name="password"
                    [autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'"
-                   [(ngModel)]="password" required minlength="6" />
+                   [(ngModel)]="password" required minlength="8" />
           </div>
+          @if (mode() === 'register' && requiresSetupSecret()) {
+            <div>
+              <label class="label">Setup secret</label>
+              <input class="input" type="password" name="setupSecret"
+                     autocomplete="one-time-code"
+                     [(ngModel)]="setupSecret" required />
+            </div>
+          }
 
           @if (error()) {
             <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">

@@ -4,10 +4,11 @@ import { RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Item } from '../../core/models';
+import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.directive';
 
 @Component({
   selector: 'app-items',
-  imports: [FormsModule, RouterLink, CurrencyPipe, DatePipe],
+  imports: [FormsModule, RouterLink, CurrencyPipe, DatePipe, ProtectedMediaSrcDirective],
   templateUrl: './items.html',
   styleUrl: './items.scss'
 })

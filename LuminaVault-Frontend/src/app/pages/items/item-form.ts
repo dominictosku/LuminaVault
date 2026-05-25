@@ -4,13 +4,15 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
-import { AssetCategory, Container, Furniture, House, Item, Room } from '../../core/models';
+import { AssetCategory, Container, DocumentAttachment, Furniture, House, Item, Room } from '../../core/models';
+import { ProtectedMediaService } from '../../core/protected-media.service';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.directive';
 import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-item-form',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, ProtectedMediaSrcDirective],
   templateUrl: './item-form.html',
   styleUrl: './item-form.scss'
 })
@@ -21,6 +23,7 @@ export class ItemFormComponent {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private toast = inject(ToastService);
+  private media = inject(ProtectedMediaService);
 
   id = signal<number | null>(null);
   current = signal<Item | null>(null);
@@ -221,6 +224,10 @@ export class ItemFormComponent {
       this.toast.success('Document removed.');
       if (this.id()) this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
+  }
+
+  openAttachment(attachment: DocumentAttachment) {
+    this.media.open(this.api.attachmentUrl(attachment));
   }
 
   onUploadModel(input: HTMLInputElement) {
