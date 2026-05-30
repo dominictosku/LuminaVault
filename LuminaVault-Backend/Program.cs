@@ -10,7 +10,7 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 52_428_800);
 
 var jwtStartupState = builder.Services.AddLuminaVaultAuth(builder.Configuration);
 builder.Services.AddLuminaVaultPersistence(storage);
-builder.Services.AddLuminaVaultWebDefaults();
+builder.Services.AddLuminaVaultWebDefaults(builder.Configuration);
 builder.Services.AddLuminaVaultPriceProviders(builder.Configuration);
 builder.Services.AddLuminaVaultFeatureServices(builder.Configuration);
 

@@ -68,7 +68,7 @@ public static class AuthEndpoints
             if (user is null || !hasher.Verify(req.Password, user.PasswordHash))
                 return Results.Unauthorized();
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
-        }).AllowAnonymous().RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("login");
 
         g.MapPost("/change-password", async (
             HttpContext ctx,

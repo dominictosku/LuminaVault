@@ -57,8 +57,14 @@ public static class LuminaVaultHostingExtensions
         return services;
     }
 
-    public static IServiceCollection AddLuminaVaultWebDefaults(this IServiceCollection services)
+    public static IServiceCollection AddLuminaVaultWebDefaults(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
+        // Tunable so self-hosters can loosen/tighten the brute-force window; the integration
+        // test suite raises it because its shared fixtures log in far more than a human would.
+        var loginPermitLimit = configuration.GetValue("RateLimiting:LoginPermitLimit", 10);
+
         services.AddCors(o => o.AddPolicy(DevCors, p => p
             .WithOrigins("http://localhost:4200", "https://localhost:4200")
             .AllowAnyHeader()
@@ -100,6 +106,20 @@ public static class LuminaVaultHostingExtensions
                 return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueLimit = 0,
+                });
+            });
+            // Tighter window for the password-guessing surface. Far above a human fat-fingering
+            // their password, but it caps brute-force throughput against the single account.
+            // Keyed on the connection IP, which — with ForwardedHeaders enabled behind the proxy
+            // — is the real caller, so the limit bites per client rather than per proxy.
+            o.AddPolicy("login", httpContext =>
+            {
+                var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = loginPermitLimit,
                     Window = TimeSpan.FromMinutes(1),
                     QueueLimit = 0,
                 });

@@ -18,7 +18,14 @@ public class LuminaVaultFactory : WebApplicationFactory<Program>
         Path.GetTempPath(),
         $"luminavault-test-{Guid.NewGuid():N}.db");
 
-    public LuminaVaultFactory() : this("Development", null) { }
+    // Shared-fixture test classes log in once per test, which would otherwise trip the
+    // production login throttle. Raise it for the default factory; RateLimitTests opts back
+    // into a low limit to exercise the throttle directly.
+    public LuminaVaultFactory() : this("Development", new Dictionary<string, string?>
+    {
+        ["RateLimiting:LoginPermitLimit"] = "10000",
+    })
+    { }
 
     internal LuminaVaultFactory(
         string environment = "Development",
@@ -31,11 +38,11 @@ public class LuminaVaultFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(_environment);
-        builder.ConfigureAppConfiguration((_, cfg) =>
-        {
-            if (_configuration.Count > 0)
-                cfg.AddInMemoryCollection(_configuration);
-        });
+        // UseSetting writes host configuration, which is visible to `builder.Configuration`
+        // reads at service-registration time in Program.cs. ConfigureAppConfiguration is
+        // layered in too late for options consumed during DI setup (e.g. rate-limit policies).
+        foreach (var (key, value) in _configuration)
+            builder.UseSetting(key, value);
         builder.ConfigureServices(services =>
         {
             var existing = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));

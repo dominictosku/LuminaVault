@@ -76,7 +76,7 @@
 
 ### 🔐 Platform
 - **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage
-- **Security controls** — login/register throttling, in-app password change, hardening response headers (CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) on both the API and the SPA shell, and proxy-aware client-IP resolution so rate limiting throttles the real caller rather than the reverse proxy
+- **Security controls** — tight per-IP login throttling (10/min) plus register throttling, in-app password change, hardening response headers (CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) on both the API and the SPA shell, and proxy-aware client-IP resolution so rate limiting throttles the real caller rather than the reverse proxy
 - **Glassmorphism UI** — dark, frosted-glass design with smooth transitions, built on PrimeNG + Tailwind v4
 - **Self-hosted, single-file SQLite** — your data never leaves your machine
 - **Zoneless Angular + Signals** — fast, modern change detection
@@ -361,6 +361,17 @@ Maximum request body size is 50 MB (configured in `Program.cs`) to accommodate l
 When LuminaVault sits behind a reverse proxy (the bundled nginx, or any TLS terminator), the backend's direct connection IP is the proxy's, not the client's — which would collapse the per-IP login rate limiter into a single shared bucket and mislabel request logs. Set `LUMINA_BEHIND_PROXY=true` (or `ForwardedHeaders:Enabled` in config) so the backend reads `X-Forwarded-For`/`X-Forwarded-Proto` and partitions throttling per real client. The bundled `docker-compose.yml` already sets this for the nginx-fronted deployment. **Leave it off for a directly-exposed backend** — trusting forwarded headers from an untrusted caller would let them spoof their address to dodge the rate limiter.
 
 Hardening headers ship on every response: the API sends a strict `default-src 'none'` CSP (it only ever returns JSON or file bytes), and nginx sends the SPA a CSP that forbids inline/eval scripts while allowing the app's real runtime needs (Angular's injected styles, `blob:` object URLs for protected media, and tesseract.js's WASM core + language data from `cdn.jsdelivr.net` / `tessdata.projectnaptha.com`). Self-host the tesseract assets to tighten those two hosts back to `'self'`.
+
+The `/api/auth/login` endpoint is throttled to 10 attempts per minute per client IP — well above a human mistyping a password, but enough to blunt brute force. Tune it (e.g. to loosen for a shared egress IP) via config:
+
+```jsonc
+// LuminaVault-Backend/appsettings.json
+{
+  "RateLimiting": {
+    "LoginPermitLimit": 10
+  }
+}
+```
 
 ### Price providers (optional)
 
