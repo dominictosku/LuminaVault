@@ -10,20 +10,32 @@ export abstract class ReceiptOcr {
   abstract recognize(file: File, onProgress?: (fraction: number) => void): Promise<string>;
 }
 
-/// Default implementation: lazy-wraps tesseract.js. The library + English language
-/// pack weighs ~3 MB, so we dynamic-import on first call to keep the initial bundle
-/// slim. Subsequent calls reuse the cached module via the bundler's import cache.
+/// Default implementation: lazy-wraps tesseract.js. The library is dynamic-imported on
+/// first call to keep the initial bundle slim. The worker script, WASM core and English
+/// language pack are all self-hosted under `/tesseract/` (copied from node_modules at build
+/// time + a committed `eng.traineddata.gz`) rather than pulled from a CDN, so the SPA's CSP
+/// needs no external origins. Paths must be absolute because the worker runs from a blob URL
+/// and resolves `importScripts`/fetch against the document origin, not the blob.
 @Injectable()
 export class TesseractReceiptOcr extends ReceiptOcr {
   async recognize(file: File, onProgress?: (fraction: number) => void): Promise<string> {
-    const { recognize } = await import('tesseract.js');
-    const result = await recognize(file, 'eng', {
+    const { createWorker, OEM } = await import('tesseract.js');
+    const base = `${location.origin}/tesseract`;
+    const worker = await createWorker('eng', OEM.DEFAULT, {
+      workerPath: `${base}/worker.min.js`,
+      corePath: `${base}/core`,
+      langPath: `${base}/lang`,
       logger: msg => {
         if (onProgress && msg.status === 'recognizing text') {
           onProgress(msg.progress ?? 0);
         }
       },
     });
-    return result.data.text ?? '';
+    try {
+      const result = await worker.recognize(file);
+      return result.data.text ?? '';
+    } finally {
+      await worker.terminate();
+    }
   }
 }
