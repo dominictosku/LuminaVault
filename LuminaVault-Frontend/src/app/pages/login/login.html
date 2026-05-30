@@ -16,40 +16,80 @@
     <div class="glass rounded-2xl p-6">
       <form (ngSubmit)="submit()">
         <div class="space-y-4">
-          <div>
-            <label class="label">Username</label>
-            <input class="input" name="username" autocomplete="username"
-                   [(ngModel)]="username" required minlength="2" />
-          </div>
-          <div>
-            <label class="label">Password</label>
-            <input class="input" type="password" name="password"
-                   [autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'"
-                   [(ngModel)]="password" required minlength="8" />
-          </div>
-          @if (mode() === 'register' && requiresSetupSecret()) {
-            <div>
-              <label class="label">Setup secret</label>
-              <input class="input" type="password" name="setupSecret"
-                     autocomplete="one-time-code"
-                     [(ngModel)]="setupSecret" required />
-            </div>
-          }
-
-          @if (error()) {
-            <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-              {{ error() }}
-            </div>
-          }
-
-          <button class="btn btn-primary w-full justify-center" type="submit" [disabled]="loading()">
-            @if (loading()) {
-              <i class="pi pi-spin pi-spinner"></i>
+          @if (step() === 'twoFactor') {
+            @if (useRecovery()) {
+              <div>
+                <label class="label">Recovery code</label>
+                <input class="input tracking-widest text-center" name="recoveryCode"
+                       autocomplete="one-time-code" autofocus
+                       [(ngModel)]="recoveryCode" required />
+              </div>
             } @else {
-              <i class="pi pi-arrow-right"></i>
+              <div>
+                <label class="label">Authentication code</label>
+                <input class="input tracking-[0.4em] text-center text-lg" name="totpCode"
+                       inputmode="numeric" autocomplete="one-time-code" maxlength="6" autofocus
+                       [(ngModel)]="totpCode" required />
+                <p class="text-slate-500 text-xs mt-1">Enter the 6-digit code from your authenticator app.</p>
+              </div>
             }
-            {{ mode() === 'login' ? 'Sign in' : 'Create vault' }}
-          </button>
+
+            @if (error()) {
+              <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                {{ error() }}
+              </div>
+            }
+
+            <button class="btn btn-primary w-full justify-center" type="submit" [disabled]="loading()">
+              @if (loading()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-arrow-right"></i> }
+              Verify
+            </button>
+
+            <div class="flex items-center justify-between text-xs">
+              <button type="button" class="text-slate-400 hover:text-slate-200" (click)="backToCredentials()">
+                <i class="pi pi-arrow-left text-[10px]"></i> Back
+              </button>
+              <button type="button" class="text-violet-300 hover:text-violet-200"
+                      (click)="useRecovery.set(!useRecovery()); error.set(null)">
+                {{ useRecovery() ? 'Use authenticator code' : 'Use a recovery code' }}
+              </button>
+            </div>
+          } @else {
+            <div>
+              <label class="label">Username</label>
+              <input class="input" name="username" autocomplete="username"
+                     [(ngModel)]="username" required minlength="2" />
+            </div>
+            <div>
+              <label class="label">Password</label>
+              <input class="input" type="password" name="password"
+                     [autocomplete]="mode() === 'login' ? 'current-password' : 'new-password'"
+                     [(ngModel)]="password" required minlength="8" />
+            </div>
+            @if (mode() === 'register' && requiresSetupSecret()) {
+              <div>
+                <label class="label">Setup secret</label>
+                <input class="input" type="password" name="setupSecret"
+                       autocomplete="one-time-code"
+                       [(ngModel)]="setupSecret" required />
+              </div>
+            }
+
+            @if (error()) {
+              <div class="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                {{ error() }}
+              </div>
+            }
+
+            <button class="btn btn-primary w-full justify-center" type="submit" [disabled]="loading()">
+              @if (loading()) {
+                <i class="pi pi-spin pi-spinner"></i>
+              } @else {
+                <i class="pi pi-arrow-right"></i>
+              }
+              {{ mode() === 'login' ? 'Sign in' : 'Create vault' }}
+            </button>
+          }
         </div>
       </form>
     </div>

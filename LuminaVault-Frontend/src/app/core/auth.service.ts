@@ -18,8 +18,9 @@ export class AuthService {
   readonly username = this._username.asReadonly();
   readonly isAuthenticated = computed(() => !!this._token());
 
-  login(username: string, password: string) {
-    return this.api.login(username, password).pipe(tap(r => this.persist(r.token, r.username)));
+  login(username: string, password: string, totpCode?: string, recoveryCode?: string) {
+    return this.api.login(username, password, totpCode, recoveryCode)
+      .pipe(tap(r => this.persist(r.token, r.username)));
   }
   register(username: string, password: string, setupSecret?: string) {
     return this.api.register(username, password, setupSecret).pipe(tap(r => this.persist(r.token, r.username)));

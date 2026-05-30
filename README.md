@@ -76,6 +76,7 @@
 
 ### 🔐 Platform
 - **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage
+- **Two-factor authentication (TOTP)** — optional authenticator-app second factor (Google Authenticator, Authy, 1Password…) with QR enrolment, 10 one-time recovery codes, and a password-confirmed disable; login becomes a two-step password → code challenge once enabled
 - **Security controls** — tight per-IP login throttling (10/min) plus register throttling, in-app password change, hardening response headers (CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) on both the API and the SPA shell, and proxy-aware client-IP resolution so rate limiting throttles the real caller rather than the reverse proxy
 - **Glassmorphism UI** — dark, frosted-glass design with smooth transitions, built on PrimeNG + Tailwind v4
 - **Self-hosted, single-file SQLite** — your data never leaves your machine
@@ -361,6 +362,10 @@ Maximum request body size is 50 MB (configured in `Program.cs`) to accommodate l
 When LuminaVault sits behind a reverse proxy (the bundled nginx, or any TLS terminator), the backend's direct connection IP is the proxy's, not the client's — which would collapse the per-IP login rate limiter into a single shared bucket and mislabel request logs. Set `LUMINA_BEHIND_PROXY=true` (or `ForwardedHeaders:Enabled` in config) so the backend reads `X-Forwarded-For`/`X-Forwarded-Proto` and partitions throttling per real client. The bundled `docker-compose.yml` already sets this for the nginx-fronted deployment. **Leave it off for a directly-exposed backend** — trusting forwarded headers from an untrusted caller would let them spoof their address to dodge the rate limiter.
 
 Hardening headers ship on every response: the API sends a strict `default-src 'none'` CSP (it only ever returns JSON or file bytes), and nginx sends the SPA a CSP that forbids inline/eval scripts and allows **no external origins** — every script, connection and worker is same-origin. The receipt-OCR engine (tesseract.js) is fully self-hosted under `/tesseract/`: its worker and WASM core are copied from `node_modules` at build time, and the English language pack (`eng.traineddata.gz`, ~3 MB) is committed under `LuminaVault-Frontend/public/tesseract/lang/`. The remaining CSP relaxations are local runtime needs only — `'wasm-unsafe-eval'` for the OCR core, `'unsafe-inline'` styles for Angular/PrimeNG, and `blob:` for object URLs.
+
+### Two-factor authentication
+
+Enable TOTP from **Settings → Security → Two-factor authentication**: scan the QR with any authenticator app (or type the shown secret), confirm a 6-digit code, then save the 10 one-time recovery codes that appear (each works once if you lose the device). Once enabled, sign-in is a two-step flow — password first, then the 6-digit code (or a recovery code). Disabling it re-checks your password. The TOTP scheme is RFC 6238 (SHA-1, 6 digits, 30s) and is implemented in-house with no third-party OTP dependency. If you're locked out and have no recovery codes left, a self-hosted operator can clear the `TwoFactorEnabled`/`TwoFactorSecret` columns on the single `Users` row directly.
 
 The `/api/auth/login` endpoint is throttled to 10 attempts per minute per client IP — well above a human mistyping a password, but enough to blunt brute force. Tune it (e.g. to loosen for a shared egress IP) via config:
 

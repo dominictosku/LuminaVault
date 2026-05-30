@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth.service';
+import { AuthApi } from '../../core/data-access/auth-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   AssetCategory,
@@ -12,6 +13,8 @@ import {
   FinanceCategoryRuleInput,
   ExchangeRate,
   ExchangeRateInput,
+  TwoFactorSetup,
+  TwoFactorStatus,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -29,6 +32,7 @@ type CategoryInput = AssetCategoryInput | FinanceCategoryInput;
 export class SettingsComponent {
   private api = inject(SettingsApi);
   private auth = inject(AuthService);
+  private authApi = inject(AuthApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
   tab = signal<SettingsTab>('assets');
@@ -44,6 +48,16 @@ export class SettingsComponent {
   editingRateId = signal<number | null>(null);
   passwordChanged = signal(false);
   colors = ['#7c3aed', '#ec4899', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#94a3b8'];
+
+  // Two-factor authentication enrolment state.
+  twoFa = signal<TwoFactorStatus | null>(null);
+  twoFaSetup = signal<TwoFactorSetup | null>(null);
+  twoFaQr = signal<string | null>(null);
+  twoFaRecoveryCodes = signal<string[] | null>(null);
+  twoFaBusy = signal(false);
+  twoFaError = signal<string | null>(null);
+  twoFaCode = '';
+  twoFaPassword = '';
 
   title = computed(() => {
     if (this.tab() === 'assets') return 'Asset categories';
@@ -64,6 +78,7 @@ export class SettingsComponent {
 
   constructor() {
     this.fetch();
+    this.loadTwoFa();
   }
 
   setTab(tab: SettingsTab) {
@@ -178,6 +193,82 @@ export class SettingsComponent {
     this.rateModel = this.defaultRateModel();
     this.rateEffectiveDate = new Date().toISOString().substring(0, 10);
     this.passwordChanged.set(false);
+    this.cancelTwoFaSetup();
+    this.twoFaRecoveryCodes.set(null);
+    this.twoFaPassword = '';
+  }
+
+  loadTwoFa() {
+    this.authApi.twoFactorStatus().subscribe({
+      next: status => this.twoFa.set(status),
+      error: () => {},
+    });
+  }
+
+  startTwoFaSetup() {
+    this.twoFaBusy.set(true);
+    this.twoFaError.set(null);
+    this.authApi.twoFactorSetup().subscribe({
+      next: async setup => {
+        this.twoFaSetup.set(setup);
+        try {
+          const mod: any = await import('qrcode');
+          const QRCode = mod.default ?? mod;
+          this.twoFaQr.set(await QRCode.toDataURL(setup.otpauthUri, { margin: 1, width: 208 }));
+        } catch {
+          this.twoFaQr.set(null); // fall back to the manual secret if QR rendering fails
+        }
+        this.twoFaBusy.set(false);
+      },
+      error: e => { this.twoFaBusy.set(false); this.twoFaError.set(e?.error?.error ?? 'Could not start setup.'); },
+    });
+  }
+
+  confirmTwoFa() {
+    if (!this.twoFaCode.trim()) { this.twoFaError.set('Enter the 6-digit code.'); return; }
+    this.twoFaBusy.set(true);
+    this.twoFaError.set(null);
+    this.authApi.twoFactorEnable(this.twoFaCode.trim()).subscribe({
+      next: result => {
+        this.twoFaBusy.set(false);
+        this.twoFaSetup.set(null);
+        this.twoFaQr.set(null);
+        this.twoFaCode = '';
+        this.twoFaRecoveryCodes.set(result.recoveryCodes);
+        this.toast.success('Two-factor authentication enabled.');
+        this.loadTwoFa();
+      },
+      error: e => { this.twoFaBusy.set(false); this.twoFaError.set(e?.error?.error ?? 'That code did not match.'); },
+    });
+  }
+
+  cancelTwoFaSetup() {
+    this.twoFaSetup.set(null);
+    this.twoFaQr.set(null);
+    this.twoFaCode = '';
+    this.twoFaError.set(null);
+  }
+
+  disableTwoFa() {
+    if (!this.twoFaPassword) { this.twoFaError.set('Enter your password to confirm.'); return; }
+    this.twoFaBusy.set(true);
+    this.twoFaError.set(null);
+    this.authApi.twoFactorDisable(this.twoFaPassword).subscribe({
+      next: status => {
+        this.twoFaBusy.set(false);
+        this.twoFaPassword = '';
+        this.twoFa.set(status);
+        this.toast.success('Two-factor authentication disabled.');
+      },
+      error: e => { this.twoFaBusy.set(false); this.twoFaError.set(e?.error?.error ?? 'Could not disable.'); },
+    });
+  }
+
+  copyRecoveryCodes(codes: string[]) {
+    navigator.clipboard?.writeText(codes.join('\n')).then(
+      () => this.toast.success('Recovery codes copied.'),
+      () => this.toast.error('Could not copy to clipboard.'),
+    );
   }
 
   editRule(rule: FinanceCategoryRule) {
