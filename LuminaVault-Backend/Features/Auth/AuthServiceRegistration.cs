@@ -24,6 +24,7 @@ public static class AuthServiceRegistration
         services.AddSingleton(jwtOptions);
         services.AddSingleton(setupOptions);
         services.AddSingleton<JwtService>();
+        services.AddSingleton<TotpService>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

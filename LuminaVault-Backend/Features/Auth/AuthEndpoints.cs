@@ -8,7 +8,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LuminaVault.Endpoints;
 
-public record AuthRequest(string? Username, string? Password, string? SetupSecret);
+public record AuthRequest(
+    string? Username,
+    string? Password,
+    string? SetupSecret = null,
+    string? TotpCode = null,
+    string? RecoveryCode = null);
 public record AuthResponse(string Token, string Username);
 public record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 
@@ -58,7 +63,7 @@ public static class AuthEndpoints
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).AllowAnonymous().RequireRateLimiting("auth");
 
-        g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher) =>
+        g.MapPost("/login", async ([FromBody] AuthRequest req, AppDbContext db, JwtService jwt, IPasswordHasher hasher, TotpService totp) =>
         {
             if (string.IsNullOrWhiteSpace(req.Username) || string.IsNullOrEmpty(req.Password))
                 return Results.Unauthorized();
@@ -67,6 +72,29 @@ public static class AuthEndpoints
             var user = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
             if (user is null || !hasher.Verify(req.Password, user.PasswordHash))
                 return Results.Unauthorized();
+
+            if (user.TwoFactorEnabled)
+            {
+                if (!string.IsNullOrWhiteSpace(req.TotpCode))
+                {
+                    if (!totp.VerifyCode(user.TwoFactorSecret ?? "", req.TotpCode))
+                        return TwoFactorChallenge("Invalid authentication code.");
+                }
+                else if (!string.IsNullOrWhiteSpace(req.RecoveryCode))
+                {
+                    var codes = user.TwoFactorRecoveryCodes;
+                    if (!RecoveryCodes.TryConsume(ref codes, req.RecoveryCode))
+                        return TwoFactorChallenge("Invalid recovery code.");
+                    user.TwoFactorRecoveryCodes = codes;
+                    await db.SaveChangesAsync();
+                }
+                else
+                {
+                    // Password was correct but a second factor is needed; the client prompts for it.
+                    return TwoFactorChallenge(null);
+                }
+            }
+
             return Results.Ok(new AuthResponse(jwt.Issue(user), user.Username));
         }).AllowAnonymous().RequireRateLimiting("login");
 
@@ -96,4 +124,10 @@ public static class AuthEndpoints
 
         return app;
     }
+
+    // A correct password but a missing/invalid second factor. 401 with a `twoFactorRequired`
+    // flag the login page keys off to switch into code-entry mode; the HTTP interceptor leaves
+    // /auth/ 401s alone, so this doesn't bounce the user out.
+    private static IResult TwoFactorChallenge(string? error) =>
+        Results.Json(new { twoFactorRequired = true, error }, statusCode: StatusCodes.Status401Unauthorized);
 }

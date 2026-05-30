@@ -279,6 +279,7 @@ public static class LuminaVaultHostingExtensions
     {
         app.MapSystem();
         app.MapAuth();
+        app.MapTwoFactor();
         app.MapHouses();
         app.MapFurniture();
         app.MapItems();
