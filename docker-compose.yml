@@ -26,6 +26,10 @@ services:
       # Required only for first-user registration in Production. Once a user exists,
       # normal login does not use this value.
       LUMINA_SETUP_SECRET: ${LUMINA_SETUP_SECRET:-}
+      # The web service fronts the API, so trust its X-Forwarded-For/Proto. Without this
+      # the auth rate limiter and request logs would see every request as coming from the
+      # nginx container IP — one shared bucket instead of per-client throttling.
+      LUMINA_BEHIND_PROXY: "true"
       # Optional price-provider keys — Finnhub for stocks, CoinGecko works without a key.
       # ASP.NET Core config maps double-underscore env vars to nested keys, so this
       # overlays the empty `PriceProviders:Finnhub:ApiKey` slot in appsettings.json.

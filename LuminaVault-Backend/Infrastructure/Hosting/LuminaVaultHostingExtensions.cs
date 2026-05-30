@@ -5,6 +5,7 @@ using LuminaVault.Endpoints;
 using LuminaVault.Pricing;
 using LuminaVault.Storage;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -15,6 +16,13 @@ namespace LuminaVault.Hosting;
 public static class LuminaVaultHostingExtensions
 {
     private const string DevCors = "DevCors";
+
+    // The API only ever returns JSON or file bytes — never HTML — so a `default-src 'none'`
+    // policy is safe and stops a content-sniffed response (e.g. an inline item photo) from
+    // being coerced into executing as a document. The SPA's own (necessarily looser) CSP is
+    // served by nginx alongside index.html.
+    private const string ApiContentSecurityPolicy =
+        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
 
     public static StoragePaths AddLuminaVaultStorage(this WebApplicationBuilder builder)
     {
@@ -175,6 +183,42 @@ public static class LuminaVaultHostingExtensions
 
     public static void UseLuminaVaultRequestPipeline(this WebApplication app)
     {
+        // Behind a reverse proxy (the bundled nginx, or any TLS terminator) the direct
+        // connection IP is the proxy's, not the client's. Honor X-Forwarded-For/Proto so the
+        // auth rate limiter partitions per real client and request logs record the right IP.
+        // Must run before the rate limiter and request logging. Off by default for direct
+        // `dotnet run`, where trusting forwarded headers from any caller would let a client
+        // spoof its address; docker-compose sets LUMINA_BEHIND_PROXY=true.
+        if (IsBehindProxy(app.Configuration))
+        {
+            var forwarded = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+            };
+            // The backend is only reachable through the proxy on an isolated container network
+            // and the proxy's IP is assigned dynamically by Docker, so there is no fixed address
+            // to pin. Clearing the allow-lists trusts the single upstream hop that fronts us.
+            forwarded.KnownIPNetworks.Clear();
+            forwarded.KnownProxies.Clear();
+            app.UseForwardedHeaders(forwarded);
+        }
+
+        // Hardening headers on every backend response, registered ahead of the exception
+        // handler and applied via OnStarting so they ride onto error and 401 responses too.
+        app.Use(async (ctx, next) =>
+        {
+            ctx.Response.OnStarting(static state =>
+            {
+                var headers = ((HttpContext)state).Response.Headers;
+                headers["X-Content-Type-Options"] = "nosniff";
+                headers["X-Frame-Options"] = "DENY";
+                headers["Referrer-Policy"] = "no-referrer";
+                headers["Content-Security-Policy"] = ApiContentSecurityPolicy;
+                return Task.CompletedTask;
+            }, ctx);
+            await next();
+        });
+
         app.UseExceptionHandler(errorApp =>
         {
             errorApp.Run(async ctx =>
@@ -227,5 +271,13 @@ public static class LuminaVaultHostingExtensions
         app.MapSettings();
         app.MapNotifications();
         return app;
+    }
+
+    private static bool IsBehindProxy(IConfiguration configuration)
+    {
+        var env = Environment.GetEnvironmentVariable("LUMINA_BEHIND_PROXY");
+        if (!string.IsNullOrWhiteSpace(env) && bool.TryParse(env, out var enabled))
+            return enabled;
+        return configuration.GetValue("ForwardedHeaders:Enabled", false);
     }
 }
