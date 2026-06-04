@@ -4,6 +4,9 @@ import gsap from 'gsap';
 import { Furniture, Item, Room } from '../../core/models';
 import { API_BASE } from '../../core/api-base';
 import { applyFurnitureId, BuiltFurniture, buildFurnitureMesh, fitCentered, fitInto, loadModelForKind, loadModelFromUrl, OpenTransform } from './furniture-models';
+import { furnitureCameraView, furnitureMarkerPosition, looseMarkerPosition, roomCameraView, roomWallSpecs } from './planner-layout';
+import { findFurnitureIdInAncestors, findItemInAncestors } from './scene-graph';
+import { createEnvironment } from './scene-environment';
 
 export type PlannerMode = 'overview' | 'room' | 'furniture';
 
@@ -95,45 +98,9 @@ export class PlannerScene {
     this.controls.maxDistance = 60;
     this.controls.maxPolarAngle = Math.PI * 0.49;
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0xb8a8ff, 0.45);
-    this.scene.add(ambient);
-
-    const key = new THREE.DirectionalLight(0xffffff, 1.0);
-    key.position.set(8, 18, 6);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.left = -30;
-    key.shadow.camera.right = 30;
-    key.shadow.camera.top = 30;
-    key.shadow.camera.bottom = -30;
-    this.scene.add(key);
-
-    const fill = new THREE.PointLight(0xff5fa3, 1.4, 30);
-    fill.position.set(-6, 6, -4);
-    this.scene.add(fill);
-
-    const rim = new THREE.PointLight(0x7c3aed, 1.2, 30);
-    rim.position.set(8, 5, -8);
-    this.scene.add(rim);
-
-    // Ground grid
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(120, 120),
-      new THREE.MeshStandardMaterial({ color: 0x0e0c1a, roughness: 0.95, metalness: 0.0 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.001;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-
-    const grid = new THREE.GridHelper(120, 120, 0x2a2540, 0x18152a);
-    (grid.material as THREE.Material).transparent = true;
-    (grid.material as THREE.Material).opacity = 0.5;
-    this.scene.add(grid);
-
-    // Star field
-    this.buildStars();
+    // Lighting rig, ground, grid, and star dome.
+    const env = createEnvironment(this.scene);
+    this.starField = env.starField;
 
     // Events
     this.renderer.domElement.addEventListener('pointermove', this.onPointerMove);
@@ -145,27 +112,6 @@ export class PlannerScene {
     this.resizeObs.observe(this.host);
 
     this.animate();
-  }
-
-  private buildStars() {
-    const count = 1500;
-    const geo = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const r = 60 + Math.random() * 30;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      positions[i*3+0] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i*3+1] = Math.abs(r * Math.cos(phi));
-      positions[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.18, color: 0xc4b5fd, transparent: true, opacity: 0.7,
-      sizeAttenuation: true, depthWrite: false,
-    });
-    this.starField = new THREE.Points(geo, mat);
-    this.scene.add(this.starField);
   }
 
   setData(rooms: Room[], furniture: Furniture[], items: Item[]) {
@@ -221,14 +167,8 @@ export class PlannerScene {
       transmission: 0.92, transparent: true, opacity: 0.18,
       thickness: 0.4, side: THREE.DoubleSide,
     });
-    const t = 0.05;
     const walls: THREE.Mesh[] = [];
-    const wallSpecs = [
-      { w: r.width, h: r.height, d: t, x: r.width/2, z: 0 },
-      { w: r.width, h: r.height, d: t, x: r.width/2, z: r.depth },
-      { w: t, h: r.height, d: r.depth, x: 0, z: r.depth/2 },
-      { w: t, h: r.height, d: r.depth, x: r.width, z: r.depth/2 },
-    ];
+    const wallSpecs = roomWallSpecs(r.width, r.height, r.depth);
     for (const s of wallSpecs) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(s.w, s.h, s.d), wallMat);
       m.position.set(s.x, s.h/2, s.z);
@@ -254,12 +194,8 @@ export class PlannerScene {
     const looseItems = this.looseItemsByRoom.get(r.id) ?? [];
     const looseItemMarkers: THREE.Mesh[] = [];
     looseItems.forEach((it, idx) => {
-      const radius = Math.min(r.width, r.depth) * 0.18;
-      const angle = (idx / Math.max(looseItems.length, 1)) * Math.PI * 2;
-      const baseX = r.width / 2 + Math.cos(angle) * radius;
-      const baseZ = r.depth / 2 + Math.sin(angle) * radius;
-      const baseY = 1.35 + (idx % 3) * 0.08;
-      const orb = this.createItemMarker(it, new THREE.Vector3(baseX, baseY, baseZ), {
+      const p = looseMarkerPosition(idx, looseItems.length, r.width, r.depth);
+      const orb = this.createItemMarker(it, new THREE.Vector3(p.x, p.y, p.z), {
         loose: true, modelMaxDim: 0.5,
       });
       g.add(orb);
@@ -351,13 +287,8 @@ export class PlannerScene {
     const items = this.itemsByFurniture.get(f.id) ?? [];
     const markers: THREE.Mesh[] = [];
     items.forEach((it, idx) => {
-      const angle = (idx / Math.max(items.length, 1)) * Math.PI * 2;
-      const radius = Math.min(f.width, f.depth) * 0.35;
-      const basePos = new THREE.Vector3(
-        Math.cos(angle) * radius,
-        f.height + 0.3 + (idx % 3) * 0.05,
-        Math.sin(angle) * radius
-      );
+      const p = furnitureMarkerPosition(idx, items.length, f.width, f.depth, f.height);
+      const basePos = new THREE.Vector3(p.x, p.y, p.z);
       const marker = this.createItemMarker(it, basePos, { loose: false, modelMaxDim: 0.28 });
       g.add(marker);
       markers.push(marker);
@@ -433,12 +364,10 @@ export class PlannerScene {
     if (s.mode === 'room' && s.room) {
       const room = this.rooms.find(rm => rm.data.id === s.room!.id);
       if (!room) return;
-      const cx = room.data.x + room.data.width/2;
-      const cz = room.data.z + room.data.depth/2;
-      const dist = Math.max(room.data.width, room.data.depth) * 1.4;
+      const view = roomCameraView(room.data);
       this.flyTo({
-        camPos: new THREE.Vector3(cx + dist*0.6, room.data.height + dist*0.8, cz + dist*0.9),
-        target: new THREE.Vector3(cx, room.data.height/2, cz),
+        camPos: new THREE.Vector3(view.camPos.x, view.camPos.y, view.camPos.z),
+        target: new THREE.Vector3(view.target.x, view.target.y, view.target.z),
       });
       // Drop walls of the focused room
       for (const r of this.rooms) {
@@ -465,9 +394,11 @@ export class PlannerScene {
       const fmesh = this.furniture.find(fm => fm.data.id === s.furniture!.id);
       if (!fmesh) return;
       const wp = fmesh.group.position;
-      const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0,1,0), fmesh.group.rotation.y);
-      const camPos = wp.clone().add(fwd.multiplyScalar(2.4)).add(new THREE.Vector3(0, fmesh.data.height + 0.6, 0));
-      this.flyTo({ camPos, target: wp.clone().add(new THREE.Vector3(0, fmesh.data.height/2, 0)) });
+      const view = furnitureCameraView({ x: wp.x, y: wp.y, z: wp.z }, fmesh.group.rotation.y, fmesh.data.height);
+      this.flyTo({
+        camPos: new THREE.Vector3(view.camPos.x, view.camPos.y, view.camPos.z),
+        target: new THREE.Vector3(view.target.x, view.target.y, view.target.z),
+      });
 
       // Close other furniture, open the focused one
       for (const f of this.furniture) {
@@ -731,26 +662,6 @@ export class PlannerScene {
     this.controls.dispose();
     if (this.renderer.domElement.parentNode) this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
   }
-}
-
-function findFurnitureIdInAncestors(o: THREE.Object3D | null): number | null {
-  let cur: THREE.Object3D | null = o;
-  while (cur) {
-    const id = cur.userData?.['furnitureId'];
-    if (typeof id === 'number') return id;
-    cur = cur.parent;
-  }
-  return null;
-}
-
-function findItemInAncestors(o: THREE.Object3D | null): Item | null {
-  let cur: THREE.Object3D | null = o;
-  while (cur) {
-    const it = cur.userData?.['item'] as Item | undefined;
-    if (it) return it;
-    cur = cur.parent;
-  }
-  return null;
 }
 
 function makeLabelSprite(text: string): THREE.Sprite {
