@@ -60,38 +60,13 @@
           @for (account of accounts(); track account.id) { <option [ngValue]="account.id">{{ account.name }}</option> }
         </select>
         <select class="select" [ngModel]="sortToken()" (ngModelChange)="setSortToken($event)" aria-label="Sort by">
-          <optgroup label="Next due">
-            <option value="due-asc">Soonest</option>
-            <option value="due-desc">Latest</option>
-          </optgroup>
-          <optgroup label="Monthly">
-            <option value="monthly-desc">High → low</option>
-            <option value="monthly-asc">Low → high</option>
-          </optgroup>
-          <optgroup label="Price">
-            <option value="price-desc">High → low</option>
-            <option value="price-asc">Low → high</option>
-          </optgroup>
-          <optgroup label="Name">
-            <option value="name-asc">A → Z</option>
-            <option value="name-desc">Z → A</option>
-          </optgroup>
-          <optgroup label="Category">
-            <option value="category-asc">A → Z</option>
-            <option value="category-desc">Z → A</option>
-          </optgroup>
-          <optgroup label="Account">
-            <option value="account-asc">A → Z</option>
-            <option value="account-desc">Z → A</option>
-          </optgroup>
-          <optgroup label="Status">
-            <option value="status-asc">Active first</option>
-            <option value="status-desc">Cancelled first</option>
-          </optgroup>
-          <optgroup label="Billing">
-            <option value="billing-asc">Shortest</option>
-            <option value="billing-desc">Longest</option>
-          </optgroup>
+          <option value="due-asc">Due soon</option>
+          <option value="due-desc">Due latest</option>
+          <option value="monthly-desc">Monthly high</option>
+          <option value="monthly-asc">Monthly low</option>
+          <option value="name-asc">Name A-Z</option>
+          <option value="category-asc">Category A-Z</option>
+          <option value="status-asc">Status</option>
         </select>
       </div>
 
