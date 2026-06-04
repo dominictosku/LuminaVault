@@ -36,3 +36,4 @@ Thumbs.db
 .env
 # Optional bind-mount path if the user switches the named volume to ./data.
 /data/
+.claude
