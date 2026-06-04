@@ -59,14 +59,39 @@
           <option [ngValue]="0">No account</option>
           @for (account of accounts(); track account.id) { <option [ngValue]="account.id">{{ account.name }}</option> }
         </select>
-        <select class="select" [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event); filterChanged()">
-          <option value="dueAsc">Due soon</option>
-          <option value="dueDesc">Due latest</option>
-          <option value="monthlyDesc">Monthly high</option>
-          <option value="monthlyAsc">Monthly low</option>
-          <option value="nameAsc">Name A-Z</option>
-          <option value="categoryAsc">Category A-Z</option>
-          <option value="statusAsc">Status</option>
+        <select class="select" [ngModel]="sortToken()" (ngModelChange)="setSortToken($event)" aria-label="Sort by">
+          <optgroup label="Next due">
+            <option value="due-asc">Soonest</option>
+            <option value="due-desc">Latest</option>
+          </optgroup>
+          <optgroup label="Monthly">
+            <option value="monthly-desc">High → low</option>
+            <option value="monthly-asc">Low → high</option>
+          </optgroup>
+          <optgroup label="Price">
+            <option value="price-desc">High → low</option>
+            <option value="price-asc">Low → high</option>
+          </optgroup>
+          <optgroup label="Name">
+            <option value="name-asc">A → Z</option>
+            <option value="name-desc">Z → A</option>
+          </optgroup>
+          <optgroup label="Category">
+            <option value="category-asc">A → Z</option>
+            <option value="category-desc">Z → A</option>
+          </optgroup>
+          <optgroup label="Account">
+            <option value="account-asc">A → Z</option>
+            <option value="account-desc">Z → A</option>
+          </optgroup>
+          <optgroup label="Status">
+            <option value="status-asc">Active first</option>
+            <option value="status-desc">Cancelled first</option>
+          </optgroup>
+          <optgroup label="Billing">
+            <option value="billing-asc">Shortest</option>
+            <option value="billing-desc">Longest</option>
+          </optgroup>
         </select>
       </div>
 
@@ -76,7 +101,7 @@
           @if (statusFilter()) { <button class="tag" type="button" (click)="clearFilter('status')">Status: {{ statusFilter() }} ×</button> }
           @if (categoryFilter()) { <button class="tag" type="button" (click)="clearFilter('category')">Category: {{ categoryFilter() }} ×</button> }
           @if (accountFilter() != null) { <button class="tag" type="button" (click)="clearFilter('account')">Account filter ×</button> }
-          @if (sortBy() !== 'dueAsc') { <button class="tag" type="button" (click)="clearFilter('sort')">Sort: {{ sortBy() }} ×</button> }
+          @if (sortToken() !== 'due-asc') { <button class="tag" type="button" (click)="clearFilter('sort')">Sort: {{ sortLabel() }} ×</button> }
           <button class="btn btn-ghost !py-1 !px-2 text-xs" type="button" (click)="clearFilters()">Clear all</button>
         } @else {
           <span class="text-xs text-slate-500">No active filters</span>
@@ -120,14 +145,38 @@
             <table class="w-full text-sm">
               <thead class="text-slate-400 text-xs uppercase tracking-wide">
                 <tr class="border-b border-white/10">
-                  <th class="text-left font-medium px-4 py-2.5">Name</th>
-                  <th class="text-left font-medium px-4 py-2.5">Category</th>
-                  <th class="text-left font-medium px-4 py-2.5">Account</th>
-                  <th class="text-left font-medium px-4 py-2.5">Status</th>
-                  <th class="text-left font-medium px-4 py-2.5">Billing</th>
-                  <th class="text-right font-medium px-4 py-2.5">Price</th>
-                  <th class="text-right font-medium px-4 py-2.5">Monthly</th>
-                  <th class="text-right font-medium px-4 py-2.5">Next due</th>
+                  <th class="text-left font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('name')" (click)="sortByColumn('name')">Name {{ sortArrow('name') }}</button>
+                  </th>
+                  <th class="text-left font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('category')" (click)="sortByColumn('category')">Category {{ sortArrow('category') }}</button>
+                  </th>
+                  <th class="text-left font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('account')" (click)="sortByColumn('account')">Account {{ sortArrow('account') }}</button>
+                  </th>
+                  <th class="text-left font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('status')" (click)="sortByColumn('status')">Status {{ sortArrow('status') }}</button>
+                  </th>
+                  <th class="text-left font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('billing')" (click)="sortByColumn('billing')">Billing {{ sortArrow('billing') }}</button>
+                  </th>
+                  <th class="text-right font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('price')" (click)="sortByColumn('price')">Price {{ sortArrow('price') }}</button>
+                  </th>
+                  <th class="text-right font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('monthly')" (click)="sortByColumn('monthly')">Monthly {{ sortArrow('monthly') }}</button>
+                  </th>
+                  <th class="text-right font-medium px-4 py-2.5">
+                    <button type="button" class="inline-flex items-center gap-1 transition hover:text-slate-200"
+                            [class.text-amber-200]="isSorted('due')" (click)="sortByColumn('due')">Next due {{ sortArrow('due') }}</button>
+                  </th>
                 </tr>
               </thead>
               <tbody>

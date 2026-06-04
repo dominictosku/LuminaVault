@@ -26,13 +26,25 @@ import { activeSubscriptionsMonthlyTotal } from '../../core/finance-math';
 import { ProtectedMediaService } from '../../core/protected-media.service';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
+import {
+  DEFAULT_SORT,
+  SORT_COLUMN_LABELS,
+  SubscriptionSortColumn,
+  SubscriptionSortDir,
+  SubscriptionSortState,
+  defaultDirFor,
+  parseSort,
+  sortSubscriptions,
+} from './subscription-sort';
 
 type SubscriptionFilters = {
   q: string;
   status: SubscriptionStatus | null;
   category: string | null;
   account: number | null;
-  sort: SubscriptionSort;
+  /// Serialized "{column}-{dir}" token (e.g. "monthly-desc"), kept as a plain string
+  /// so URL params and saved presets stay simple. See parseSort/SubscriptionSortState.
+  sort: string;
 };
 
 const DEFAULT_FILTERS: SubscriptionFilters = {
@@ -40,7 +52,7 @@ const DEFAULT_FILTERS: SubscriptionFilters = {
   status: null,
   category: null,
   account: null,
-  sort: 'dueAsc',
+  sort: 'due-asc',
 };
 
 @Component({
@@ -82,7 +94,10 @@ export class SubscriptionsComponent {
   statusFilter = signal<SubscriptionStatus | null>(null);
   categoryFilter = signal<string | null>(null);
   accountFilter = signal<number | null>(null);
-  sortBy = signal<SubscriptionSort>('dueAsc');
+  sort = signal<SubscriptionSortState>({ ...DEFAULT_SORT });
+  /// "{column}-{dir}" view of `sort` for the dropdown <select> and URL/preset state.
+  sortToken = computed(() => `${this.sort().column}-${this.sort().dir}`);
+  sortLabel = computed(() => `${SORT_COLUMN_LABELS[this.sort().column]} ${this.sort().dir === 'asc' ? '↑' : '↓'}`);
   presetName = '';
   filterPresets = this.filters.presets;
   startedOn = new Date().toISOString().substring(0, 10);
@@ -104,7 +119,7 @@ export class SubscriptionsComponent {
     const statusFilter = this.statusFilter();
     const categoryFilter = this.categoryFilter();
     const accountFilter = this.accountFilter();
-    const sortBy = this.sortBy();
+    const sort = this.sort();
     const filtered = this.subscriptions().filter(s => {
       const matchesQuery = !q ||
         s.name.toLowerCase().includes(q) ||
@@ -119,25 +134,7 @@ export class SubscriptionsComponent {
       return matchesQuery && matchesStatus && matchesCategory && matchesAccount;
     });
 
-    return [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'dueDesc':
-          return dateMs(b.nextDueOn) - dateMs(a.nextDueOn);
-        case 'monthlyDesc':
-          return b.monthlyAmount - a.monthlyAmount;
-        case 'monthlyAsc':
-          return a.monthlyAmount - b.monthlyAmount;
-        case 'nameAsc':
-          return a.name.localeCompare(b.name);
-        case 'categoryAsc':
-          return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
-        case 'statusAsc':
-          return statusRank(a.status) - statusRank(b.status) || dateMs(a.nextDueOn) - dateMs(b.nextDueOn);
-        case 'dueAsc':
-        default:
-          return dateMs(a.nextDueOn) - dateMs(b.nextDueOn);
-      }
-    });
+    return sortSubscriptions(filtered, sort);
   });
 
   constructor() {
@@ -161,7 +158,7 @@ export class SubscriptionsComponent {
     this.statusFilter.set((params.get('status') as SubscriptionStatus | null) || null);
     this.categoryFilter.set(params.get('category'));
     this.accountFilter.set(params.has('account') ? Number(params.get('account')) : null);
-    this.sortBy.set((params.get('sort') as SubscriptionSort | null) ?? 'dueAsc');
+    this.sort.set(parseSort(params.get('sort')));
     this.fetchAll();
   }
 
@@ -319,6 +316,32 @@ export class SubscriptionsComponent {
     try { localStorage.setItem(VIEW_STORAGE_KEY, mode); } catch { /* private mode / disabled storage */ }
   }
 
+  /// Table header click: toggle direction when the column is already active, otherwise
+  /// switch to it with a sensible default direction.
+  sortByColumn(column: SubscriptionSortColumn) {
+    const current = this.sort();
+    const dir: SubscriptionSortDir = current.column === column
+      ? (current.dir === 'asc' ? 'desc' : 'asc')
+      : defaultDirFor(column);
+    this.sort.set({ column, dir });
+    this.filterChanged();
+  }
+
+  setSortToken(token: string) {
+    this.sort.set(parseSort(token));
+    this.filterChanged();
+  }
+
+  isSorted(column: SubscriptionSortColumn) {
+    return this.sort().column === column;
+  }
+
+  /// Direction arrow for a column header — empty unless that column is the active sort.
+  sortArrow(column: SubscriptionSortColumn): string {
+    if (this.sort().column !== column) return '';
+    return this.sort().dir === 'asc' ? '↑' : '↓';
+  }
+
   // Template-facing wrappers around FilterStateController.
   hasActiveFilters() { return this.filters.hasActive(); }
   clearFilters() { this.filters.clearAll(); }
@@ -332,7 +355,7 @@ export class SubscriptionsComponent {
       status: this.statusFilter(),
       category: this.categoryFilter(),
       account: this.accountFilter(),
-      sort: this.sortBy(),
+      sort: this.sortToken(),
     };
   }
 
@@ -341,7 +364,7 @@ export class SubscriptionsComponent {
     this.statusFilter.set(values.status);
     this.categoryFilter.set(values.category);
     this.accountFilter.set(values.account);
-    this.sortBy.set(values.sort);
+    this.sort.set(parseSort(values.sort));
   }
 
   private syncFiltersToUrl() {
@@ -354,7 +377,7 @@ export class SubscriptionsComponent {
         status: f.status,
         category: f.category,
         account: f.account,
-        sort: f.sort === 'dueAsc' ? null : f.sort,
+        sort: f.sort === 'due-asc' ? null : f.sort,
       },
       queryParamsHandling: 'merge',
     });
@@ -409,15 +432,6 @@ export class SubscriptionsComponent {
   }
 }
 
-type SubscriptionSort =
-  | 'dueAsc'
-  | 'dueDesc'
-  | 'monthlyDesc'
-  | 'monthlyAsc'
-  | 'nameAsc'
-  | 'categoryAsc'
-  | 'statusAsc';
-
 type SubscriptionView = 'cards' | 'table';
 const VIEW_STORAGE_KEY = 'lv_subscriptions_view';
 
@@ -427,12 +441,4 @@ function readStoredView(): SubscriptionView {
   } catch {
     return 'cards';
   }
-}
-
-function dateMs(value: string) {
-  return new Date(value).getTime();
-}
-
-function statusRank(status: SubscriptionStatus) {
-  return status === 'Active' ? 0 : status === 'Paused' ? 1 : 2;
 }
