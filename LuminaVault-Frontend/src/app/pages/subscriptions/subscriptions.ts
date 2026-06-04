@@ -72,6 +72,8 @@ export class SubscriptionsComponent {
   generatingDue = signal(false);
   uploadingAttachment = signal(false);
   automationMessage = signal<string | null>(null);
+  /// Card grid vs. compact table. Persisted so the choice sticks across visits.
+  viewMode = signal<SubscriptionView>(readStoredView());
 
   statuses = SUBSCRIPTION_STATUSES;
   intervalUnits = BILLING_INTERVAL_UNITS;
@@ -312,6 +314,11 @@ export class SubscriptionsComponent {
     this.syncFiltersToUrl();
   }
 
+  setViewMode(mode: SubscriptionView) {
+    this.viewMode.set(mode);
+    try { localStorage.setItem(VIEW_STORAGE_KEY, mode); } catch { /* private mode / disabled storage */ }
+  }
+
   // Template-facing wrappers around FilterStateController.
   hasActiveFilters() { return this.filters.hasActive(); }
   clearFilters() { this.filters.clearAll(); }
@@ -410,6 +417,17 @@ type SubscriptionSort =
   | 'nameAsc'
   | 'categoryAsc'
   | 'statusAsc';
+
+type SubscriptionView = 'cards' | 'table';
+const VIEW_STORAGE_KEY = 'lv_subscriptions_view';
+
+function readStoredView(): SubscriptionView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'table' ? 'table' : 'cards';
+  } catch {
+    return 'cards';
+  }
+}
 
 function dateMs(value: string) {
   return new Date(value).getTime();

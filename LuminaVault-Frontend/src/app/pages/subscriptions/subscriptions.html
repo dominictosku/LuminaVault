@@ -4,7 +4,23 @@
       <h1 class="text-2xl font-semibold tracking-tight">Subscriptions</h1>
       <p class="text-slate-400 text-sm mt-1">{{ activeCount() }} active · {{ monthlyTotal() | currency:'CHF':'symbol-narrow' }}/mo</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex gap-2 items-center">
+      <div class="flex rounded-lg border border-white/10 overflow-hidden mr-1">
+        <button type="button" class="px-3 py-2 transition" title="Card view" aria-label="Card view"
+                [class.bg-white/10]="viewMode() === 'cards'"
+                [class.text-amber-200]="viewMode() === 'cards'"
+                [class.text-slate-400]="viewMode() !== 'cards'"
+                (click)="setViewMode('cards')">
+          <i class="pi pi-th-large"></i>
+        </button>
+        <button type="button" class="px-3 py-2 transition border-l border-white/10" title="Table view" aria-label="Table view"
+                [class.bg-white/10]="viewMode() === 'table'"
+                [class.text-amber-200]="viewMode() === 'table'"
+                [class.text-slate-400]="viewMode() !== 'table'"
+                (click)="setViewMode('table')">
+          <i class="pi pi-list"></i>
+        </button>
+      </div>
       <button class="btn btn-ghost" type="button" (click)="generateDueSubscriptions()" [disabled]="generatingDue()">
         @if (generatingDue()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-bell"></i> }
         Forecast due
@@ -99,40 +115,87 @@
         <div class="text-xs text-slate-500 px-1">
           Showing {{ filteredSubscriptions().length }} of {{ subscriptions().length }}
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          @for (s of filteredSubscriptions(); track s.id) {
-            <button type="button" class="surface p-4 text-left hover:border-amber-300/40 transition"
-                    (click)="editSubscription(s)">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="font-medium truncate">{{ s.name }}</div>
-                  <div class="text-xs text-slate-500 mt-1 truncate">
-                    {{ s.provider || s.category }} · {{ s.accountName || 'No account' }}
+        @if (viewMode() === 'table') {
+          <div class="surface overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="text-slate-400 text-xs uppercase tracking-wide">
+                <tr class="border-b border-white/10">
+                  <th class="text-left font-medium px-4 py-2.5">Name</th>
+                  <th class="text-left font-medium px-4 py-2.5">Category</th>
+                  <th class="text-left font-medium px-4 py-2.5">Account</th>
+                  <th class="text-left font-medium px-4 py-2.5">Status</th>
+                  <th class="text-left font-medium px-4 py-2.5">Billing</th>
+                  <th class="text-right font-medium px-4 py-2.5">Price</th>
+                  <th class="text-right font-medium px-4 py-2.5">Monthly</th>
+                  <th class="text-right font-medium px-4 py-2.5">Next due</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (s of filteredSubscriptions(); track s.id) {
+                  <tr class="border-t border-white/5 hover:bg-white/5 cursor-pointer transition"
+                      [class.bg-amber-400/10]="editingId() === s.id"
+                      (click)="editSubscription(s)">
+                    <td class="px-4 py-2.5">
+                      <div class="font-medium truncate max-w-[16rem]">{{ s.name }}</div>
+                      @if (s.provider) { <div class="text-xs text-slate-500 truncate max-w-[16rem]">{{ s.provider }}</div> }
+                    </td>
+                    <td class="px-4 py-2.5 text-slate-300">{{ s.category }}</td>
+                    <td class="px-4 py-2.5 text-slate-300">{{ s.accountName || '—' }}</td>
+                    <td class="px-4 py-2.5">
+                      <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
+                        <span class="w-1.5 h-1.5 rounded-full shrink-0"
+                              [class.bg-emerald-400]="s.status === 'Active'"
+                              [class.bg-amber-400]="s.status === 'Paused'"
+                              [class.bg-slate-500]="s.status === 'Cancelled'"></span>
+                        <span class="text-slate-300">{{ s.status }}</span>
+                      </span>
+                    </td>
+                    <td class="px-4 py-2.5 text-slate-400 whitespace-nowrap">{{ formatIntervalSummary(s.billingIntervalUnit, s.billingIntervalCount) }}</td>
+                    <td class="px-4 py-2.5 text-right whitespace-nowrap">{{ s.amount | currency:s.currency:'symbol-narrow' }}</td>
+                    <td class="px-4 py-2.5 text-right font-medium whitespace-nowrap">{{ s.monthlyAmount | currency:s.currency:'symbol-narrow' }}</td>
+                    <td class="px-4 py-2.5 text-right text-slate-400 whitespace-nowrap">{{ s.nextDueOn | date:'MMM d' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            @for (s of filteredSubscriptions(); track s.id) {
+              <button type="button" class="surface p-4 text-left hover:border-amber-300/40 transition"
+                      [class.border-amber-300/60]="editingId() === s.id"
+                      (click)="editSubscription(s)">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="font-medium truncate">{{ s.name }}</div>
+                    <div class="text-xs text-slate-500 mt-1 truncate">
+                      {{ s.provider || s.category }} · {{ s.accountName || 'No account' }}
+                    </div>
+                  </div>
+                  <span class="text-xs px-2 py-1 rounded"
+                        [class.bg-emerald-400/10]="s.status === 'Active'"
+                        [class.text-emerald-300]="s.status === 'Active'"
+                        [class.bg-amber-400/10]="s.status === 'Paused'"
+                        [class.text-amber-300]="s.status === 'Paused'"
+                        [class.bg-slate-700]="s.status === 'Cancelled'"
+                        [class.text-slate-300]="s.status === 'Cancelled'">
+                    {{ s.status }}
+                  </span>
+                </div>
+                <div class="mt-5 flex items-end justify-between gap-3">
+                  <div>
+                    <div class="text-2xl font-semibold">{{ s.monthlyAmount | currency:s.currency:'symbol-narrow' }}</div>
+                    <div class="text-xs text-slate-500">monthly equivalent</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm">{{ s.amount | currency:s.currency:'symbol-narrow' }}</div>
+                    <div class="text-xs text-slate-500">due {{ s.nextDueOn | date:'MMM d' }}</div>
                   </div>
                 </div>
-                <span class="text-xs px-2 py-1 rounded"
-                      [class.bg-emerald-400/10]="s.status === 'Active'"
-                      [class.text-emerald-300]="s.status === 'Active'"
-                      [class.bg-amber-400/10]="s.status === 'Paused'"
-                      [class.text-amber-300]="s.status === 'Paused'"
-                      [class.bg-slate-700]="s.status === 'Cancelled'"
-                      [class.text-slate-300]="s.status === 'Cancelled'">
-                  {{ s.status }}
-                </span>
-              </div>
-              <div class="mt-5 flex items-end justify-between gap-3">
-                <div>
-                  <div class="text-2xl font-semibold">{{ s.monthlyAmount | currency:s.currency:'symbol-narrow' }}</div>
-                  <div class="text-xs text-slate-500">monthly equivalent</div>
-                </div>
-                <div class="text-right">
-                  <div class="text-sm">{{ s.amount | currency:s.currency:'symbol-narrow' }}</div>
-                  <div class="text-xs text-slate-500">due {{ s.nextDueOn | date:'MMM d' }}</div>
-                </div>
-              </div>
-            </button>
-          }
-        </div>
+              </button>
+            }
+          </div>
+        }
       }
     </section>
 
