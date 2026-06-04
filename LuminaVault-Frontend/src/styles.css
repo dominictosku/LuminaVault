@@ -64,20 +64,34 @@ html, body {
 }
 .btn-danger:hover { background: rgba(239,68,68,0.25); }
 
-.input, .select, .textarea {
-  width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.10);
-  color: #e5e7eb;
-  padding: 0.6rem 0.85rem;
-  border-radius: 0.6rem;
-  outline: none;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
-  font-size: 0.95rem;
+/* In the `components` layer so Tailwind utilities (pl-9, w-44, py-1, …) can override
+   these base styles. Unlayered rules win against the utilities layer in Tailwind v4,
+   which is why `.input pl-9` left the search icon overlapping the text. */
+@layer components {
+  .input, .select, .textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: #e5e7eb;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.6rem;
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+    font-size: 0.95rem;
+  }
+  .input:focus, .select:focus, .textarea:focus {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 3px rgba(167,139,250,0.18);
+  }
 }
-.input:focus, .select:focus, .textarea:focus {
-  border-color: #a78bfa;
-  box-shadow: 0 0 0 3px rgba(167,139,250,0.18);
+
+/* Faux placeholder for an empty <input type="month"> filter. Firefox renders nothing
+   inside an empty month field (no placeholder, no picker icon), so it looks like a
+   blank, broken box. We overlay a "Month" label via the template; Chromium draws its
+   own "mm/yyyy" dashes and supports the calendar-picker pseudo, so hide the overlay
+   there to avoid doubling up. Positioning lives on the element's utility classes. */
+@supports selector(::-webkit-calendar-picker-indicator) {
+  .month-placeholder { display: none; }
 }
 .label { display:block; font-size: 0.78rem; color:#a3a0b8; margin-bottom: 0.3rem; letter-spacing: 0.02em; text-transform: uppercase; }
 

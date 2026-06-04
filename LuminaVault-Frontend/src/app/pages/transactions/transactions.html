@@ -26,8 +26,14 @@
           @for (k of kinds; track k) { <option [ngValue]="k">{{ k }}</option> }
         </select>
         <div class="flex gap-2">
-          <input class="input" type="month" aria-label="Filter by month"
-                 [ngModel]="monthFilter()" (ngModelChange)="setMonthFilter($event || '')" />
+          <div class="relative flex-1">
+            <i class="pi pi-calendar absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"></i>
+            <input class="input pl-9" type="month" aria-label="Filter by month"
+                   [ngModel]="monthFilter()" (ngModelChange)="setMonthFilter($event || '')" />
+            @if (!monthFilter()) {
+              <span class="month-placeholder absolute left-9 top-1/2 -translate-y-1/2 text-[0.95rem] text-slate-500 pointer-events-none">Month</span>
+            }
+          </div>
           @if (monthFilter()) {
             <button type="button" class="btn btn-ghost px-3" title="Clear month filter" (click)="setMonthFilter('')">
               <i class="pi pi-times"></i>
