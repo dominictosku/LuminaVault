@@ -12,25 +12,29 @@ import {
   FinanceAccountType,
 } from '../../core/models';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-accounts',
   imports: [FormsModule, CurrencyPipe, DatePipe],
   templateUrl: './accounts.html',
-  styleUrl: './accounts.scss'
+  styleUrl: './accounts.scss',
+  providers: [CrudFormController],
 })
 export class AccountsComponent {
   private accountsApi = inject(AccountsApi);
   private snapshotsApi = inject(BalanceSnapshotsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
+  protected crud = inject<CrudFormController<FinanceAccountInput, FinanceAccount>>(CrudFormController);
+  // Pass-through signals so the template keeps reading editingId()/saving()/error() unchanged.
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
   accounts = signal<FinanceAccount[]>([]);
   snapshots = signal<AccountBalanceSnapshot[]>([]);
   loading = signal(true);
-  saving = signal(false);
-  error = signal<string | null>(null);
-  editingId = signal<number | null>(null);
 
   accountTypes = FINANCE_ACCOUNT_TYPES;
   colors = ['#14b8a6', '#38bdf8', '#34d399', '#f59e0b', '#818cf8', '#fb7185'];
@@ -41,6 +45,15 @@ export class AccountsComponent {
   snapshotNotes = '';
 
   constructor() {
+    this.crud.configure({
+      create: input => this.accountsApi.createFinanceAccount(input),
+      update: (id, input) => this.accountsApi.updateFinanceAccount(id, input),
+      delete: id => this.accountsApi.deleteFinanceAccount(id),
+      toastSubject: 'Account',
+      saveErrorFallback: 'Save failed.',
+      onSaved: () => { this.reset(); this.fetch(); },
+      onRemoved: () => { this.reset(); this.fetch(); },
+    });
     this.fetch();
   }
 
@@ -65,8 +78,7 @@ export class AccountsComponent {
   }
 
   editAccount(account: FinanceAccount) {
-    this.editingId.set(account.id);
-    this.error.set(null);
+    this.crud.startEdit(account.id);
     this.model = {
       name: account.name,
       institution: account.institution ?? '',
@@ -87,48 +99,25 @@ export class AccountsComponent {
       this.error.set('Name is required.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
-    const input = {
+    this.crud.save({
       ...this.model,
       currency: (this.model.currency || 'CHF').toUpperCase(),
       startingBalance: Number(this.model.startingBalance) || 0,
       balance: Number(this.model.balance) || 0,
-    };
-    const isUpdate = this.editingId() != null;
-    const op = isUpdate
-      ? this.accountsApi.updateFinanceAccount(this.editingId()!, input)
-      : this.accountsApi.createFinanceAccount(input);
-    op.subscribe({
-      next: () => {
-        this.saving.set(false);
-        this.toast.success(isUpdate ? 'Account updated.' : 'Account created.');
-        this.reset();
-        this.fetch();
-      },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete account?',
       message: 'Archive or delete this account?',
       detail: 'Accounts with financial history may be archived by the backend instead of removed.',
       confirmText: 'Delete',
     });
-    if (!confirmed) return;
-    this.accountsApi.deleteFinanceAccount(this.editingId()!).subscribe(() => {
-      this.toast.success('Account removed.');
-      this.reset();
-      this.fetch();
-    });
   }
 
   reset() {
-    this.editingId.set(null);
-    this.error.set(null);
+    this.crud.cancel();
     this.model = this.defaultModel();
     this.snapshots.set([]);
     this.snapshotActualBalance = 0;

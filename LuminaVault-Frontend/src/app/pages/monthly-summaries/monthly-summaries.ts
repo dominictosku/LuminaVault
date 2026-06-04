@@ -9,27 +9,29 @@ import {
   MonthlyAccountSummary,
   MonthlyAccountSummaryInput,
 } from '../../core/models';
-import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
+import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
 import { ToastService } from '../../shared/toast/toast.service';
 
 @Component({
   selector: 'app-monthly-summaries',
   imports: [FormsModule, CurrencyPipe, DatePipe],
   templateUrl: './monthly-summaries.html',
-  styleUrl: './monthly-summaries.scss'
+  styleUrl: './monthly-summaries.scss',
+  providers: [CrudFormController],
 })
 export class MonthlySummariesComponent {
   private api = inject(MonthlySummariesApi);
   private accountsApi = inject(AccountsApi);
-  private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
+  protected crud = inject<CrudFormController<MonthlyAccountSummaryInput, MonthlyAccountSummary>>(CrudFormController);
+  // Pass-through signals so the template keeps reading editingId()/saving()/error() unchanged.
+  protected editingId = this.crud.editingId;
+  protected saving = this.crud.saving;
+  protected error = this.crud.error;
   accounts = signal<FinanceAccount[]>([]);
   summaries = signal<MonthlyAccountSummary[]>([]);
   loading = signal(true);
-  saving = signal(false);
   reconciling = signal(false);
-  error = signal<string | null>(null);
-  editingId = signal<number | null>(null);
   editingSummary = signal<MonthlyAccountSummary | null>(null);
   accountFilter: number | null = null;
   yearFilter = signal<number | null>(null);
@@ -50,6 +52,15 @@ export class MonthlySummariesComponent {
   });
 
   constructor() {
+    this.crud.configure({
+      create: input => this.api.createMonthlySummary(input),
+      update: (id, input) => this.api.updateMonthlySummary(id, input),
+      delete: id => this.api.deleteMonthlySummary(id),
+      toastSubject: 'Monthly summary',
+      saveErrorFallback: 'Save failed.',
+      onSaved: () => { this.reset(); this.fetchSummaries(); },
+      onRemoved: () => { this.reset(); this.fetchSummaries(); },
+    });
     forkJoin({
       accounts: this.accountsApi.listFinanceAccounts(),
       summaries: this.api.listMonthlySummaries(),
@@ -77,9 +88,8 @@ export class MonthlySummariesComponent {
   }
 
   editSummary(summary: MonthlyAccountSummary) {
-    this.editingId.set(summary.id);
+    this.crud.startEdit(summary.id);
     this.editingSummary.set(summary);
-    this.error.set(null);
     this.reconciliationNotes = summary.reconciliationNotes ?? '';
     this.monthPickerValue = summary.month.substring(0, 10);
     this.model = {
@@ -98,43 +108,21 @@ export class MonthlySummariesComponent {
       this.error.set('Choose an account.');
       return;
     }
-    this.saving.set(true);
-    this.error.set(null);
-    const input: MonthlyAccountSummaryInput = {
+    this.crud.save({
       ...this.model,
       month: this.monthStartIso(),
       income: Number(this.model.income) || 0,
       expenses: Number(this.model.expenses) || 0,
       openingBalance: this.model.openingBalance == null ? null : Number(this.model.openingBalance),
       closingBalance: this.model.closingBalance == null ? null : Number(this.model.closingBalance),
-    };
-    const isUpdate = this.editingId() != null;
-    const op = isUpdate
-      ? this.api.updateMonthlySummary(this.editingId()!, input)
-      : this.api.createMonthlySummary(input);
-    op.subscribe({
-      next: () => {
-        this.saving.set(false);
-        this.toast.success(isUpdate ? 'Monthly summary updated.' : 'Monthly summary created.');
-        this.reset();
-        this.fetchSummaries();
-      },
-      error: e => { this.saving.set(false); this.error.set(e?.error?.error ?? 'Save failed.'); },
     });
   }
 
-  async remove() {
-    if (!this.editingId()) return;
-    const confirmed = await this.confirmDialog.confirm({
+  remove() {
+    this.crud.remove({
       title: 'Delete monthly summary?',
       message: 'This monthly income and expense summary will be removed.',
       confirmText: 'Delete',
-    });
-    if (!confirmed) return;
-    this.api.deleteMonthlySummary(this.editingId()!).subscribe(() => {
-      this.toast.success('Monthly summary deleted.');
-      this.reset();
-      this.fetchSummaries();
     });
   }
 
@@ -161,9 +149,8 @@ export class MonthlySummariesComponent {
   }
 
   reset() {
-    this.editingId.set(null);
+    this.crud.cancel();
     this.editingSummary.set(null);
-    this.error.set(null);
     this.reconciliationNotes = '';
     this.monthPickerValue = new Date().toISOString().substring(0, 10);
     this.model = this.defaultModel();
