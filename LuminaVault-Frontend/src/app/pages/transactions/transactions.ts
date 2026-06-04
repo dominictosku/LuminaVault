@@ -29,6 +29,7 @@ import { ReceiptOcr } from '../../core/receipt-ocr.service';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
 import { isSplitBalanced, remainingToAllocate, sumSplits } from './split-math';
+import { monthToRange } from './month-range';
 
 type TransactionFilters = {
   q: string;
@@ -590,13 +591,6 @@ export class TransactionsComponent {
   }
 
   private monthRange() {
-    const value = this.monthFilter();
-    if (!value) return {};
-    const [year, month] = value.split('-').map(Number);
-    const lastDay = new Date(year, month, 0).getDate();
-    return {
-      from: `${value}-01`,
-      to: `${value}-${String(lastDay).padStart(2, '0')}`,
-    };
+    return monthToRange(this.monthFilter());
   }
 }
