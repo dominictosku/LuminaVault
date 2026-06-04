@@ -16,6 +16,10 @@ export class ItemsComponent {
   protected api = inject(InventoryApi);
   items = signal<Item[]>([]);
   loading = signal(true);
+  // Base64 cursor for the next page of older items, or null when the server has
+  // nothing more for the current query.
+  nextCursor = signal<string | null>(null);
+  loadingMore = signal(false);
   query = '';
   skel = Array(6);
 
@@ -26,8 +30,26 @@ export class ItemsComponent {
   fetch() {
     this.loading.set(true);
     this.api.listItems({ q: this.query.trim() || undefined }).subscribe({
-      next: r => { this.items.set(r); this.loading.set(false); },
+      next: page => {
+        this.items.set(page.items);
+        this.nextCursor.set(page.nextCursor);
+        this.loading.set(false);
+      },
       error: () => this.loading.set(false),
+    });
+  }
+
+  loadMore() {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loadingMore()) return;
+    this.loadingMore.set(true);
+    this.api.listItems({ q: this.query.trim() || undefined, cursor }).subscribe({
+      next: page => {
+        this.items.update(existing => [...existing, ...page.items]);
+        this.nextCursor.set(page.nextCursor);
+        this.loadingMore.set(false);
+      },
+      error: () => this.loadingMore.set(false),
     });
   }
 

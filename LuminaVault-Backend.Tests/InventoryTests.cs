@@ -19,6 +19,7 @@ public class InventoryTests : IClassFixture<LuminaVaultFactory>
     private record RoomDto(int Id, int HouseId, string Name, string Color,
         double X, double Z, double Width, double Depth, double Height);
     private record ItemDto(int Id, string Name, string? Category, int Quantity);
+    private record ItemPageDto(ItemDto[] Items, string? NextCursor);
 
     [Fact]
     public async Task Create_house_then_list_returns_it()
@@ -86,9 +87,50 @@ public class InventoryTests : IClassFixture<LuminaVaultFactory>
             roomId = (int?)null, furnitureId = (int?)null, containerId = (int?)null,
         });
 
-        var inRoom = await _api.GetAsync<ItemDto[]>($"/api/items/?roomId={room.Id}");
-        Assert.Single(inRoom!);
-        Assert.Equal("Monitor", inRoom![0].Name);
+        var inRoom = await _api.GetAsync<ItemPageDto>($"/api/items/?roomId={room.Id}");
+        Assert.Single(inRoom!.Items);
+        Assert.Equal("Monitor", inRoom.Items[0].Name);
+    }
+
+    [Fact]
+    public async Task Items_paginate_with_cursor()
+    {
+        var house = (await (await _api.PostAsync("/api/houses/",
+            new { name = "PageHouse", description = (string?)null })).Content
+            .ReadFromJsonAsync<HouseDto>())!;
+        var room = (await (await _api.PostAsync($"/api/houses/{house.Id}/rooms", new
+        {
+            name = "PageRoom", color = "#7c3aed",
+            x = 0.0, z = 0.0, width = 4.0, depth = 4.0, height = 2.6,
+        })).Content.ReadFromJsonAsync<RoomDto>())!;
+
+        foreach (var name in new[] { "Alpha", "Bravo", "Charlie" })
+        {
+            await _api.PostAsync("/api/items/", new
+            {
+                name, category = (string?)null,
+                description = (string?)null, brand = (string?)null, model = (string?)null,
+                serialNumber = (string?)null, value = (decimal?)null,
+                purchaseDate = (DateTime?)null, warrantyUntil = (DateTime?)null,
+                quantity = 1, notes = (string?)null, tags = Array.Empty<string>(),
+                roomId = (int?)room.Id, furnitureId = (int?)null, containerId = (int?)null,
+            });
+        }
+
+        // First page caps at pageSize and hands back a cursor for the rest.
+        var first = await _api.GetAsync<ItemPageDto>($"/api/items/?roomId={room.Id}&pageSize=2");
+        Assert.Equal(2, first!.Items.Length);
+        Assert.False(string.IsNullOrEmpty(first.NextCursor));
+
+        // Following the cursor returns the remainder and signals the end with a null cursor.
+        var second = await _api.GetAsync<ItemPageDto>(
+            $"/api/items/?roomId={room.Id}&pageSize=2&cursor={Uri.EscapeDataString(first.NextCursor!)}");
+        Assert.Single(second!.Items);
+        Assert.Null(second.NextCursor);
+
+        // No row appears twice and every created item shows up exactly once.
+        var names = first.Items.Concat(second.Items).Select(i => i.Name).ToHashSet();
+        Assert.Equal(new HashSet<string> { "Alpha", "Bravo", "Charlie" }, names);
     }
 
     [Fact]

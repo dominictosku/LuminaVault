@@ -53,7 +53,7 @@ export class PlannerComponent implements AfterViewInit, OnDestroy {
           switchMap(roomLists => {
             const rooms = roomLists.flat();
             const furn$ = rooms.length ? forkJoin(rooms.map(r => this.api.listFurniture(r.id))) : of([] as Furniture[][]);
-            return forkJoin([furn$, this.api.listItems()]).pipe(
+            return forkJoin([furn$, this.api.listAllItems()]).pipe(
               switchMap(([fLists, items]) => of({ rooms, furniture: (fLists as Furniture[][]).flat(), items }))
             );
           })

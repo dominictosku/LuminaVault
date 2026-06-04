@@ -1,5 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
+import { EMPTY, Observable, expand, reduce } from 'rxjs';
 import { API_BASE } from '../api-base';
 import {
   Container,
@@ -8,10 +9,20 @@ import {
   House,
   Item,
   ItemInput,
+  ItemPage,
   ItemPhoto,
   Room,
   StatsSummary,
 } from '../models';
+
+export interface ItemQuery {
+  q?: string;
+  furnitureId?: number;
+  containerId?: number;
+  roomId?: number;
+  cursor?: string | null;
+  pageSize?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class InventoryApi {
@@ -90,13 +101,26 @@ export class InventoryApi {
     return this.http.delete<void>(`${API_BASE}/api/containers/${id}`);
   }
 
-  listItems(opts: { q?: string; furnitureId?: number; containerId?: number; roomId?: number } = {}) {
+  listItems(opts: ItemQuery = {}) {
     let params = new HttpParams();
     if (opts.q) params = params.set('q', opts.q);
     if (opts.furnitureId) params = params.set('furnitureId', opts.furnitureId);
     if (opts.containerId) params = params.set('containerId', opts.containerId);
     if (opts.roomId) params = params.set('roomId', opts.roomId);
-    return this.http.get<Item[]>(`${API_BASE}/api/items`, { params });
+    if (opts.cursor) params = params.set('cursor', opts.cursor);
+    if (opts.pageSize) params = params.set('pageSize', opts.pageSize);
+    return this.http.get<ItemPage>(`${API_BASE}/api/items`, { params });
+  }
+
+  /// Pages through every matching item by following the cursor. The 3D planner needs
+  /// the complete set to place things in the scene, so it pages here instead of taking
+  /// the first page. Uses the server's max page size to minimise round trips.
+  listAllItems(opts: ItemQuery = {}): Observable<Item[]> {
+    const pageSize = 500;
+    return this.listItems({ ...opts, pageSize }).pipe(
+      expand(page => (page.nextCursor ? this.listItems({ ...opts, pageSize, cursor: page.nextCursor }) : EMPTY)),
+      reduce((all, page) => all.concat(page.items), [] as Item[]),
+    );
   }
 
   getItem(id: number) {

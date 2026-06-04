@@ -86,5 +86,13 @@
         </a>
       }
     </div>
+    @if (nextCursor()) {
+      <div class="flex justify-center mt-6">
+        <button type="button" class="btn btn-ghost text-sm" (click)="loadMore()" [disabled]="loadingMore()">
+          @if (loadingMore()) { <i class="pi pi-spin pi-spinner"></i> Loading… }
+          @else { <i class="pi pi-arrow-down"></i> Load more assets }
+        </button>
+      </div>
+    }
   }
 </div>

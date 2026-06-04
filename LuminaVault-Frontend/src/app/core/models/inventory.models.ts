@@ -64,6 +64,11 @@ export interface Item {
   modelUrl?: string | null;
 }
 
+export interface ItemPage {
+  items: Item[];
+  nextCursor: string | null;
+}
+
 export interface ItemInput {
   name: string;
   category?: string | null;

@@ -43,9 +43,14 @@ public static class ItemEndpoints
     {
         var g = app.MapGroup("/api/items").RequireAuthorization().WithTags("Items");
 
-        g.MapGet("/", async (AppDbContext db, string? q, int? furnitureId, int? containerId, int? roomId) =>
+        g.MapGet("/", async (
+            AppDbContext db, string? q, int? furnitureId, int? containerId, int? roomId,
+            string? cursor, int? pageSize) =>
         {
+            // Read-only list: opt out of change tracking so we don't pay the per-row tax
+            // on what can be the largest result set in the app.
             var query = db.Items
+                .AsNoTracking()
                 .Include(i => i.Photos)
                 .Include(i => i.Room)
                 .Include(i => i.Furniture).ThenInclude(f => f!.Room)
@@ -69,8 +74,36 @@ public static class ItemEndpoints
                 i.RoomId == roomId ||
                 (i.Furniture != null && i.Furniture.RoomId == roomId));
 
-            var items = await query.OrderByDescending(i => i.UpdatedAt).Take(500).ToListAsync();
-            return Results.Ok(items.Select(MapToDto));
+            // Keyset pagination on (UpdatedAt DESC, Id DESC) — same shape as the
+            // transactions list. Replaces a silent Take(500) that capped large
+            // inventories without telling anyone.
+            if (ItemCursor.TryDecode(cursor, out var cursorUpdated, out var cursorId))
+            {
+                query = query.Where(i =>
+                    i.UpdatedAt < cursorUpdated ||
+                    (i.UpdatedAt == cursorUpdated && i.Id < cursorId));
+            }
+
+            var size = Math.Clamp(pageSize ?? 100, 1, 500);
+            var page = await query
+                .OrderByDescending(i => i.UpdatedAt)
+                .ThenByDescending(i => i.Id)
+                // +1 to detect whether more rows exist beyond this page without a separate count.
+                .Take(size + 1)
+                .ToListAsync();
+
+            string? nextCursor = null;
+            if (page.Count > size)
+            {
+                page.RemoveAt(page.Count - 1);
+                var last = page[^1];
+                nextCursor = ItemCursor.Encode(last.UpdatedAt, last.Id);
+            }
+            return Results.Ok(new
+            {
+                items = page.Select(MapToDto),
+                nextCursor,
+            });
         });
 
         g.MapGet("/{id:int}", async (int id, AppDbContext db) =>
@@ -241,4 +274,36 @@ public static class ItemEndpoints
             i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
     }
 
+}
+
+/// Opaque base64 cursor that pins keyset pagination to (UpdatedAt, Id). The timestamp
+/// is encoded as ticks for full precision — unlike the date-only transaction cursor,
+/// item UpdatedAt carries a time component. Bad cursors decode to no-op rather than
+/// 400, so a stale or fabricated cursor just yields the first page.
+internal static class ItemCursor
+{
+    public static string Encode(DateTime updatedAt, int id) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+            $"{updatedAt.Ticks}|{id}"));
+
+    public static bool TryDecode(string? cursor, out DateTime updatedAt, out int id)
+    {
+        updatedAt = default;
+        id = 0;
+        if (string.IsNullOrWhiteSpace(cursor)) return false;
+        try
+        {
+            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            var parts = decoded.Split('|', 2);
+            if (parts.Length != 2) return false;
+            if (!long.TryParse(parts[0], out var ticks)) return false;
+            if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks) return false;
+            updatedAt = new DateTime(ticks);
+            return int.TryParse(parts[1], out id);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
