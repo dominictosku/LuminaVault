@@ -28,6 +28,7 @@ import { parseReceipt } from '../../core/receipt-ocr';
 import { ReceiptOcr } from '../../core/receipt-ocr.service';
 import { FilterPreset } from '../../shared/filters/filter-presets.service';
 import { FilterStateController } from '../../shared/filters/filter-state.controller';
+import { isSplitBalanced, remainingToAllocate, sumSplits } from './split-math';
 
 type TransactionFilters = {
   q: string;
@@ -121,13 +122,9 @@ export class TransactionsComponent {
   // Splits live in their own signal so the form can mutate them without re-creating the model.
   splits = signal<TransactionSplitInput[]>([]);
   canSplit = computed(() => supportsSplits(this.model.kind));
-  splitsTotal = computed(() =>
-    this.splits().reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
-  );
-  splitsRemaining = computed(() =>
-    Number(((Number(this.model.amount) || 0) - this.splitsTotal()).toFixed(2))
-  );
-  splitsBalanced = computed(() => Math.abs(this.splitsRemaining()) < 0.005);
+  splitsTotal = computed(() => sumSplits(this.splits()));
+  splitsRemaining = computed(() => remainingToAllocate(this.model.amount, this.splits()));
+  splitsBalanced = computed(() => isSplitBalanced(this.splitsRemaining()));
 
   filteredTransactions = computed(() => {
     const month = this.monthFilter();
