@@ -75,7 +75,7 @@
 - **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
 
 ### 🔐 Platform
-- **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage
+- **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage. Registration is open only until the first account is created; every later `/api/auth/register` is rejected with `409 Conflict`, so the instance can never grow a second user
 - **Two-factor authentication (TOTP)** — optional authenticator-app second factor (Google Authenticator, Authy, 1Password…) with QR enrolment, 10 one-time recovery codes, and a password-confirmed disable; login becomes a two-step password → code challenge once enabled
 - **Security controls** — tight per-IP login throttling (10/min) plus register throttling, in-app password change, hardening response headers (CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) on both the API and the SPA shell, and proxy-aware client-IP resolution so rate limiting throttles the real caller rather than the reverse proxy
 - **Glassmorphism UI** — dark, frosted-glass design with smooth transitions, built on PrimeNG + Tailwind v4

@@ -2,7 +2,7 @@ import { HttpResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataTransferApi } from '../../core/data-access/data-transfer-api';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
 import {
   BankCsvImportResult,
   BankCsvPreviewResult,
@@ -22,7 +22,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 })
 export class DataComponent {
   private api = inject(DataTransferApi);
-  private financeApi = inject(FinanceApi);
+  private financeApi = inject(AccountsApi);
   private toast = inject(ToastService);
   exporting = signal(false);
   backingUp = signal(false);

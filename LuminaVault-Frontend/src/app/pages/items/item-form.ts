@@ -2,6 +2,7 @@ import { Component, inject, signal, effect, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { forkJoin, of, switchMap } from 'rxjs';
+import { AttachmentsApi } from '../../core/data-access/attachments-api';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import { AssetCategory, Container, DocumentAttachment, Furniture, House, Item, Room } from '../../core/models';
@@ -18,6 +19,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 })
 export class ItemFormComponent {
   protected api = inject(InventoryApi);
+  private attachmentsApi = inject(AttachmentsApi);
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private route = inject(ActivatedRoute);
@@ -220,14 +222,14 @@ export class ItemFormComponent {
   }
 
   removeAttachment(id: number) {
-    this.api.deleteAttachment(id).subscribe(() => {
+    this.attachmentsApi.deleteAttachment(id).subscribe(() => {
       this.toast.success('Document removed.');
       if (this.id()) this.api.getItem(this.id()!).subscribe(i => this.current.set(i));
     });
   }
 
   openAttachment(attachment: DocumentAttachment) {
-    this.media.open(this.api.attachmentUrl(attachment));
+    this.media.open(this.attachmentsApi.attachmentUrl(attachment));
   }
 
   onUploadModel(input: HTMLInputElement) {

@@ -3,7 +3,9 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { AttachmentsApi } from '../../core/data-access/attachments-api';
+import { SubscriptionsApi } from '../../core/data-access/subscriptions-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   SUBSCRIPTION_STATUSES,
@@ -49,7 +51,9 @@ const DEFAULT_FILTERS: SubscriptionFilters = {
   providers: [FilterStateController, CrudFormController],
 })
 export class SubscriptionsComponent {
-  protected api = inject(FinanceApi);
+  protected api = inject(SubscriptionsApi);
+  private accountsApi = inject(AccountsApi);
+  private attachmentsApi = inject(AttachmentsApi);
   private settingsApi = inject(SettingsApi);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -162,7 +166,7 @@ export class SubscriptionsComponent {
   fetchAll() {
     this.loading.set(true);
     forkJoin({
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
       subscriptions: this.api.listSubscriptions(true),
       financeCategories: this.settingsApi.listFinanceCategories(),
     }).subscribe({
@@ -253,14 +257,14 @@ export class SubscriptionsComponent {
   }
 
   removeAttachment(id: number) {
-    this.api.deleteAttachment(id).subscribe(() => {
+    this.attachmentsApi.deleteAttachment(id).subscribe(() => {
       this.toast.success('Document removed.');
       this.fetchAll();
     });
   }
 
   openAttachment(attachment: DocumentAttachment) {
-    this.media.open(this.api.attachmentUrl(attachment));
+    this.media.open(this.attachmentsApi.attachmentUrl(attachment));
   }
 
   generateTransaction(status: 'Pending' | 'Cleared') {

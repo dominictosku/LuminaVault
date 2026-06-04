@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { GoalsApi } from '../../core/data-access/goals-api';
 import {
   FinanceAccount,
   SAVINGS_GOAL_STATUSES,
@@ -19,7 +20,8 @@ import { CrudFormController } from '../../shared/crud-form/crud-form.controller'
   providers: [CrudFormController],
 })
 export class GoalsComponent {
-  private api = inject(FinanceApi);
+  private api = inject(GoalsApi);
+  private accountsApi = inject(AccountsApi);
   protected crud = inject<CrudFormController<SavingsGoalInput, SavingsGoal>>(CrudFormController);
   // Pass-through signals so the template keeps reading `editingId()`, `saving()`, `error()`
   // unchanged — the controller is an implementation detail of the component.
@@ -64,7 +66,7 @@ export class GoalsComponent {
     this.loading.set(true);
     forkJoin({
       goals: this.api.listGoals(this.includeInactive()),
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
     }).subscribe({
       next: r => {
         this.goals.set(r.goals);

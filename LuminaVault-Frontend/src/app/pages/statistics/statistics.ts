@@ -1,6 +1,6 @@
 import { CurrencyPipe, DatePipe, DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { FinanceSummaryApi } from '../../core/data-access/finance-summary-api';
 import { FinanceStatistics } from '../../core/models';
 import { FinanceSankeyComponent, FinanceSankeyRow } from '../../shared/sankey/finance-sankey';
 
@@ -14,7 +14,7 @@ type SubscriptionRow = { category: string; monthlyAmount: number; annualAmount: 
   styleUrl: './statistics.scss'
 })
 export class StatisticsComponent {
-  private api = inject(FinanceApi);
+  private api = inject(FinanceSummaryApi);
   stats = signal<FinanceStatistics | null>(null);
 
   sankeyIncome = computed<FinanceSankeyRow[]>(() =>

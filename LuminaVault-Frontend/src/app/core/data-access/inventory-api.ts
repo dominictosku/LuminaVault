@@ -141,14 +141,6 @@ export class InventoryApi {
     return this.http.post<DocumentAttachment>(`${API_BASE}/api/items/${itemId}/attachments`, fd);
   }
 
-  deleteAttachment(id: number) {
-    return this.http.delete<void>(`${API_BASE}/api/attachments/${id}`);
-  }
-
-  attachmentUrl(attachment: DocumentAttachment) {
-    return `${API_BASE}${attachment.url}`;
-  }
-
   stats() {
     return this.http.get<StatsSummary>(`${API_BASE}/api/items/stats/summary`);
   }

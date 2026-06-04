@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { HoldingsApi } from '../../core/data-access/holdings-api';
 import { aggregateHoldingsByAccount, holdingsTotals } from '../../core/finance-math';
 import {
   FinanceAccount,
@@ -21,7 +22,8 @@ import { ToastService } from '../../shared/toast/toast.service';
   templateUrl: './holdings.html',
 })
 export class HoldingsComponent {
-  private api = inject(FinanceApi);
+  private api = inject(HoldingsApi);
+  private accountsApi = inject(AccountsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
 
@@ -60,7 +62,7 @@ export class HoldingsComponent {
     forkJoin({
       holdings: this.api.listHoldings(),
       analytics: this.api.holdingAnalytics(),
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
       providers: this.api.listPriceProviders(),
     }).subscribe({
       next: r => {

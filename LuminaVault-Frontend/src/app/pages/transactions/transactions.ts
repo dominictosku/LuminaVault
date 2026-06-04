@@ -3,7 +3,8 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { TransactionsApi } from '../../core/data-access/transactions-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import {
   CASH_TRANSACTION_KINDS,
@@ -45,7 +46,8 @@ const DEFAULT_FILTERS: TransactionFilters = { q: '', account: null, kind: null, 
   providers: [FilterStateController],
 })
 export class TransactionsComponent {
-  private api = inject(FinanceApi);
+  private api = inject(TransactionsApi);
+  private accountsApi = inject(AccountsApi);
   private settingsApi = inject(SettingsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
@@ -150,7 +152,7 @@ export class TransactionsComponent {
     this.kindFilter = (params.get('kind') as FinanceTransactionKind | null) || null;
     this.monthFilter.set(params.get('month') ?? '');
     forkJoin({
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
       transactions: this.api.listFinanceTransactions({
         q: this.query.trim() || undefined,
         accountId: this.accountFilter || undefined,

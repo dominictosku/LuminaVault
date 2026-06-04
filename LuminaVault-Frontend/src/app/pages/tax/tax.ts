@@ -1,7 +1,7 @@
 import { CurrencyPipe, DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { TaxApi } from '../../core/data-access/tax-api';
 import { TaxExport } from '../../core/models';
 
 @Component({
@@ -10,7 +10,7 @@ import { TaxExport } from '../../core/models';
   templateUrl: './tax.html',
 })
 export class TaxComponent {
-  private api = inject(FinanceApi);
+  private api = inject(TaxApi);
 
   year = signal(new Date().getFullYear() - 1);
   bundle = signal<TaxExport | null>(null);

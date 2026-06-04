@@ -1,7 +1,8 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { BalanceSnapshotsApi } from '../../core/data-access/balance-snapshots-api';
 import {
   AccountBalanceSnapshot,
   AccountBalanceSnapshotInput,
@@ -20,7 +21,8 @@ import { ToastService } from '../../shared/toast/toast.service';
   styleUrl: './accounts.scss'
 })
 export class AccountsComponent {
-  private api = inject(FinanceApi);
+  private accountsApi = inject(AccountsApi);
+  private snapshotsApi = inject(BalanceSnapshotsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
   accounts = signal<FinanceAccount[]>([]);
@@ -44,7 +46,7 @@ export class AccountsComponent {
 
   fetch() {
     this.loading.set(true);
-    this.api.listFinanceAccounts().subscribe({
+    this.accountsApi.listFinanceAccounts().subscribe({
       next: accounts => {
         this.accounts.set(accounts);
         this.loading.set(false);
@@ -55,7 +57,7 @@ export class AccountsComponent {
   }
 
   fetchSnapshots() {
-    this.api.listBalanceSnapshots(this.editingId() ?? undefined).subscribe(s => this.snapshots.set(s));
+    this.snapshotsApi.listBalanceSnapshots(this.editingId() ?? undefined).subscribe(s => this.snapshots.set(s));
   }
 
   newAccount() {
@@ -95,8 +97,8 @@ export class AccountsComponent {
     };
     const isUpdate = this.editingId() != null;
     const op = isUpdate
-      ? this.api.updateFinanceAccount(this.editingId()!, input)
-      : this.api.createFinanceAccount(input);
+      ? this.accountsApi.updateFinanceAccount(this.editingId()!, input)
+      : this.accountsApi.createFinanceAccount(input);
     op.subscribe({
       next: () => {
         this.saving.set(false);
@@ -117,7 +119,7 @@ export class AccountsComponent {
       confirmText: 'Delete',
     });
     if (!confirmed) return;
-    this.api.deleteFinanceAccount(this.editingId()!).subscribe(() => {
+    this.accountsApi.deleteFinanceAccount(this.editingId()!).subscribe(() => {
       this.toast.success('Account removed.');
       this.reset();
       this.fetch();
@@ -142,7 +144,7 @@ export class AccountsComponent {
       isReconciled: true,
       notes: this.snapshotNotes,
     };
-    this.api.createBalanceSnapshot(input).subscribe({
+    this.snapshotsApi.createBalanceSnapshot(input).subscribe({
       next: () => {
         this.snapshotNotes = '';
         this.toast.success('Balance snapshot saved.');
@@ -159,7 +161,7 @@ export class AccountsComponent {
       confirmText: 'Delete',
     });
     if (!confirmed) return;
-    this.api.deleteBalanceSnapshot(snapshot.id).subscribe(() => {
+    this.snapshotsApi.deleteBalanceSnapshot(snapshot.id).subscribe(() => {
       this.toast.success('Snapshot deleted.');
       this.fetch();
     });

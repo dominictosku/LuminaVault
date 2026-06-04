@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { MonthlySummariesApi } from '../../core/data-access/monthly-summaries-api';
 import {
   FinanceAccount,
   MonthlyAccountSummary,
@@ -18,7 +19,8 @@ import { ToastService } from '../../shared/toast/toast.service';
   styleUrl: './monthly-summaries.scss'
 })
 export class MonthlySummariesComponent {
-  private api = inject(FinanceApi);
+  private api = inject(MonthlySummariesApi);
+  private accountsApi = inject(AccountsApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
   accounts = signal<FinanceAccount[]>([]);
@@ -49,7 +51,7 @@ export class MonthlySummariesComponent {
 
   constructor() {
     forkJoin({
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
       summaries: this.api.listMonthlySummaries(),
     }).subscribe({
       next: r => {

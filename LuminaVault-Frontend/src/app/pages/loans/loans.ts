@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe, DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { LoansApi } from '../../core/data-access/loans-api';
 import {
   FinanceAccount,
   Loan,
@@ -20,7 +21,8 @@ import { CrudFormController } from '../../shared/crud-form/crud-form.controller'
   providers: [CrudFormController],
 })
 export class LoansComponent {
-  private api = inject(FinanceApi);
+  private api = inject(LoansApi);
+  private accountsApi = inject(AccountsApi);
   protected crud = inject<CrudFormController<LoanInput, Loan>>(CrudFormController);
   protected editingId = this.crud.editingId;
   protected saving = this.crud.saving;
@@ -77,7 +79,7 @@ export class LoansComponent {
     this.loading.set(true);
     forkJoin({
       loans: this.api.listLoans(this.includeClosed()),
-      accounts: this.api.listFinanceAccounts(),
+      accounts: this.accountsApi.listFinanceAccounts(),
     }).subscribe({
       next: r => {
         this.loans.set(r.loans);

@@ -2,7 +2,8 @@ import { CurrencyPipe, DatePipe, NgClass } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { AccountsApi } from '../../core/data-access/accounts-api';
+import { ForecastApi } from '../../core/data-access/forecast-api';
 import { CashFlowForecast, FinanceAccount, ForecastEvent } from '../../core/models';
 
 const CHART_WIDTH = 1000;
@@ -16,7 +17,8 @@ const PAD_Y = 16;
   templateUrl: './forecast.html',
 })
 export class ForecastComponent {
-  private api = inject(FinanceApi);
+  private api = inject(ForecastApi);
+  private accountsApi = inject(AccountsApi);
 
   forecast = signal<CashFlowForecast | null>(null);
   accounts = signal<FinanceAccount[]>([]);
@@ -64,7 +66,7 @@ export class ForecastComponent {
   hasNegativeProjection = computed(() => (this.forecast()?.lowestBalance ?? 0) < 0);
 
   constructor() {
-    this.api.listFinanceAccounts().subscribe({ next: a => this.accounts.set(a) });
+    this.accountsApi.listFinanceAccounts().subscribe({ next: a => this.accounts.set(a) });
     this.fetch();
   }
 

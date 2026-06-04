@@ -1,7 +1,8 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { FinanceSummaryApi } from '../../core/data-access/finance-summary-api';
+import { NetWorthApi } from '../../core/data-access/net-worth-api';
 import { FinanceSummary, NetWorthSnapshot } from '../../core/models';
 import { ToastService } from '../../shared/toast/toast.service';
 
@@ -17,7 +18,8 @@ const CHART_PAD_Y = 12;
   styleUrl: './dashboard.scss'
 })
 export class DashboardComponent {
-  private api = inject(FinanceApi);
+  private summaryApi = inject(FinanceSummaryApi);
+  private netWorthApi = inject(NetWorthApi);
   private toast = inject(ToastService);
   summary = signal<FinanceSummary | null>(null);
   netWorthHistory = signal<NetWorthSnapshot[]>([]);
@@ -65,13 +67,13 @@ export class DashboardComponent {
   });
 
   constructor() {
-    this.api.financeSummary().subscribe({ next: s => this.summary.set(s) });
+    this.summaryApi.financeSummary().subscribe({ next: s => this.summary.set(s) });
     this.loadHistory();
   }
 
   loadHistory() {
     this.netWorthLoading.set(true);
-    this.api.netWorthHistory().subscribe({
+    this.netWorthApi.netWorthHistory().subscribe({
       next: rows => {
         this.netWorthHistory.set(rows);
         this.netWorthLoading.set(false);
@@ -82,7 +84,7 @@ export class DashboardComponent {
 
   captureSnapshot() {
     this.capturingSnapshot.set(true);
-    this.api.captureNetWorthSnapshot().subscribe({
+    this.netWorthApi.captureNetWorthSnapshot().subscribe({
       next: snapshot => {
         this.netWorthHistory.update(list => {
           const without = list.filter(s => s.snapshotDate.substring(0, 10) !== snapshot.snapshotDate.substring(0, 10));

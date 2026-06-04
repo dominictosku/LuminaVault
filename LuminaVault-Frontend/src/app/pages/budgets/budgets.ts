@@ -2,7 +2,7 @@ import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
-import { FinanceApi } from '../../core/data-access/finance-api';
+import { BudgetsApi } from '../../core/data-access/budgets-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
 import { FinanceBudget, FinanceBudgetInput, FinanceBudgetOverview, FinanceCategory } from '../../core/models';
 import { CrudFormController } from '../../shared/crud-form/crud-form.controller';
@@ -15,7 +15,7 @@ import { CrudFormController } from '../../shared/crud-form/crud-form.controller'
   providers: [CrudFormController],
 })
 export class BudgetsComponent {
-  private finance = inject(FinanceApi);
+  private finance = inject(BudgetsApi);
   private settings = inject(SettingsApi);
   protected crud = inject<CrudFormController<FinanceBudgetInput, FinanceBudget>>(CrudFormController);
   protected editingId = this.crud.editingId;
