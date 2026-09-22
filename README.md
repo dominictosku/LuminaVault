@@ -414,6 +414,24 @@ The planner fetches `/models/{Kind}.glb` at runtime and falls back to the built-
 
 <br>
 
+## License
+
+LuminaVault's original code is licensed under the [MIT License](LICENSE).
+Third-party dependencies and bundled assets retain their own licenses; see
+[Third-party notices](THIRD_PARTY_NOTICES.md) for license texts and attribution.
+GSAP is included under its separate Standard No Charge license, so the complete
+dependency stack is not entirely open source.
+
+Frontend builds include `/LICENSE.txt` and `/THIRD_PARTY_NOTICES.txt`, together
+with the OCR model's license and provenance under `/tesseract/lang/`. Production
+Docker images also include Angular's extracted `/3rdpartylicenses.txt`.
+Backend builds and published output include `LICENSE` and `THIRD_PARTY_NOTICES.txt`.
+
+When upgrading dependencies, regenerate the checked-in notices as described in
+[the notice maintenance instructions](THIRD_PARTY_NOTICES.md#maintaining-the-notices).
+
+<br>
+
 <div align="center">
 
 Made with ☕, Three.js and a slightly obsessive spreadsheet habit

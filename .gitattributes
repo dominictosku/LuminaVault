@@ -1,0 +1,4 @@
+# Preserve downloaded upstream bytes so the recorded SHA-256 hashes remain valid.
+licenses/upstream/* -text
+# Preserve vendor rich-text notices without newline conversion.
+*.rtf -text

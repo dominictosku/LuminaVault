@@ -26,7 +26,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore LuminaVault-Backend/LuminaVault-Backend.csproj LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj
+        run: dotnet restore LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj
 
       - name: Build
         run: dotnet build LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj --no-restore --configuration Release
@@ -62,3 +62,29 @@ jobs:
 
       - name: Build
         run: npm run build -- --configuration development
+
+  licenses:
+    name: License notice consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: LuminaVault-Frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci --prefix LuminaVault-Frontend
+
+      - name: Restore backend dependencies
+        run: dotnet restore LuminaVault-Backend/LuminaVault-Backend.csproj
+
+      - name: Verify committed licenses and notices
+        run: python3 scripts/update-license-notices.py --check

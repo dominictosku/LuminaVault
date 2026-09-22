@@ -1,0 +1,9 @@
+English OCR language model for Tesseract.js
+
+File: eng.traineddata.gz (4.0.0_best_int)
+Upstream: naptha/tessdata, Tesseract OCR project and contributors
+Source: https://github.com/naptha/tessdata/blob/806cd9adc8c6e8abc11c782db1818c990576bebc/4.0.0_best_int/eng.traineddata.gz
+SHA-256: 45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91
+License: Apache-2.0; see LICENSE.txt in this directory.
+The compressed file is redistributed unchanged.
+Additional worker, WASM and native-library notices: /THIRD_PARTY_NOTICES.txt
