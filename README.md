@@ -3,7 +3,7 @@
 # ✦ LuminaVault
 
 <p>
-  <img alt="Not production ready" src="https://img.shields.io/badge/Not_production_ready-redstyle=for-the-badge">
+  <img alt="Not production ready" src="https://img.shields.io/badge/Not_production_ready-red?style=for-the-badge">
   <br />
   <strong>This is my personal learning project and is not ready for production use.</strong>
 </p>
