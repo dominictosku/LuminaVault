@@ -2,6 +2,12 @@
 
 # ✦ LuminaVault
 
+<p>
+  <img alt="Not production ready" src="https://img.shields.io/badge/Not_production_ready-redstyle=for-the-badge">
+  <br />
+  <strong>This is my personal learning project and is not ready for production use.</strong>
+</p>
+
 **Your personal vault for everything you own and everything you spend** — a self-hosted home inventory with an interactive 3D planner, paired with a full personal-finance suite.
 
 [![Stars](https://img.shields.io/github/stars/dominictosku/LuminaVault?style=for-the-badge&color=7c3aed&labelColor=0f0f1a)](https://github.com/dominictosku/LuminaVault/stargazers)
