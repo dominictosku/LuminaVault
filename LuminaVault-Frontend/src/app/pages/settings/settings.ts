@@ -16,10 +16,17 @@ import {
   TwoFactorSetup,
   TwoFactorStatus,
 } from '../../core/models';
+import {
+  getConfiguredServerUrl,
+  setConfiguredServerUrl,
+  testServerConnection,
+  isTauriEnvironment,
+} from '../../core/api-base';
+import { DesktopNotificationService } from '../../core/desktop-notification.service';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { ToastService } from '../../shared/toast/toast.service';
 
-type SettingsTab = 'assets' | 'finance' | 'rules' | 'rates' | 'security';
+type SettingsTab = 'assets' | 'finance' | 'rules' | 'rates' | 'security' | 'connection';
 type EditableCategory = AssetCategory | FinanceCategory;
 type CategoryInput = AssetCategoryInput | FinanceCategoryInput;
 
@@ -35,6 +42,7 @@ export class SettingsComponent {
   private authApi = inject(AuthApi);
   private confirmDialog = inject(ConfirmDialogService);
   private toast = inject(ToastService);
+  private desktopNotification = inject(DesktopNotificationService);
   tab = signal<SettingsTab>('assets');
   assetCategories = signal<AssetCategory[]>([]);
   financeCategories = signal<FinanceCategory[]>([]);
@@ -64,7 +72,22 @@ export class SettingsComponent {
     if (this.tab() === 'rules') return 'Auto-categorization rules';
     if (this.tab() === 'rates') return 'Exchange rates';
     if (this.tab() === 'security') return 'Security';
+    if (this.tab() === 'connection') return 'Server & Sync Connection';
     return 'Transaction & subscription categories';
+  });
+
+  readonly isDesktop = isTauriEnvironment();
+  serverUrlInput = signal(getConfiguredServerUrl());
+  serverTesting = signal(false);
+  serverTestResult = signal<{ success: boolean; message: string; hasUser?: boolean } | null>(null);
+  notificationPermission = signal<boolean>(false);
+
+  readonly displayServerUrl = computed(() => {
+    const configured = getConfiguredServerUrl();
+    if (configured) return configured;
+    if (this.isDesktop) return 'http://localhost:5256';
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return 'Same Origin';
   });
 
   currentCategories = computed<EditableCategory[]>(() =>
@@ -79,6 +102,7 @@ export class SettingsComponent {
   constructor() {
     this.fetch();
     this.loadTwoFa();
+    this.checkNotificationPermission();
   }
 
   setTab(tab: SettingsTab) {
@@ -404,6 +428,53 @@ export class SettingsComponent {
         this.error.set(e?.error?.error ?? 'Password change failed.');
       },
     });
+  }
+
+  async checkNotificationPermission() {
+    this.notificationPermission.set(await this.desktopNotification.isPermissionGranted());
+  }
+
+  async testServer() {
+    this.serverTesting.set(true);
+    this.serverTestResult.set(null);
+    const res = await testServerConnection(this.serverUrlInput());
+    this.serverTesting.set(false);
+    this.serverTestResult.set(res);
+  }
+
+  saveServer() {
+    setConfiguredServerUrl(this.serverUrlInput());
+    this.toast.success('Server connection URL updated.');
+    this.testServer();
+  }
+
+  resetServer() {
+    this.serverUrlInput.set('');
+    setConfiguredServerUrl('');
+    this.serverTestResult.set(null);
+    this.toast.info('Server URL reset to default.');
+  }
+
+  async requestNotificationPermission() {
+    const granted = await this.desktopNotification.requestPermission();
+    this.notificationPermission.set(granted);
+    if (granted) {
+      this.toast.success('Desktop notification permission granted.');
+    } else {
+      this.toast.error('Notification permission was not granted.');
+    }
+  }
+
+  async sendTestNotification() {
+    const ok = await this.desktopNotification.send({
+      title: 'LuminaVault Test',
+      body: 'Desktop notifications are configured and working properly.',
+    });
+    if (ok) {
+      this.toast.success('Test notification sent.');
+    } else {
+      this.toast.error('Could not send notification. Ensure permissions are granted.');
+    }
   }
 
   private defaultModel(): CategoryInput {

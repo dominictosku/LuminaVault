@@ -1,6 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import {
+  getConfiguredServerUrl,
+  setConfiguredServerUrl,
+  testServerConnection,
+  isTauriEnvironment,
+} from '../../core/api-base';
 import { AuthService } from '../../core/auth.service';
 import { AuthApi } from '../../core/data-access/auth-api';
 
@@ -28,14 +34,69 @@ export class LoginComponent {
   step = signal<'credentials' | 'twoFactor'>('credentials');
   useRecovery = signal(false);
 
+  // Server connection configuration state
+  showServerConfig = signal(false);
+  serverUrlInput = signal(getConfiguredServerUrl());
+  serverConnected = signal<boolean | null>(null);
+  testingConnection = signal(false);
+  testResult = signal<{ success: boolean; message: string } | null>(null);
+  readonly isDesktop = isTauriEnvironment();
+
+  readonly displayServerUrl = computed(() => {
+    const configured = getConfiguredServerUrl();
+    if (configured) return configured;
+    if (this.isDesktop) return 'http://localhost:5256';
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return 'Same Origin';
+  });
+
   constructor() {
+    this.checkServerStatus();
+  }
+
+  checkServerStatus() {
     this.api.authStatus().subscribe({
       next: s => {
+        this.serverConnected.set(true);
         this.mode.set(s.hasUser ? 'login' : 'register');
         this.requiresSetupSecret.set(s.requiresSetupSecret);
+        if (this.error()?.startsWith('Cannot reach the server')) {
+          this.error.set(null);
+        }
       },
-      error: () => this.error.set('Cannot reach the server. Is the backend running?'),
+      error: () => {
+        this.serverConnected.set(false);
+        this.error.set(`Cannot reach the server at ${this.displayServerUrl()}. Is the backend running?`);
+      },
     });
+  }
+
+  toggleServerConfig() {
+    this.serverUrlInput.set(getConfiguredServerUrl());
+    this.testResult.set(null);
+    this.showServerConfig.update(v => !v);
+  }
+
+  async testConnection() {
+    this.testingConnection.set(true);
+    this.testResult.set(null);
+    const res = await testServerConnection(this.serverUrlInput());
+    this.testingConnection.set(false);
+    this.testResult.set({ success: res.success, message: res.message });
+  }
+
+  saveServerConfig() {
+    setConfiguredServerUrl(this.serverUrlInput());
+    this.showServerConfig.set(false);
+    this.checkServerStatus();
+  }
+
+  resetServerConfig() {
+    this.serverUrlInput.set('');
+    setConfiguredServerUrl('');
+    this.testResult.set(null);
+    this.showServerConfig.set(false);
+    this.checkServerStatus();
   }
 
   submit() {

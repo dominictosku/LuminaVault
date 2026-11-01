@@ -39,6 +39,22 @@ public class SecurityHeadersTests : IClassFixture<LuminaVaultFactory>
         Assert.Equal("DENY", Header(resp, "X-Frame-Options"));
     }
 
+    [Theory]
+    [InlineData("http://localhost:4200")]
+    [InlineData("tauri://localhost")]
+    [InlineData("http://tauri.localhost")]
+    [InlineData("https://tauri.localhost")]
+    public async Task Cors_headers_are_returned_for_allowed_desktop_and_dev_origins(string origin)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Options, "/api/auth/status");
+        req.Headers.Add("Origin", origin);
+        req.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var resp = await _api.Raw.SendAsync(req);
+
+        Assert.Equal(origin, Header(resp, "Access-Control-Allow-Origin"));
+    }
+
     private static string Header(HttpResponseMessage resp, string name)
     {
         if (resp.Headers.TryGetValues(name, out var values))

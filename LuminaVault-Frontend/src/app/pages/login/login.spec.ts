@@ -80,4 +80,21 @@ describe('LoginComponent two-factor challenge', () => {
     expect(component.step()).toBe('credentials');
     expect(component.error()).toBe('Invalid credentials.');
   });
+
+  it('manages server connection configuration', () => {
+    const { component } = create();
+    expect(component.showServerConfig()).toBe(false);
+
+    component.toggleServerConfig();
+    expect(component.showServerConfig()).toBe(true);
+
+    component.serverUrlInput.set('https://vault.example.com');
+    component.saveServerConfig();
+    expect(component.showServerConfig()).toBe(false);
+    expect(localStorage.getItem('luminavault_server_url')).toBe('https://vault.example.com');
+
+    component.toggleServerConfig();
+    component.resetServerConfig();
+    expect(localStorage.getItem('luminavault_server_url')).toBeNull();
+  });
 });

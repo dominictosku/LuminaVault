@@ -15,7 +15,7 @@ namespace LuminaVault.Hosting;
 
 public static class LuminaVaultHostingExtensions
 {
-    private const string DevCors = "DevCors";
+    private const string CorsPolicyName = "LuminaVaultCors";
 
     // The API only ever returns JSON or file bytes — never HTML — so a `default-src 'none'`
     // policy is safe and stops a content-sniffed response (e.g. an inline item photo) from
@@ -65,8 +65,27 @@ public static class LuminaVaultHostingExtensions
         // test suite raises it because its shared fixtures log in far more than a human would.
         var loginPermitLimit = configuration.GetValue("RateLimiting:LoginPermitLimit", 10);
 
-        services.AddCors(o => o.AddPolicy(DevCors, p => p
-            .WithOrigins("http://localhost:4200", "https://localhost:4200")
+        var allowedOrigins = new List<string>
+        {
+            "http://localhost:4200",
+            "https://localhost:4200",
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "https://tauri.localhost"
+        };
+
+        var customOrigins = Environment.GetEnvironmentVariable("LUMINA_CORS_ORIGINS");
+        if (!string.IsNullOrWhiteSpace(customOrigins))
+        {
+            foreach (var origin in customOrigins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+                    allowedOrigins.Add(origin);
+            }
+        }
+
+        services.AddCors(o => o.AddPolicy(CorsPolicyName, p => p
+            .WithOrigins(allowedOrigins.ToArray())
             .AllowAnyHeader()
             .AllowAnyMethod()));
 
@@ -266,8 +285,9 @@ public static class LuminaVaultHostingExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
-            app.UseCors(DevCors);
         }
+
+        app.UseCors(CorsPolicyName);
 
         app.UseAuthentication();
         app.UseAuthorization();

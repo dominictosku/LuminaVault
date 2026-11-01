@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LuminaVault",
+  "version": "0.1.0",
+  "identifier": "com.luminavault.desktop",
+  "build": {
+    "frontendDist": "../dist/LuminaVault/browser",
+    "devUrl": "http://localhost:4200",
+    "beforeDevCommand": "npm start",
+    "beforeBuildCommand": "CI=true npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "LuminaVault",
+        "width": 1280,
+        "height": 850,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

@@ -5,9 +5,14 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "CI=true ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:appimage": "tauri build --bundles appimage",
+    "tauri:deb": "tauri build --bundles deb"
   },
   "prettier": {
     "printWidth": 100,
@@ -47,6 +52,9 @@
     "@angular/cli": "^21.2.9",
     "@angular/compiler-cli": "^21.2.11",
     "@tailwindcss/postcss": "^4.2.4",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/cli": "^2.12.4",
+    "@tauri-apps/plugin-notification": "^2.8.0",
     "@types/qrcode": "^1.5.6",
     "@types/three": "^0.171.0",
     "jsdom": "^29.1.1",

@@ -40,6 +40,13 @@
             (click)="setTab('security')">
       Security
     </button>
+    <button type="button" class="px-4 py-2 rounded-lg text-sm transition"
+            [class.bg-white/10]="tab() === 'connection'"
+            [class.text-white]="tab() === 'connection'"
+            [class.text-slate-400]="tab() !== 'connection'"
+            (click)="setTab('connection')">
+      Server connection
+    </button>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
@@ -48,7 +55,7 @@
         <h2 class="font-medium flex items-center gap-2">
           <i class="pi pi-tags text-violet-300"></i> {{ title() }}
         </h2>
-        @if (tab() !== 'security') {
+        @if (tab() !== 'security' && tab() !== 'connection') {
           <button class="btn btn-primary" (click)="reset()">
             <i class="pi pi-plus"></i> {{ tab() === 'rules' ? 'Rule' : tab() === 'rates' ? 'Rate' : 'Category' }}
           </button>
@@ -130,6 +137,84 @@
             Sign-in is throttled to 10 login attempts per minute per client IP (registration to 100).
           </p>
         </form>
+      } @else if (tab() === 'connection') {
+        <div class="space-y-6">
+          <div class="p-4 rounded-xl border border-white/10 bg-white/5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Running Mode</span>
+              <span class="px-2 py-0.5 rounded text-xs font-medium" [class.bg-violet-500/20]="isDesktop" [class.text-violet-300]="isDesktop" [class.bg-slate-700/50]="!isDesktop" [class.text-slate-300]="!isDesktop">
+                {{ isDesktop ? 'Desktop App (Tauri)' : 'Web Application' }}
+              </span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Active Server Base</span>
+              <span class="font-mono text-sm text-violet-300">{{ displayServerUrl() }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Origin Resolution</span>
+              <span class="text-xs text-slate-300">
+                {{ serverUrlInput() ? 'Custom override stored in localStorage' : (isDesktop ? 'Default localhost backend' : 'Same-origin reverse proxy') }}
+              </span>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <h3 class="font-medium text-sm text-slate-200">Backend Server URL</h3>
+            <p class="text-xs text-slate-400">
+              Set the REST API endpoint of your self-hosted LuminaVault backend. In desktop mode, this defaults to
+              <code class="text-violet-300">http://localhost:5256</code>. You can point it to your home server or NAS (e.g.
+              <code class="text-violet-300">https://vault.yourhome.lan</code>).
+            </p>
+
+            <div>
+              <label class="label">Server URL</label>
+              <input class="input font-mono"
+                     placeholder="http://localhost:5256"
+                     name="serverUrl"
+                     [ngModel]="serverUrlInput()"
+                     (ngModelChange)="serverUrlInput.set($event)" />
+            </div>
+
+            @if (serverTestResult(); as res) {
+              <div class="p-3 rounded-lg text-sm border"
+                   [class.bg-emerald-500/10]="res.success"
+                   [class.text-emerald-300]="res.success"
+                   [class.border-emerald-500/30]="res.success"
+                   [class.bg-red-500/10]="!res.success"
+                   [class.text-red-300]="!res.success"
+                   [class.border-red-500/30]="!res.success">
+                <div class="flex items-center gap-2">
+                  <i class="pi" [class.pi-check-circle]="res.success" [class.pi-exclamation-triangle]="!res.success"></i>
+                  <span>{{ res.message }}</span>
+                </div>
+              </div>
+            }
+
+            <div class="flex items-center gap-2">
+              <button type="button" class="btn btn-ghost" (click)="testServer()" [disabled]="serverTesting()">
+                @if (serverTesting()) { <i class="pi pi-spin pi-spinner"></i> } @else { <i class="pi pi-sync"></i> }
+                Test connection
+              </button>
+              <button type="button" class="btn btn-primary" (click)="saveServer()">
+                <i class="pi pi-check"></i>
+                Save URL
+              </button>
+              <button type="button" class="btn btn-ghost text-slate-500 hover:text-slate-300" (click)="resetServer()">
+                Reset to default
+              </button>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl border border-white/5 bg-slate-900/40 text-xs text-slate-400 space-y-2">
+            <div class="font-medium text-slate-300 flex items-center gap-2">
+              <i class="pi pi-info-circle text-violet-400"></i>
+              Self-Hosting & Remote Access Note
+            </div>
+            <p>
+              When connecting the desktop app to a remote server, ensure the server has CORS enabled. LuminaVault backend allows Tauri desktop clients (<code class="text-slate-300">tauri://localhost</code>) by default. Custom origins can be allowed on the server via the <code class="text-slate-300">LUMINA_CORS_ORIGINS</code> environment variable.
+            </p>
+          </div>
+        </div>
       } @else if (currentCategories().length === 0) {
         <div class="text-sm text-slate-500">No categories yet.</div>
       } @else if (tab() === 'rates') {
@@ -341,6 +426,36 @@
             </button>
           </div>
         }
+      } @else if (tab() === 'connection') {
+        <h2 class="font-medium flex items-center gap-2 mb-4">
+          <i class="pi pi-bell text-violet-300"></i>
+          Desktop notifications
+        </h2>
+
+        <div class="space-y-4 text-sm">
+          <p class="text-xs text-slate-400">
+            LuminaVault can send native desktop alerts for battery charge due dates, overdue subscriptions, and critical budget thresholds.
+          </p>
+
+          <div class="p-3 rounded-lg border border-white/10 bg-white/5 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Permission status:</span>
+            <span class="font-medium" [class.text-emerald-400]="notificationPermission()" [class.text-amber-400]="!notificationPermission()">
+              {{ notificationPermission() ? 'Granted' : 'Not granted' }}
+            </span>
+          </div>
+
+          @if (!notificationPermission()) {
+            <button type="button" class="btn btn-primary w-full justify-center" (click)="requestNotificationPermission()">
+              <i class="pi pi-check"></i>
+              Enable notifications
+            </button>
+          }
+
+          <button type="button" class="btn btn-ghost w-full justify-center" (click)="sendTestNotification()">
+            <i class="pi pi-send"></i>
+            Send test notification
+          </button>
+        </div>
       } @else {
       <h2 class="font-medium flex items-center gap-2 mb-4">
         <i class="pi pi-pen-to-square text-violet-300"></i>

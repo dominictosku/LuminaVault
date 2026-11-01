@@ -96,6 +96,7 @@ Detailed documentation has been organized into dedicated guides in the [`docs/`]
 | [🔔 **Notifications & Automated Scanner**](docs/notifications.md) | Background scanner, deduplication keys, alert lifecycle, and notification configuration. |
 | [📦 **Data Management & Backups**](docs/data-and-backups.md) | ODS spreadsheet round-trips, bank CSV statement importing, and disaster recovery snapshots. |
 | [🔐 **Security, Auth & Configuration**](docs/security-and-auth.md) | JWT setup, TOTP 2FA, rate limits, reverse proxy setup, CSP headers, and environment variables. |
+| [💻 **Desktop App (Tauri v2)**](docs/desktop-app.md) | Native desktop client setup, dynamic server URL switching, native OS notifications, and build guides. |
 | [🏛️ **Architecture & Project Structure**](docs/architecture.md) | Vertical-slice backend design, zoneless Angular frontend, 3D graphics pipeline, and source tree. |
 
 <br>
@@ -105,6 +106,7 @@ Detailed documentation has been organized into dedicated guides in the [`docs/`]
 | Layer | Technology |
 |---|---|
 | **Frontend** | Angular 21 (Zoneless, Signals, Standalone Components) |
+| **Desktop Shell** | Tauri v2 (Native Rust host, OS notifications, WebKit/WebView2) |
 | **UI & Styling** | PrimeNG 21 · Tailwind CSS v4 · PrimeIcons · Frosted Glassmorphism |
 | **3D Engine** | Three.js r171 · OrbitControls · GLTFLoader · GSAP Animation Suite |
 | **Backend** | ASP.NET Core 10 (Minimal APIs, Vertical Slice Architecture) |
@@ -162,6 +164,22 @@ npm install
 npm start
 # App runs at http://localhost:4200
 ```
+
+---
+
+### Option 3: Native Desktop App (Tauri v2)
+
+Run LuminaVault as a native desktop application connecting to your local or self-hosted backend:
+
+```bash
+cd LuminaVault-Frontend
+# Run in desktop development mode (with hot reload):
+npm run tauri:dev
+
+# Or build the native installer / binary (.deb, .AppImage, .msi, or .dmg):
+npm run tauri:build
+```
+*See the [Desktop Application Guide](docs/desktop-app.md) for OS library requirements and remote server synchronization.*
 
 ---
 
