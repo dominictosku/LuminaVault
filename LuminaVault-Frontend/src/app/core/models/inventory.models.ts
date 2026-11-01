@@ -62,6 +62,11 @@ export interface Item {
   photos: ItemPhoto[];
   attachments: DocumentAttachment[];
   modelUrl?: string | null;
+  hasLithiumBattery: boolean;
+  batteryChargeIntervalMonths?: number | null;
+  lastChargedAt?: string | null;
+  needsBatteryCharge?: boolean;
+  nextBatteryChargeDue?: string | null;
 }
 
 export interface ItemPage {
@@ -85,6 +90,9 @@ export interface ItemInput {
   roomId?: number | null;
   furnitureId?: number | null;
   containerId?: number | null;
+  hasLithiumBattery?: boolean;
+  batteryChargeIntervalMonths?: number | null;
+  lastChargedAt?: string | null;
 }
 
 export interface StatsSummary {

@@ -1,10 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { Item } from '../../core/models';
 import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.directive';
+import { ToastService } from '../../shared/toast/toast.service';
+import { NotificationCenterService } from '../../shared/notifications/notification-center.service';
+
+type ItemFilter = 'all' | 'needsCharging';
 
 @Component({
   selector: 'app-items',
@@ -14,14 +18,27 @@ import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.dir
 })
 export class ItemsComponent {
   protected api = inject(InventoryApi);
+  private toast = inject(ToastService);
+  private center = inject(NotificationCenterService);
+
   items = signal<Item[]>([]);
   loading = signal(true);
+  filter = signal<ItemFilter>('all');
   // Base64 cursor for the next page of older items, or null when the server has
   // nothing more for the current query.
   nextCursor = signal<string | null>(null);
   loadingMore = signal(false);
   query = '';
   skel = Array(6);
+
+  needsChargingCount = computed(() => this.items().filter(i => i.needsBatteryCharge).length);
+
+  filteredItems = computed(() => {
+    const f = this.filter();
+    const list = this.items();
+    if (f === 'needsCharging') return list.filter(i => i.needsBatteryCharge);
+    return list;
+  });
 
   private debounce: any = null;
 
@@ -50,6 +67,23 @@ export class ItemsComponent {
         this.loadingMore.set(false);
       },
       error: () => this.loadingMore.set(false),
+    });
+  }
+
+  setFilter(f: ItemFilter) {
+    this.filter.set(f);
+  }
+
+  chargeItem(item: Item, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.api.chargeItem(item.id).subscribe({
+      next: updated => {
+        this.items.update(list => list.map(i => i.id === updated.id ? updated : i));
+        this.toast.success(`Battery charged for ${item.name}.`);
+        this.center.refresh();
+      },
+      error: () => this.toast.error('Failed to mark as charged.'),
     });
   }
 

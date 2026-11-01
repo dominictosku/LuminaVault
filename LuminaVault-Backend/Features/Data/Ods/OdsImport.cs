@@ -435,6 +435,9 @@ internal static class OdsImport
                 }
                 var tags = EmptyToNull(Get(row, headers, "Tags")) ?? category ?? "";
                 var quantityRaw = ParseDecimal(Get(row, headers, "Quantity"));
+                var hasBattery = ParseBool(Get(row, headers, "Has lithium battery", "Lithium battery", "Battery"));
+                var intervalRaw = ParseDecimal(Get(row, headers, "Battery charge interval months", "Charge interval"));
+                var lastCharged = ParseDate(Get(row, headers, "Last charged at", "Last charged"));
                 return new Item
                 {
                     Name = name,
@@ -449,6 +452,9 @@ internal static class OdsImport
                     Quantity = Math.Max(1, (int)Math.Round(quantityRaw == 0 ? 1 : quantityRaw)),
                     Notes = EmptyToNull(Get(row, headers, "Notes", "Notizen")),
                     TagsCsv = tags,
+                    HasLithiumBattery = hasBattery,
+                    BatteryChargeIntervalMonths = hasBattery ? (intervalRaw > 0 ? (int)Math.Round(intervalRaw) : 3) : null,
+                    LastChargedAt = hasBattery ? lastCharged : null,
                 };
             });
     }

@@ -30,6 +30,7 @@ public class NotificationScanner
         created += await ScanSubscriptionsDueSoonAsync(db, ct);
         created += await ScanBudgetOverrunsAsync(db, ct);
         created += await ScanForecastNegativeAsync(db, ct);
+        created += await ScanLithiumBatteriesNeedingChargeAsync(db, ct);
         return created;
     }
 
@@ -120,5 +121,36 @@ public class NotificationScanner
             link: "/forecast",
             ct: ct);
         return 1;
+    }
+
+    public async Task<int> ScanLithiumBatteriesNeedingChargeAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var items = await db.Items
+            .Where(i => i.HasLithiumBattery)
+            .ToListAsync(ct);
+
+        var created = 0;
+        foreach (var item in items)
+        {
+            if (!item.NeedsBatteryCharge(now)) continue;
+
+            var lastCharged = item.LastChargedAt ?? item.PurchaseDate ?? item.CreatedAt;
+            var interval = Math.Max(1, item.BatteryChargeIntervalMonths ?? 3);
+            var nextDue = item.GetNextBatteryChargeDue() ?? lastCharged.AddMonths(interval);
+            var overdueDays = Math.Max(0, (int)(now.Date - nextDue.Date).TotalDays);
+            var when = overdueDays == 0 ? "today" : overdueDays == 1 ? "yesterday" : $"{overdueDays} days ago";
+
+            var source = $"item:{item.Id}:battery-charge:{nextDue:yyyy-MM-dd}";
+            await _service.UpsertAsync(db, source,
+                type: "BatteryChargeDue",
+                severity: overdueDays > 14 ? NotificationSeverity.Critical : NotificationSeverity.Warning,
+                title: $"Battery charge needed: {item.Name}",
+                message: $"Lithium battery charge due ({when}). Last charged on {lastCharged:yyyy-MM-dd}. Recharge regularly (every {interval} months) to prevent degradation.",
+                link: $"/items/{item.Id}",
+                ct: ct);
+            created++;
+        }
+        return created;
     }
 }

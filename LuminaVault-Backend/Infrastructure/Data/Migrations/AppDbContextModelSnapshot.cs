@@ -535,6 +535,9 @@ namespace LuminaVault.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("BatteryChargeIntervalMonths")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Brand")
                         .HasColumnType("TEXT");
 
@@ -553,6 +556,12 @@ namespace LuminaVault.Migrations
 
                     b.Property<int?>("FurnitureId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasLithiumBattery")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastChargedAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Model")
                         .HasColumnType("TEXT");

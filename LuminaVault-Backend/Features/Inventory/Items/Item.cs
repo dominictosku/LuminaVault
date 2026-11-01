@@ -28,9 +28,30 @@ public class Item
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    public bool HasLithiumBattery { get; set; }
+    public int? BatteryChargeIntervalMonths { get; set; } = 3;
+    public DateTime? LastChargedAt { get; set; }
+
     public string? ModelFileName { get; set; }
     public string? ModelContentType { get; set; }
 
     public List<ItemPhoto> Photos { get; set; } = new();
     public List<DocumentAttachment> Attachments { get; set; } = new();
+
+    public DateTime? GetNextBatteryChargeDue()
+    {
+        if (!HasLithiumBattery) return null;
+        var interval = Math.Max(1, BatteryChargeIntervalMonths ?? 3);
+        var baseline = LastChargedAt ?? PurchaseDate ?? CreatedAt;
+        return baseline.AddMonths(interval);
+    }
+
+    public bool NeedsBatteryCharge(DateTime? asOfUtc = null)
+    {
+        if (!HasLithiumBattery) return false;
+        var nextDue = GetNextBatteryChargeDue();
+        if (!nextDue.HasValue) return false;
+        var now = asOfUtc ?? DateTime.UtcNow;
+        return now.Date >= nextDue.Value.Date;
+    }
 }

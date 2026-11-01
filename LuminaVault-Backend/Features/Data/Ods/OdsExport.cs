@@ -101,10 +101,12 @@ internal static class OdsExport
 
     public static OdsSheet Assets(IEnumerable<Item> assets) =>
         Sheet("Assets",
-            new[] { Row("Name", "Category", "Description", "Brand", "Model", "Serial number", "Value", "Purchase date", "Warranty until", "Quantity", "Notes", "Tags") }
+            new[] { Row("Name", "Category", "Description", "Brand", "Model", "Serial number", "Value", "Purchase date", "Warranty until", "Quantity", "Notes", "Tags", "Has lithium battery", "Battery charge interval months", "Last charged at") }
                 .Concat(assets.Select(i => Row(
                     i.Name, i.Category, i.Description, i.Brand, i.Model, i.SerialNumber, i.Value,
                     i.PurchaseDate.HasValue ? DateOnly.FromDateTime(i.PurchaseDate.Value) : null,
                     i.WarrantyUntil.HasValue ? DateOnly.FromDateTime(i.WarrantyUntil.Value) : null,
-                    i.Quantity, i.Notes, i.TagsCsv))));
+                    i.Quantity, i.Notes, i.TagsCsv,
+                    i.HasLithiumBattery, i.BatteryChargeIntervalMonths,
+                    i.LastChargedAt.HasValue ? DateOnly.FromDateTime(i.LastChargedAt.Value) : null))));
 }

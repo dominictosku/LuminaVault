@@ -214,12 +214,16 @@ export class PlannerScene {
    */
   private createItemMarker(item: Item, basePos: THREE.Vector3,
                             opts: { loose: boolean; modelMaxDim: number }): THREE.Mesh {
+    const emissiveColor = item.needsBatteryCharge
+      ? 0xf59e0b
+      : (opts.loose ? 0xff6fb3 : 0xa78bfa);
+    const emissiveIntensity = item.needsBatteryCharge ? 1.8 : (opts.loose ? 1.4 : 1.2);
     const orb = new THREE.Mesh(
       new THREE.IcosahedronGeometry(opts.loose ? 0.09 : 0.07, 1),
       new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        emissive: opts.loose ? 0xff6fb3 : 0xa78bfa,
-        emissiveIntensity: opts.loose ? 1.4 : 1.2,
+        emissive: emissiveColor,
+        emissiveIntensity: emissiveIntensity,
         roughness: 0.2, metalness: 0.8,
         transparent: true, opacity: 0,
       })

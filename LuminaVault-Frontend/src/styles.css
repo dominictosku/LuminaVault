@@ -63,6 +63,12 @@ html, body {
   color: #fca5a5;
 }
 .btn-danger:hover { background: rgba(239,68,68,0.25); }
+.btn-warning {
+  background: rgba(245,158,11,0.15);
+  border-color: rgba(245,158,11,0.4);
+  color: #fcd34d;
+}
+.btn-warning:hover { background: rgba(245,158,11,0.25); }
 
 /* In the `components` layer so Tailwind utilities (pl-9, w-44, py-1, …) can override
    these base styles. Unlayered rules win against the utilities layer in Tailwind v4,

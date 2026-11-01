@@ -83,6 +83,65 @@
         </div>
       </div>
 
+      <div class="glass rounded-2xl p-5 space-y-4" [class.border-amber-500/40]="model.hasLithiumBattery && (current()?.needsBatteryCharge || batteryStatus()?.overdue)">
+        <div class="flex items-center justify-between">
+          <h3 class="font-medium flex items-center gap-2">
+            <i class="pi pi-bolt" [class.text-amber-400]="model.hasLithiumBattery" [class.text-violet-300]="!model.hasLithiumBattery"></i>
+            Lithium battery & maintenance
+          </h3>
+          <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
+            <input type="checkbox" name="hasLithiumBattery" [(ngModel)]="model.hasLithiumBattery"
+                   class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-violet-600 focus:ring-violet-500" />
+            <span>Has lithium battery</span>
+          </label>
+        </div>
+
+        @if (model.hasLithiumBattery) {
+          @if (current()?.needsBatteryCharge || batteryStatus()?.overdue) {
+            <div class="px-3 py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3">
+              <i class="pi pi-exclamation-triangle text-amber-400 text-lg mt-0.5 shrink-0"></i>
+              <div class="min-w-0 flex-1">
+                <div class="font-medium text-amber-200 text-sm">Battery charge due!</div>
+                <div class="text-xs text-amber-300/80 mt-0.5">
+                  Overdue by {{ batteryStatus()?.diffDays ?? 0 }} day(s). Lithium batteries should be recharged periodically to prevent deep self-discharge and irreversible degradation.
+                </div>
+              </div>
+              <button type="button" class="btn btn-warning !py-1 !px-2.5 text-xs shrink-0 whitespace-nowrap" (click)="markChargedToday()">
+                <i class="pi pi-bolt"></i> Mark charged today
+              </button>
+            </div>
+          } @else {
+            <div class="px-3 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between gap-3 flex-wrap">
+              <div class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-400"></i>
+                <span class="text-xs text-emerald-200">
+                  Battery status OK. Next charge due:
+                  <span class="font-medium">{{ batteryStatus()?.nextDue | date:'mediumDate' }}</span>
+                </span>
+              </div>
+              <button type="button" class="btn btn-ghost !py-1 !px-2 text-xs" (click)="markChargedToday()">
+                <i class="pi pi-refresh"></i> Record charge today
+              </button>
+            </div>
+          }
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label class="label">Check / Charge interval (months)</label>
+              <input class="input" type="number" min="1" max="60" name="chargeInterval"
+                     [(ngModel)]="model.batteryChargeIntervalMonths" placeholder="3" />
+              <p class="text-[11px] text-slate-400 mt-1">Recommended: 3 months for stored electronics.</p>
+            </div>
+            <div>
+              <label class="label">Last charged date</label>
+              <input class="input" type="date" name="lastCharged"
+                     [(ngModel)]="model.lastChargedAt" />
+              <p class="text-[11px] text-slate-400 mt-1">Leave empty to use purchase or creation date.</p>
+            </div>
+          </div>
+        }
+      </div>
+
       <div class="glass rounded-2xl p-5 space-y-4">
         <h3 class="font-medium flex items-center gap-2"><i class="pi pi-tag text-violet-300"></i> Tags & notes</h3>
         <div>

@@ -19,13 +19,21 @@ public record ItemDto(
     DateTime CreatedAt, DateTime UpdatedAt,
     ItemPhotoDto[] Photos,
     DocumentAttachmentDto[] Attachments,
-    string? ModelUrl);
+    string? ModelUrl,
+    bool HasLithiumBattery = false,
+    int? BatteryChargeIntervalMonths = null,
+    DateTime? LastChargedAt = null,
+    bool NeedsBatteryCharge = false,
+    DateTime? NextBatteryChargeDue = null);
 
 public record ItemInput(
     string Name, string? Category, string? Description, string? Brand, string? Model,
     string? SerialNumber, decimal? Value, DateTime? PurchaseDate, DateTime? WarrantyUntil,
     int Quantity, string? Notes, string[] Tags,
-    int? RoomId, int? FurnitureId, int? ContainerId);
+    int? RoomId, int? FurnitureId, int? ContainerId,
+    bool HasLithiumBattery = false,
+    int? BatteryChargeIntervalMonths = 3,
+    DateTime? LastChargedAt = null);
 
 public static class ItemEndpoints
 {
@@ -45,6 +53,7 @@ public static class ItemEndpoints
 
         g.MapGet("/", async (
             AppDbContext db, string? q, int? furnitureId, int? containerId, int? roomId,
+            bool? needsBatteryCharge,
             string? cursor, int? pageSize) =>
         {
             // Read-only list: opt out of change tracking so we don't pay the per-row tax
@@ -56,6 +65,11 @@ public static class ItemEndpoints
                 .Include(i => i.Furniture).ThenInclude(f => f!.Room)
                 .Include(i => i.Container)
                 .AsQueryable();
+
+            if (needsBatteryCharge == true)
+            {
+                query = query.Where(i => i.HasLithiumBattery);
+            }
 
             if (!string.IsNullOrWhiteSpace(q))
             {
@@ -91,6 +105,11 @@ public static class ItemEndpoints
                 // +1 to detect whether more rows exist beyond this page without a separate count.
                 .Take(size + 1)
                 .ToListAsync();
+
+            if (needsBatteryCharge == true)
+            {
+                page = page.Where(i => i.NeedsBatteryCharge()).ToList();
+            }
 
             string? nextCursor = null;
             if (page.Count > size)
@@ -162,6 +181,35 @@ public static class ItemEndpoints
             db.Items.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
+        });
+
+        // Mark battery as charged
+        g.MapPost("/{id:int}/charge", async (int id, AppDbContext db) =>
+        {
+            var item = await db.Items
+                .Include(x => x.Photos)
+                .Include(x => x.Attachments)
+                .Include(x => x.Room)
+                .Include(x => x.Furniture).ThenInclude(f => f!.Room)
+                .Include(x => x.Container)
+                .FirstOrDefaultAsync(x => x.Id == id);
+            if (item is null) return Results.NotFound();
+
+            item.HasLithiumBattery = true;
+            item.LastChargedAt = DateTime.UtcNow;
+            item.UpdatedAt = DateTime.UtcNow;
+
+            var alerts = await db.Notifications
+                .Where(n => n.Type == "BatteryChargeDue" && n.Source.StartsWith($"item:{item.Id}:battery-charge:"))
+                .ToListAsync();
+            foreach (var a in alerts)
+            {
+                a.Status = NotificationStatus.Dismissed;
+                a.DismissedAt = DateTime.UtcNow;
+            }
+
+            await db.SaveChangesAsync();
+            return Results.Ok(MapToDto(item));
         });
 
         // Model upload (single .glb/.gltf per item)
@@ -254,6 +302,11 @@ public static class ItemEndpoints
         item.RoomId = input.RoomId;
         item.FurnitureId = input.FurnitureId;
         item.ContainerId = input.ContainerId;
+        item.HasLithiumBattery = input.HasLithiumBattery;
+        item.BatteryChargeIntervalMonths = input.HasLithiumBattery
+            ? Math.Max(1, input.BatteryChargeIntervalMonths ?? 3)
+            : null;
+        item.LastChargedAt = input.HasLithiumBattery ? input.LastChargedAt : null;
     }
 
     public static ItemDto MapToDto(Item i)
@@ -271,7 +324,12 @@ public static class ItemEndpoints
             i.CreatedAt, i.UpdatedAt,
             i.Photos.Select(p => new ItemPhotoDto(p.Id, $"/api/photos/{p.Id}", p.ContentType)).ToArray(),
             i.Attachments.Select(AttachmentEndpoints.MapAttachment).ToArray(),
-            i.ModelFileName == null ? null : $"/api/items/{i.Id}/model");
+            i.ModelFileName == null ? null : $"/api/items/{i.Id}/model",
+            i.HasLithiumBattery,
+            i.BatteryChargeIntervalMonths,
+            i.LastChargedAt,
+            i.NeedsBatteryCharge(),
+            i.GetNextBatteryChargeDue());
     }
 
 }

@@ -16,43 +16,130 @@
     </div>
   </div>
 
+  @if (needsChargingCount() > 0) {
+    <div class="mb-6 p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-center justify-between gap-4 flex-wrap">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 grid place-items-center shrink-0 text-amber-400">
+          <i class="pi pi-bolt text-xl"></i>
+        </div>
+        <div>
+          <div class="font-medium text-amber-200">
+            {{ needsChargingCount() }} item(s) require battery recharge
+          </div>
+          <div class="text-xs text-amber-300/80 mt-0.5">
+            Lithium batteries degrade when left discharged. Recharge regularly (e.g. every 3 months) to preserve battery health.
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button type="button" class="btn text-xs"
+                [class.btn-warning]="filter() !== 'needsCharging'"
+                [class.btn-ghost]="filter() === 'needsCharging'"
+                (click)="setFilter(filter() === 'needsCharging' ? 'all' : 'needsCharging')">
+          {{ filter() === 'needsCharging' ? 'Show all items' : 'View items needing charge' }}
+        </button>
+      </div>
+    </div>
+  }
+
+  <div class="surface p-1.5 mb-6 flex gap-1 w-fit rounded-xl border border-white/5">
+    <button type="button" class="px-3 py-1.5 text-xs rounded-lg transition font-medium"
+            [class.bg-white/10]="filter() === 'all'"
+            [class.text-white]="filter() === 'all'"
+            [class.text-slate-400]="filter() !== 'all'"
+            (click)="setFilter('all')">
+      All ({{ items().length }})
+    </button>
+    <button type="button" class="px-3 py-1.5 text-xs rounded-lg transition font-medium flex items-center gap-1.5"
+            [class.bg-amber-500/20]="filter() === 'needsCharging'"
+            [class.text-amber-300]="filter() === 'needsCharging'"
+            [class.text-slate-400]="filter() !== 'needsCharging'"
+            (click)="setFilter('needsCharging')">
+      <i class="pi pi-bolt" [class.text-amber-400]="needsChargingCount() > 0"></i>
+      Needs charging
+      @if (needsChargingCount() > 0) {
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/30 text-amber-300 border border-amber-500/40">
+          {{ needsChargingCount() }}
+        </span>
+      }
+    </button>
+  </div>
+
   @if (loading()) {
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       @for (_ of skel; track $index) {
         <div class="glass rounded-2xl p-5 h-40 animate-pulse"></div>
       }
     </div>
-  } @else if (items().length === 0) {
+  } @else if (filteredItems().length === 0) {
     <div class="glass rounded-2xl p-10 text-center">
-      <i class="pi pi-box text-5xl text-violet-300/60"></i>
-      <div class="mt-4 text-lg">No assets yet.</div>
-      <p class="text-slate-400 text-sm mt-1">Track valuables that contribute to your net worth.</p>
-      <a routerLink="/items/new" class="btn btn-primary mt-4">
-        <i class="pi pi-plus"></i> Add asset
-      </a>
+      @if (filter() === 'needsCharging') {
+        <i class="pi pi-check-circle text-5xl text-emerald-400/70"></i>
+        <div class="mt-4 text-lg">No items need charging!</div>
+        <p class="text-slate-400 text-sm mt-1">All lithium battery items are properly charged and healthy.</p>
+        <button type="button" class="btn btn-ghost mt-4" (click)="setFilter('all')">
+          View all items
+        </button>
+      } @else {
+        <i class="pi pi-box text-5xl text-violet-300/60"></i>
+        <div class="mt-4 text-lg">No assets yet.</div>
+        <p class="text-slate-400 text-sm mt-1">Track valuables that contribute to your net worth.</p>
+        <a routerLink="/items/new" class="btn btn-primary mt-4">
+          <i class="pi pi-plus"></i> Add asset
+        </a>
+      }
     </div>
   } @else {
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      @for (item of items(); track item.id) {
+      @for (item of filteredItems(); track item.id) {
         <a [routerLink]="['/items', item.id]"
-           class="glass rounded-2xl p-5 hover:border-violet-400/40 transition group flex flex-col">
+           class="glass rounded-2xl p-5 transition group flex flex-col relative"
+           [class.border-amber-500/60]="item.needsBatteryCharge"
+           [class.bg-gradient-to-br]="item.needsBatteryCharge"
+           [class.from-amber-500/10]="item.needsBatteryCharge"
+           [class.via-amber-500/5]="item.needsBatteryCharge"
+           [class.to-transparent]="item.needsBatteryCharge"
+           [class.ring-1]="item.needsBatteryCharge"
+           [class.ring-amber-500/30]="item.needsBatteryCharge"
+           [class.hover:border-amber-400/80]="item.needsBatteryCharge"
+           [class.hover:border-violet-400/40]="!item.needsBatteryCharge">
           <div class="flex items-start gap-3">
-            <div class="w-14 h-14 rounded-xl overflow-hidden bg-gradient-to-br from-violet-500/20 to-pink-500/20 grid place-items-center shrink-0">
+            <div class="w-14 h-14 rounded-xl overflow-hidden grid place-items-center shrink-0"
+                 [class.bg-gradient-to-br]="!item.needsBatteryCharge"
+                 [class.from-violet-500/20]="!item.needsBatteryCharge"
+                 [class.to-pink-500/20]="!item.needsBatteryCharge"
+                 [class.bg-amber-500/20]="item.needsBatteryCharge">
               @if (item.photos[0]) {
                 <img [appProtectedSrc]="api.photoUrl(item.photos[0])" class="w-full h-full object-cover" />
               } @else {
-                <i class="pi pi-box text-2xl text-violet-300"></i>
+                <i class="pi text-2xl" [class.pi-bolt]="item.needsBatteryCharge" [class.text-amber-400]="item.needsBatteryCharge"
+                   [class.pi-box]="!item.needsBatteryCharge" [class.text-violet-300]="!item.needsBatteryCharge"></i>
               }
             </div>
             <div class="min-w-0 flex-1">
-              <div class="font-medium truncate group-hover:text-violet-300 transition">{{ item.name }}</div>
+              <div class="font-medium truncate transition"
+                   [class.text-amber-200]="item.needsBatteryCharge"
+                   [class.group-hover:text-violet-300]="!item.needsBatteryCharge">
+                {{ item.name }}
+              </div>
               <div class="text-xs text-slate-400 truncate mt-0.5">
                 {{ item.category || item.brand || '—' }}{{ item.model ? ' · ' + item.model : '' }}
               </div>
             </div>
-            @if (item.quantity > 1) {
-              <div class="text-xs text-slate-300 bg-white/5 rounded px-2 py-0.5">×{{ item.quantity }}</div>
-            }
+            <div class="flex items-center gap-1.5 shrink-0">
+              @if (item.needsBatteryCharge) {
+                <span class="text-[11px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-500/40 rounded px-2 py-0.5 inline-flex items-center gap-1">
+                  <i class="pi pi-bolt text-amber-400 animate-pulse"></i> Needs charge
+                </span>
+              } @else if (item.hasLithiumBattery) {
+                <span class="text-[11px] text-emerald-400/80 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 inline-flex items-center gap-1" title="Lithium battery healthy">
+                  <i class="pi pi-bolt text-emerald-400"></i> Battery OK
+                </span>
+              }
+              @if (item.quantity > 1) {
+                <div class="text-xs text-slate-300 bg-white/5 rounded px-2 py-0.5">×{{ item.quantity }}</div>
+              }
+            </div>
           </div>
 
           <div class="text-xs text-slate-400 mt-3 flex items-center gap-2 flex-wrap">
@@ -78,10 +165,23 @@
           }
 
           <div class="mt-auto pt-3 flex items-center justify-between text-xs text-slate-500">
-            <span>{{ item.updatedAt | date:'shortDate' }}</span>
-            @if (item.value != null) {
-              <span class="text-slate-300">{{ item.value | currency }}</span>
-            }
+            <div class="flex items-center gap-2">
+              <span>{{ item.updatedAt | date:'shortDate' }}</span>
+              @if (item.needsBatteryCharge) {
+                <span class="text-amber-400/90 font-medium">· Charge overdue</span>
+              }
+            </div>
+            <div class="flex items-center gap-2">
+              @if (item.value != null) {
+                <span class="text-slate-300">{{ item.value | currency }}</span>
+              }
+              @if (item.needsBatteryCharge) {
+                <button type="button" class="btn btn-warning !py-1 !px-2.5 text-xs flex items-center gap-1 shadow-sm"
+                        (click)="chargeItem(item, $event)" title="Mark lithium battery charged today">
+                  <i class="pi pi-bolt"></i> Mark charged
+                </button>
+              }
+            </div>
           </div>
         </a>
       }

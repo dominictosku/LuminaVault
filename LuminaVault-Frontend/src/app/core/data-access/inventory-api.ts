@@ -20,6 +20,7 @@ export interface ItemQuery {
   furnitureId?: number;
   containerId?: number;
   roomId?: number;
+  needsBatteryCharge?: boolean;
   cursor?: string | null;
   pageSize?: number;
 }
@@ -107,6 +108,7 @@ export class InventoryApi {
     if (opts.furnitureId) params = params.set('furnitureId', opts.furnitureId);
     if (opts.containerId) params = params.set('containerId', opts.containerId);
     if (opts.roomId) params = params.set('roomId', opts.roomId);
+    if (opts.needsBatteryCharge != null) params = params.set('needsBatteryCharge', opts.needsBatteryCharge);
     if (opts.cursor) params = params.set('cursor', opts.cursor);
     if (opts.pageSize) params = params.set('pageSize', opts.pageSize);
     return this.http.get<ItemPage>(`${API_BASE}/api/items`, { params });
@@ -137,6 +139,10 @@ export class InventoryApi {
 
   deleteItem(id: number) {
     return this.http.delete<void>(`${API_BASE}/api/items/${id}`);
+  }
+
+  chargeItem(id: number) {
+    return this.http.post<Item>(`${API_BASE}/api/items/${id}/charge`, {});
   }
 
   uploadItemPhoto(itemId: number, file: File) {

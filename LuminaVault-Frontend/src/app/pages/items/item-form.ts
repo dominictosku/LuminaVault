@@ -1,19 +1,21 @@
 import { Component, inject, signal, effect, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import { forkJoin, of, switchMap } from 'rxjs';
 import { AttachmentsApi } from '../../core/data-access/attachments-api';
 import { InventoryApi } from '../../core/data-access/inventory-api';
 import { SettingsApi } from '../../core/data-access/settings-api';
-import { AssetCategory, Container, DocumentAttachment, Furniture, House, Item, Room } from '../../core/models';
+import { AssetCategory, Container, DocumentAttachment, Furniture, House, Item, ItemInput, Room } from '../../core/models';
 import { ProtectedMediaService } from '../../core/protected-media.service';
 import { ConfirmDialogService } from '../../shared/confirm-dialog/confirm-dialog.service';
 import { ProtectedMediaSrcDirective } from '../../shared/protected-media-src.directive';
 import { ToastService } from '../../shared/toast/toast.service';
+import { calculateBatteryStatus } from './item-battery';
 
 @Component({
   selector: 'app-item-form',
-  imports: [FormsModule, RouterLink, ProtectedMediaSrcDirective],
+  imports: [FormsModule, RouterLink, ProtectedMediaSrcDirective, DatePipe],
   templateUrl: './item-form.html',
   styleUrl: './item-form.scss'
 })
@@ -61,10 +63,25 @@ export class ItemFormComponent {
     notes: '' as string | null,
     furnitureId: null as number | null,
     containerId: null as number | null,
+    hasLithiumBattery: false,
+    batteryChargeIntervalMonths: 3 as number | null,
+    lastChargedAt: null as string | null,
   };
   tagsRaw = '';
   tagPreview = computed(() =>
     this.tagsRaw.split(',').map(t => t.trim()).filter(t => t.length > 0));
+
+  batteryStatus = computed(() => {
+    if (!this.model.hasLithiumBattery) return null;
+    const item = this.current();
+    return calculateBatteryStatus(
+      this.model.hasLithiumBattery,
+      this.model.batteryChargeIntervalMonths,
+      this.model.lastChargedAt,
+      this.model.purchaseDate,
+      item?.createdAt ?? new Date().toISOString()
+    );
+  });
 
   constructor() {
     this.settingsApi.listAssetCategories().subscribe(categories => this.assetCategories.set(categories));
@@ -107,6 +124,9 @@ export class ItemFormComponent {
           this.model.notes = item.notes ?? null;
           this.model.furnitureId = item.furnitureId ?? null;
           this.model.containerId = item.containerId ?? null;
+          this.model.hasLithiumBattery = !!item.hasLithiumBattery;
+          this.model.batteryChargeIntervalMonths = item.batteryChargeIntervalMonths ?? 3;
+          this.model.lastChargedAt = item.lastChargedAt ? item.lastChargedAt.substring(0, 10) : null;
           this.tagsRaw = item.tags.join(', ');
           this.selectedRoomId.set(item.roomId ?? null);
           this.selectedFurnitureId.set(item.furnitureId ?? null);
@@ -137,16 +157,36 @@ export class ItemFormComponent {
     this.api.listContainers(fid).subscribe(c => this.containers.set(c));
   }
 
+  markChargedToday() {
+    const todayStr = new Date().toISOString().substring(0, 10);
+    this.model.lastChargedAt = todayStr;
+    if (this.id()) {
+      this.api.chargeItem(this.id()!).subscribe({
+        next: updated => {
+          this.current.set(updated);
+          this.model.lastChargedAt = updated.lastChargedAt ? updated.lastChargedAt.substring(0, 10) : todayStr;
+          this.toast.success('Marked battery as charged today.');
+        },
+        error: () => this.toast.error('Failed to mark as charged.'),
+      });
+    } else {
+      this.toast.success('Last charged date set to today.');
+    }
+  }
+
   save() {
     if (!this.model.name.trim()) { this.error.set('Name required.'); return; }
     this.error.set(null);
     this.saving.set(true);
-    const input = {
+    const input: ItemInput = {
       ...this.model,
       tags: this.tagPreview(),
       roomId: this.selectedRoomId(),
       purchaseDate: this.model.purchaseDate ? new Date(this.model.purchaseDate).toISOString() : null,
       warrantyUntil: this.model.warrantyUntil ? new Date(this.model.warrantyUntil).toISOString() : null,
+      hasLithiumBattery: this.model.hasLithiumBattery,
+      batteryChargeIntervalMonths: this.model.hasLithiumBattery ? (this.model.batteryChargeIntervalMonths ?? 3) : null,
+      lastChargedAt: this.model.hasLithiumBattery && this.model.lastChargedAt ? new Date(this.model.lastChargedAt).toISOString() : null,
     };
     const isUpdate = this.id() != null;
     const op = isUpdate ? this.api.updateItem(this.id()!, input) : this.api.createItem(input);

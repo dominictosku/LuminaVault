@@ -154,4 +154,81 @@ public class InventoryTests : IClassFixture<LuminaVaultFactory>
         var get = await _api.Raw.GetAsync($"/api/items/{item.Id}");
         Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
     }
+
+    private record DetailedItemDto(
+        int Id, string Name, string? Category, int Quantity,
+        bool HasLithiumBattery, int? BatteryChargeIntervalMonths,
+        DateTime? LastChargedAt, bool NeedsBatteryCharge, DateTime? NextBatteryChargeDue);
+
+    [Fact]
+    public async Task Item_lithium_battery_tracking_and_charge_endpoint()
+    {
+        var fourMonthsAgo = DateTime.UtcNow.AddMonths(-4);
+        var createResp = await _api.PostAsync("/api/items/", new
+        {
+            name = "Cordless Drill", category = "Tools",
+            description = (string?)null, brand = "Bosch", model = (string?)null,
+            serialNumber = (string?)null, value = 150m,
+            purchaseDate = fourMonthsAgo, warrantyUntil = (DateTime?)null,
+            quantity = 1, notes = (string?)null, tags = Array.Empty<string>(),
+            roomId = (int?)null, furnitureId = (int?)null, containerId = (int?)null,
+            hasLithiumBattery = true,
+            batteryChargeIntervalMonths = 3,
+            lastChargedAt = fourMonthsAgo,
+        });
+        createResp.EnsureSuccessStatusCode();
+        var created = (await createResp.Content.ReadFromJsonAsync<DetailedItemDto>())!;
+
+        Assert.True(created.HasLithiumBattery);
+        Assert.Equal(3, created.BatteryChargeIntervalMonths);
+        Assert.True(created.NeedsBatteryCharge);
+        Assert.NotNull(created.NextBatteryChargeDue);
+
+        // Call the charge endpoint to mark as charged
+        var chargeResp = await _api.PostAsync($"/api/items/{created.Id}/charge", new { });
+        chargeResp.EnsureSuccessStatusCode();
+        var charged = (await chargeResp.Content.ReadFromJsonAsync<DetailedItemDto>())!;
+
+        Assert.False(charged.NeedsBatteryCharge);
+        Assert.NotNull(charged.LastChargedAt);
+        Assert.True(charged.LastChargedAt.Value > DateTime.UtcNow.AddMinutes(-5));
+    }
+
+    [Fact]
+    public async Task Items_filter_by_needs_battery_charge()
+    {
+        var fourMonthsAgo = DateTime.UtcNow.AddMonths(-4);
+        var item1Resp = await _api.PostAsync("/api/items/", new
+        {
+            name = "Overdue Battery Item", category = "Gadgets",
+            description = (string?)null, brand = (string?)null, model = (string?)null,
+            serialNumber = (string?)null, value = 50m,
+            purchaseDate = (DateTime?)null, warrantyUntil = (DateTime?)null,
+            quantity = 1, notes = (string?)null, tags = Array.Empty<string>(),
+            roomId = (int?)null, furnitureId = (int?)null, containerId = (int?)null,
+            hasLithiumBattery = true,
+            batteryChargeIntervalMonths = 3,
+            lastChargedAt = fourMonthsAgo,
+        });
+        item1Resp.EnsureSuccessStatusCode();
+
+        var item2Resp = await _api.PostAsync("/api/items/", new
+        {
+            name = "Fresh Battery Item", category = "Gadgets",
+            description = (string?)null, brand = (string?)null, model = (string?)null,
+            serialNumber = (string?)null, value = 50m,
+            purchaseDate = (DateTime?)null, warrantyUntil = (DateTime?)null,
+            quantity = 1, notes = (string?)null, tags = Array.Empty<string>(),
+            roomId = (int?)null, furnitureId = (int?)null, containerId = (int?)null,
+            hasLithiumBattery = true,
+            batteryChargeIntervalMonths = 3,
+            lastChargedAt = DateTime.UtcNow,
+        });
+        item2Resp.EnsureSuccessStatusCode();
+
+        var filtered = await _api.GetAsync<ItemPageDto>("/api/items/?needsBatteryCharge=true");
+        Assert.NotNull(filtered);
+        Assert.Contains(filtered.Items, i => i.Name == "Overdue Battery Item");
+        Assert.DoesNotContain(filtered.Items, i => i.Name == "Fresh Battery Item");
+    }
 }

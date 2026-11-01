@@ -158,4 +158,41 @@ public class NotificationsTests : IClassFixture<LuminaVaultFactory>
         Assert.Equal(before.Unread - 1, after!.Unread);
         Assert.Equal(before.Total - 1, after.Total);
     }
+
+    private record CreatedItemDto(int Id, string Name);
+
+    [Fact]
+    public async Task Scan_fires_battery_charge_alert_when_charge_is_due_and_clears_on_charge()
+    {
+        var chargeDate = DateTime.UtcNow.AddMonths(-3).AddDays(-2);
+        var createResp = await _api.PostAsync("/api/items/", new
+        {
+            name = "DSLR Camera Battery", category = "Electronics",
+            description = (string?)null, brand = "Canon", model = (string?)null,
+            serialNumber = (string?)null, value = 80m,
+            purchaseDate = chargeDate, warrantyUntil = (DateTime?)null,
+            quantity = 1, notes = (string?)null, tags = Array.Empty<string>(),
+            roomId = (int?)null, furnitureId = (int?)null, containerId = (int?)null,
+            hasLithiumBattery = true,
+            batteryChargeIntervalMonths = 3,
+            lastChargedAt = chargeDate,
+        });
+        createResp.EnsureSuccessStatusCode();
+        var item = (await createResp.Content.ReadFromJsonAsync<CreatedItemDto>())!;
+
+        var scanResp = await _api.PostAsync("/api/notifications/scan", new { });
+        scanResp.EnsureSuccessStatusCode();
+
+        var notifications = await _api.GetAsync<NotificationDto[]>("/api/notifications/");
+        var alert = Assert.Single(notifications!, n => n.Type == "BatteryChargeDue" && n.Title.Contains("DSLR Camera Battery"));
+        Assert.Equal("Warning", alert.Severity);
+        Assert.Equal($"/items/{item.Id}", alert.Link);
+
+        // Charging the item dismisses the notification
+        var chargeResp = await _api.PostAsync($"/api/items/{item.Id}/charge", new { });
+        chargeResp.EnsureSuccessStatusCode();
+
+        var activeNotifications = await _api.GetAsync<NotificationDto[]>("/api/notifications/");
+        Assert.DoesNotContain(activeNotifications!, n => n.Type == "BatteryChargeDue" && n.Title.Contains("DSLR Camera Battery"));
+    }
 }

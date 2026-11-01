@@ -82,16 +82,31 @@
           </div>
           <div class="space-y-2">
             @for (it of looseItemsInRoom(); track it.id) {
-              <button class="w-full text-left px-3 py-2.5 rounded-lg border border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 transition flex items-center gap-3" (click)="openItem(it)">
-                <div class="w-9 h-9 rounded-lg overflow-hidden bg-pink-500/10 grid place-items-center shrink-0">
+              <button class="w-full text-left px-3 py-2.5 rounded-lg border transition flex items-center gap-3"
+                      [class.border-pink-500/20]="!it.needsBatteryCharge"
+                      [class.bg-pink-500/5]="!it.needsBatteryCharge"
+                      [class.hover:bg-pink-500/10]="!it.needsBatteryCharge"
+                      [class.border-amber-500/50]="it.needsBatteryCharge"
+                      [class.bg-amber-500/10]="it.needsBatteryCharge"
+                      [class.hover:bg-amber-500/20]="it.needsBatteryCharge"
+                      (click)="openItem(it)">
+                <div class="w-9 h-9 rounded-lg overflow-hidden grid place-items-center shrink-0"
+                     [class.bg-pink-500/10]="!it.needsBatteryCharge"
+                     [class.bg-amber-500/20]="it.needsBatteryCharge">
                   @if (it.photos[0]) {
                     <img [appProtectedSrc]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
                   } @else {
-                    <i class="pi pi-box text-pink-300"></i>
+                    <i class="pi" [class.pi-box]="!it.needsBatteryCharge" [class.text-pink-300]="!it.needsBatteryCharge"
+                       [class.pi-bolt]="it.needsBatteryCharge" [class.text-amber-400]="it.needsBatteryCharge"></i>
                   }
                 </div>
                 <div class="min-w-0 flex-1">
-                  <div class="font-medium text-sm truncate">{{ it.name }}</div>
+                  <div class="font-medium text-sm truncate flex items-center gap-1.5">
+                    <span>{{ it.name }}</span>
+                    @if (it.needsBatteryCharge) {
+                      <i class="pi pi-bolt text-amber-400 text-xs" title="Battery charge due"></i>
+                    }
+                  </div>
                   @if (it.quantity > 1) {
                     <div class="text-xs text-slate-400">×{{ it.quantity }}</div>
                   }
@@ -108,16 +123,30 @@
       <p class="text-xs text-slate-400 mb-4">Items stored here. Hover an orb in the scene to preview.</p>
       <div class="space-y-2">
         @for (it of itemsInFurniture(); track it.id) {
-          <button class="w-full text-left px-3 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition flex items-center gap-3" (click)="openItem(it)">
-            <div class="w-10 h-10 rounded-lg overflow-hidden bg-violet-500/10 grid place-items-center shrink-0">
+          <button class="w-full text-left px-3 py-2.5 rounded-lg border transition flex items-center gap-3"
+                  [class.border-white/10]="!it.needsBatteryCharge"
+                  [class.hover:bg-white/5]="!it.needsBatteryCharge"
+                  [class.border-amber-500/50]="it.needsBatteryCharge"
+                  [class.bg-amber-500/10]="it.needsBatteryCharge"
+                  [class.hover:bg-amber-500/20]="it.needsBatteryCharge"
+                  (click)="openItem(it)">
+            <div class="w-10 h-10 rounded-lg overflow-hidden grid place-items-center shrink-0"
+                 [class.bg-violet-500/10]="!it.needsBatteryCharge"
+                 [class.bg-amber-500/20]="it.needsBatteryCharge">
               @if (it.photos[0]) {
                 <img [appProtectedSrc]="api.photoUrl(it.photos[0])" class="w-full h-full object-cover" />
               } @else {
-                <i class="pi pi-box text-violet-300"></i>
+                <i class="pi" [class.pi-box]="!it.needsBatteryCharge" [class.text-violet-300]="!it.needsBatteryCharge"
+                   [class.pi-bolt]="it.needsBatteryCharge" [class.text-amber-400]="it.needsBatteryCharge"></i>
               }
             </div>
             <div class="min-w-0 flex-1">
-              <div class="font-medium text-sm truncate">{{ it.name }}</div>
+              <div class="font-medium text-sm truncate flex items-center gap-1.5">
+                <span>{{ it.name }}</span>
+                @if (it.needsBatteryCharge) {
+                  <i class="pi pi-bolt text-amber-400 text-xs" title="Battery charge due"></i>
+                }
+              </div>
               <div class="text-xs text-slate-400 truncate">
                 {{ it.containerName || 'Loose' }}
                 @if (it.quantity > 1) { · ×{{ it.quantity }} }
