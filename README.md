@@ -2,444 +2,190 @@
 
 # ✦ LuminaVault
 
-<p>
-  <img alt="Not production ready" src="https://img.shields.io/badge/Not_production_ready-red?style=for-the-badge">
+<p align="center">
+  <strong>Your personal vault for everything you own and everything you spend.</strong>
   <br />
-  <strong>This is my personal learning project and is not ready for production use.</strong>
+  A self-hosted home inventory with an interactive 3D planner, paired with a full personal-finance suite.
 </p>
 
-**Your personal vault for everything you own and everything you spend** — a self-hosted home inventory with an interactive 3D planner, paired with a full personal-finance suite.
+<p align="center">
+  <img alt="Personal learning project" src="https://img.shields.io/badge/Status-Personal_Learning_Project-7c3aed?style=for-the-badge&labelColor=0f0f1a">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-8b5cf6?style=for-the-badge&labelColor=0f0f1a"></a>
+</p>
 
-[![Stars](https://img.shields.io/github/stars/dominictosku/LuminaVault?style=for-the-badge&color=7c3aed&labelColor=0f0f1a)](https://github.com/dominictosku/LuminaVault/stargazers)
-[![Forks](https://img.shields.io/github/forks/dominictosku/LuminaVault?style=for-the-badge&color=6d28d9&labelColor=0f0f1a)](https://github.com/dominictosku/LuminaVault/network/members)
-[![Issues](https://img.shields.io/github/issues/dominictosku/LuminaVault?style=for-the-badge&color=a78bfa&labelColor=0f0f1a)](https://github.com/dominictosku/LuminaVault/issues)
-[![License](https://img.shields.io/github/license/dominictosku/LuminaVault?style=for-the-badge&color=8b5cf6&labelColor=0f0f1a)](LICENSE)
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-documentation">Documentation</a> •
+  <a href="#-license">License</a>
+</p>
 
-[![Angular](https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular)](https://angular.dev)
-[![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com)
-[![Three.js](https://img.shields.io/badge/Three.js-r171-000000?style=flat-square&logo=threedotjs)](https://threejs.org)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com)
-[![PrimeNG](https://img.shields.io/badge/PrimeNG-21-007ad9?style=flat-square)](https://primeng.org)
+<p align="center">
+  <img src="https://img.shields.io/badge/Angular_21-DD0031?style=flat-square&logo=angular&logoColor=white" alt="Angular 21">
+  <img src="https://img.shields.io/badge/.NET_10-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET 10">
+  <img src="https://img.shields.io/badge/Three.js-r171-black?style=flat-square&logo=threedotjs&logoColor=white" alt="Three.js">
+  <img src="https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS v4">
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite">
+  <img src="https://img.shields.io/badge/PrimeNG_21-007ad9?style=flat-square" alt="PrimeNG 21">
+</p>
 
 </div>
 
 ---
 
-> Track every item in your home — from the living-room cabinet to the left shelf of the hallway wardrobe — *and* every franc that moves through your accounts. One app, one database, one glassmorphism UI.
+> Track every item in your home — from the living-room cabinet to the left shelf of the hallway wardrobe — *and* every franc that moves through your accounts. One app, one self-hosted database, one dark glassmorphism UI.
 
 <br>
 
-## Screenshots
+## 📸 Screenshots
 
 <div align="center">
 
-### Dashboard
-![Dashboard screenshot](docs/screenshots/dashboard.png)
+| Overview Dashboard | Interactive 3D Planner | Asset Details & Battery Tracking |
+|:---:|:---:|:---:|
+| ![Dashboard screenshot](docs/screenshots/dashboard.png) | ![3D planner screenshot](docs/screenshots/planner.png) | ![Item form screenshot](docs/screenshots/item-form.png) |
 
-### 3D Planner
-![3D planner screenshot](docs/screenshots/planner.png)
-
-### Item detail
-![Item form screenshot](docs/screenshots/item-form.png)
+<sub>*Place your own screenshots in `docs/screenshots/` to replace the placeholders.*</sub>
 
 </div>
 
-> **Note:** Drop your own screenshots into `docs/screenshots/` to replace these placeholders.
+<br>
+
+## ✦ Features
+
+### 🏠 Home Inventory & 3D Spatial Planner
+- **5-Level Hierarchy**: Organize by `House → Room → Furniture → Container → Item`.
+- **Interactive 3D Planner**: Animated Three.js walkthrough with smooth GSAP camera navigation. Click rooms to enter, click furniture to slide drawers and open cabinet doors.
+- **Custom & Procedural 3D Models**: Built-in procedural models for all common furniture types; upload per-item `.glb`/`.gltf` models to float in the 3D scene or provide custom furniture models.
+- **⚡ Lithium Battery Maintenance Check**:
+  - Specify if an item has a lithium battery with a periodic check interval (default: **every 3 months**).
+  - Automated alerts warn when a battery recharge is due to prevent irreversible cell degradation.
+  - Distinct **amber attention styling**, warning glow, badge indicators, and 3D scene orb color differentiation.
+  - One-click **"Mark charged"** action from list cards and item details.
+- **Photos & Attachments**: Upload multiple photos, receipts, manuals, and warranty documents per item.
+
+### 💰 Personal Finance Suite
+- **Multi-Account Ledger**: Checking, savings, investments, crypto, cash, credit cards, and loans in their native currencies with dated exchange rate conversions to CHF.
+- **Transactions & Multi-Category Splits**: Income, Expense, Transfer, and Trade events (Buy/Sell/Dividend/Fee). Split single receipts across multiple categories.
+- **Automated Category Rules**: Pattern-based rules to auto-categorize statement imports and transactions.
+- **Investment & Crypto Holdings**: Track average cost basis, market value, unrealized P&L, allocation, and refresh live quotes via **Finnhub** and **CoinGecko**.
+- **Budgets & Savings Goals**: Monthly per-category spend limits with progress tracking and savings target monitors.
+- **Loan Amortisation**: Full mortgage and loan amortization schedules showing monthly interest/principal splits and payoff accelerators.
+- **Recurring Subscriptions & Cash Forecast**: Calendar-aware billing cycles with automatic pending forecast creation and forward cash-flow projection (14–180 days).
+- **Daily Net Worth History**: Automated daily snapshots aggregating cash, investments, and inventory assets.
+- **Swiss Tax Export**: Generate year-end wealth declarations and Wertschriftenverzeichnis bundles.
+
+### 🔐 Security & Platform
+- **Self-Hosted Privacy**: Single-file SQLite database (`luminavault.db`). Zero telemetry, zero external dependencies.
+- **Stateless Single-User JWT Auth**: Registration automatically locks permanently after the first user is created.
+- **Two-Factor Authentication (TOTP)**: RFC 6238 authenticator app support with QR enrollment and 10 one-time recovery codes.
+- **Hardened Security**: Strict same-origin CSP, brute-force login throttling, and fully self-hosted, offline Tesseract OCR.
+- **Modern UI**: Dark glassmorphism interface built with Angular 21 (Zoneless + Signals), PrimeNG, and Tailwind CSS v4.
 
 <br>
 
-## Features
+## 📚 Documentation
 
-### 🏠 Home inventory
-- **House → Room → Furniture → Container → Item** hierarchy — place anything anywhere
-- **3D planner** — animated Three.js walkthrough with GSAP; click rooms to fly inside, click furniture to inspect it
-- **Per-kind 3D models** — procedurally generated geometry for cabinets, shelves, wardrobes, beds, sofas and more; falls back to custom glTF if a `/models/{Kind}.glb` exists
-- **Per-item glTF upload** — attach a `.glb` or `.gltf` model to any item and see it floating in the 3D view
-- **Photo gallery** — upload multiple photos per item
-- **Document attachments** — keep receipts, manuals and warranty PDFs next to the item they belong to
-- **Full-text search & filters** — by name, brand, model, serial number, tags or category
+Detailed documentation has been organized into dedicated guides in the [`docs/`](docs/) directory:
 
-### 💰 Personal finance
-- **Multi-account ledger** — checking, savings, cash, credit cards, investments, crypto, loans; per-account currency (default CHF) and starting balance
-- **Dated exchange rates** — convert multi-currency accounts, subscriptions and historical transaction analytics into CHF aggregate totals
-- **Transactions** — income / expense / transfer with categories, tags, payee, status (pending / cleared / reconciled), plus trade kinds (buy / sell / dividend / fee) with symbol, quantity and price-per-unit for investment & crypto accounts
-- **Transaction splits** — one Income/Expense can be split across multiple categories (e.g. one grocery receipt = 70 Food + 30 Household). Cash impact still runs off the single Amount; budget/statistics aggregation routes each split to its own category bucket
-- **Category rules** — auto-categorize uncategorized/manual imports by matching payee, description or notes
-- **Holdings, analytics & live prices** — symbol-level positions per investment/crypto account with average cost, last price, realized/dividend/fee return, allocation, top movers and unrealized P&L; one-click refresh fetches quotes from pluggable providers (**Finnhub** for stocks, **CoinGecko** for crypto)
-- **Budgets** — per-category monthly limits with spend tracking
-- **Savings goals** — target amount, current amount, status and due-date tracking for funds or payoff plans
-- **Loan amortisation** — track mortgages, car and personal loans with principal, rate, term and optional extra monthly payments; per-loan schedule shows monthly principal/interest split, year-level totals, and how much earlier extra payments pay the loan off
-- **Swiss tax export** — year-end bundle for the Wertschriftenverzeichnis & wealth declaration: every crypto/stock held on Dec 31 (rolled forward from Buy/Sell history), Dec 31 cash account balances, and income/expense aggregates for the year. Available as on-screen tables or as a multi-sheet ODS download; price rows are flagged when the last known quote is older than Dec 31 so you can spot which lines to override before filing
-- **Recurring subscriptions** — calendar-aware billing interval (every N days / weeks / months / years with one-click presets and a free-form count for anything else), next-due date, auto-renew, due forecast generation, optional document attachments (contracts, invoices); monthly-cost math divides by the *unit* (so a CHF 120/year subscription reports CHF 10/month, not CHF 9.99) and due-dates advance via calendar months / years (Jan 31 → Feb 28, Feb 29 → Feb 28 next year)
-- **Monthly summaries & reconciliation** — per-account opening/closing balances, income/expense totals, reconciliation notes
-- **Balance snapshots** — record actual vs. expected balance over time to catch drift
-- **Net worth history** — daily snapshots of (cash + holdings market value + inventory), rendered as a line chart on the dashboard with delta vs. earliest point; manual "snapshot now" button seeds the curve before the first cron run
-- **Cash-flow forecast** — replays scheduled subscription dues and pending transactions forward 14/30/60/90/180 days, plotting projected liquid cash as a line chart with the lowest-balance date called out and a warning banner if the projection dips below zero
-- **Notifications & alerts** — in-app inbox with unread-count badge in the sidebar; a background scanner fires alerts for subscriptions due soon, budget overruns, and forecast dips below zero. Dedup by stable `Source` key means re-scans upsert instead of spam; dismissed alerts resurface if the underlying condition still holds
-- **Statistics** — charts and breakdowns for spend, income and category trends, plus a **money-flow Sankey** (income categories → Net → expense categories) over the last 12 months with a Surplus/Shortfall balance node and hover highlighting
-- **ODS import/export** — round-trip your data with LibreOffice Calc spreadsheets (with a preview step before import); splits ride along inline in the Transactions sheet as `Category=Amount[|Notes];…`
-- **Bank CSV import** — preview statement files, map columns, import into a chosen account, and skip likely duplicate transactions
-
-### 🔐 Platform
-- **Single-user JWT auth** — stateless, BCrypt-hashed password, token stored in localStorage. Registration is open only until the first account is created; every later `/api/auth/register` is rejected with `409 Conflict`, so the instance can never grow a second user
-- **Two-factor authentication (TOTP)** — optional authenticator-app second factor (Google Authenticator, Authy, 1Password…) with QR enrolment, 10 one-time recovery codes, and a password-confirmed disable; login becomes a two-step password → code challenge once enabled
-- **Security controls** — tight per-IP login throttling (10/min) plus register throttling, in-app password change, hardening response headers (CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) on both the API and the SPA shell, and proxy-aware client-IP resolution so rate limiting throttles the real caller rather than the reverse proxy
-- **Glassmorphism UI** — dark, frosted-glass design with smooth transitions, built on PrimeNG + Tailwind v4
-- **Self-hosted, single-file SQLite** — your data never leaves your machine
-- **Zoneless Angular + Signals** — fast, modern change detection
+| Guide | Description |
+|---|---|
+| [🏠 **Home Inventory & 3D Planner**](docs/inventory.md) | Spatial hierarchy, 3D planner walkthrough, custom glTF models, and lithium battery maintenance tracking. |
+| [💰 **Personal Finance Suite**](docs/finance.md) | Multi-currency ledger, transaction splits, holdings, live quotes, budgets, loans, forecast, and tax exports. |
+| [🔔 **Notifications & Automated Scanner**](docs/notifications.md) | Background scanner, deduplication keys, alert lifecycle, and notification configuration. |
+| [📦 **Data Management & Backups**](docs/data-and-backups.md) | ODS spreadsheet round-trips, bank CSV statement importing, and disaster recovery snapshots. |
+| [🔐 **Security, Auth & Configuration**](docs/security-and-auth.md) | JWT setup, TOTP 2FA, rate limits, reverse proxy setup, CSP headers, and environment variables. |
+| [🏛️ **Architecture & Project Structure**](docs/architecture.md) | Vertical-slice backend design, zoneless Angular frontend, 3D graphics pipeline, and source tree. |
 
 <br>
 
-## Tech stack
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Angular 21 · Standalone components · Signals · Zoneless CD |
-| UI | PrimeNG 21 · PrimeIcons · Tailwind CSS v4 · Glassmorphism |
-| 3D | Three.js r171 · OrbitControls · GLTFLoader · GSAP |
-| Backend | ASP.NET Core 10 · Minimal APIs · EF Core 9 · SQLite |
-| Auth | JWT Bearer · BCrypt.Net |
-| Import/Export | ODS (OpenDocument Spreadsheet) |
+| **Frontend** | Angular 21 (Zoneless, Signals, Standalone Components) |
+| **UI & Styling** | PrimeNG 21 · Tailwind CSS v4 · PrimeIcons · Frosted Glassmorphism |
+| **3D Engine** | Three.js r171 · OrbitControls · GLTFLoader · GSAP Animation Suite |
+| **Backend** | ASP.NET Core 10 (Minimal APIs, Vertical Slice Architecture) |
+| **ORM & Database** | Entity Framework Core 9/10 · SQLite with WAL mode & automated migrations |
+| **Auth & Security** | JWT Bearer · Salted BCrypt · RFC 6238 TOTP 2FA |
+| **Document OCR** | Tesseract.js (Self-hosted offline WebAssembly & language models) |
+| **Data Interop** | OpenDocument Spreadsheet (`.ods`) · Bank CSV formats |
 
 <br>
 
-## Getting started
+## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Docker Compose (Recommended)
 
+The fastest way to deploy LuminaVault for self-hosting:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/dominictosku/LuminaVault.git
+cd LuminaVault
+
+# 2. Configure environment
+cp .env.example .env
+
+# Generate signing keys:
+openssl rand -base64 48 | tr -d '\n' > /tmp/k && echo LUMINA_JWT_KEY=$(cat /tmp/k) >> .env
+openssl rand -base64 32 | tr -d '\n' > /tmp/s && echo LUMINA_SETUP_SECRET=$(cat /tmp/s) >> .env
+
+# 3. Start stack
+docker compose up -d --build
+```
+
+Access the app at **http://localhost:8080**.
+
+---
+
+### Option 2: Local Development
+
+#### Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js 22+](https://nodejs.org)
 
-### Backend
-
+#### 1. Backend
 ```bash
 cd LuminaVault-Backend
 dotnet run
-# API available at http://localhost:5256
+# API runs at http://localhost:5256
 ```
+*The SQLite database, storage folders, and default categories are created and migrated automatically on first start.*
 
-The SQLite database (`data/luminavault.db`), uploads (`data/uploads/`), logs (`data/logs/`), and optional scheduled backups (`data/backups/`) are created automatically on first run. The backend uses **EF Core Migrations** — `db.Database.Migrate()` runs on startup and applies any pending migrations idempotently. Default asset and finance categories are seeded the first time the app starts.
-
-> **Upgrading from a pre-migrations build?** This branch switches from `EnsureCreated` + hand-rolled `ALTER TABLE` patches to real EF migrations. The first migration is `Initial`, which models the full current schema. Existing dev databases were created without an `__EFMigrationsHistory` row, so EF won't recognise them. **Move your old database aside** (root-level `luminavault.db` or `data/luminavault.db`) and let the app create a fresh schema on next start. Open an issue if you need a data-preserving upgrade path.
-
-To add a schema change later: `cd LuminaVault-Backend && dotnet ef migrations add YourChangeName`. The new migration is applied automatically on the next `dotnet run`.
-
-### Frontend
-
+#### 2. Frontend
 ```bash
 cd LuminaVault-Frontend
 npm install
 npm start
-# App available at http://localhost:4200
+# App runs at http://localhost:4200
 ```
 
-### Self-host with Docker
+---
 
-For a one-command production deployment, the repo ships a [docker-compose.yml](docker-compose.yml) with two services: the .NET API and an nginx-fronted Angular SPA. The frontend container serves the static bundle and reverse-proxies `/api/*` to the backend, so the whole stack lives on a single port and origin (no CORS to configure).
+### 🧪 Running Tests
+
+Both backend and frontend feature thorough test suites:
 
 ```bash
-cp .env.example .env
-# generate a 32+ char JWT key (any random secret works):
-openssl rand -base64 48 | tr -d '\n' > /tmp/k && echo LUMINA_JWT_KEY=$(cat /tmp/k) >> .env
-# first-user registration secret for Production:
-openssl rand -base64 32 | tr -d '\n' > /tmp/s && echo LUMINA_SETUP_SECRET=$(cat /tmp/s) >> .env
+# Run backend tests (integration, domain math, migrations, notifications):
+dotnet test LuminaVault-Backend.Tests/LuminaVault-Backend.Tests.csproj
 
-docker compose up -d --build
-# App available at http://localhost:8080
+# Run frontend tests (vitest unit tests, battery logic, OCR):
+npm --prefix LuminaVault-Frontend test
 ```
-
-A single named volume (`luminavault-data`) holds the SQLite DB, `uploads/`, `logs/`, and (if enabled) `backups/`. Swap it for a host bind mount in `docker-compose.yml` if your backup tooling already covers a host path. The backend reads `LUMINA_DATA_DIR=/data` and writes everything under that one mount.
-
-The compose file does **not** include TLS. Front it with your favourite terminator (Caddy, Traefik, Cloudflare Tunnel, Nginx Proxy Manager) before exposing the port publicly. The bundled nginx already strips its own CORS concerns by serving SPA and API from the same origin.
-
-### Tests
-
-```bash
-cd LuminaVault-Backend.Tests
-dotnet test
-```
-
-The test project boots the real API via `WebApplicationFactory<Program>` against a per-test SQLite file under the system temp dir, so tests don't share state. Coverage spans the load-bearing finance math (balance recompute after writes, transfers debiting both sides, weighted-average holdings, budget spend tracking), the inventory CRUD plumbing, the ODS export/import round-trip, the health endpoint, settings, auth, and the `{ error: "..." }` validation envelope shape the frontend depends on.
-
-### Git hooks
-
-A tracked `pre-commit` hook in `.githooks/` runs the test suite(s) that match your staged changes — backend tests fire if any file under `LuminaVault-Backend*/` is staged, frontend tests fire if any file under `LuminaVault-Frontend/` is staged. Enable once after cloning:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-### Backups
-
-LuminaVault is self-hosted, so backup is your responsibility — but the app helps. Hit `GET /api/data/backup` (authenticated) to download a zip containing a consistent SQLite snapshot of `luminavault.db` plus the entire `uploads/` folder (item photos, glTF models, document attachments).
-
-To restore locally: stop the backend, delete the existing `data/luminavault.db` and `data/uploads/`, unzip the backup into `LuminaVault-Backend/data/`, and restart. In Docker, restore into the path mounted as `LUMINA_DATA_DIR`.
-
-For routine backups, point your favourite scheduler at this endpoint:
-
-```bash
-# Daily backup with auth header
-curl -sH "Authorization: Bearer $LUMINA_TOKEN" \
-  http://localhost:5256/api/data/backup \
-  -o "backup-$(date +%Y%m%d).zip"
-```
-
-Or enable built-in scheduled backups:
-
-```jsonc
-{
-  "Backup": {
-    "Enabled": true,
-    "Directory": "backups",
-    "IntervalHours": 24,
-    "RetainedFiles": 14
-  }
-}
-```
-
-### Category rules
-
-Use **Settings → Category rules** to create simple auto-categorization rules. Rules run in priority order and only fill placeholder categories such as `General`, `Imported`, blank or `Uncategorized`; explicit categories are left alone. They apply to manual transaction saves and bank CSV imports.
-
-### Exchange rates
-
-Use **Settings → Exchange rates** to add dated manual conversion rates into CHF. Aggregate dashboard and statistics totals convert account balances, subscriptions, monthly summaries and transaction analytics into CHF. Transaction and monthly-summary analytics use the rate effective on that date, falling back to the nearest known rate when a currency has no older entry. Individual account and transaction rows still display in their original currency.
-
-### Subscription automation
-
-Use **Subscriptions → Forecast due** to generate pending forecast transactions for active, auto-renewing subscriptions due in the next seven days. The automation advances `NextDueOn` and tags generated transactions so repeat runs do not duplicate the same due date.
-
-Scheduled generation is disabled by default. Enable it from backend configuration:
-
-```jsonc
-// LuminaVault-Backend/appsettings.json
-{
-  "SubscriptionAutomation": {
-    "Enabled": true,
-    "LookAheadDays": 7,
-    "IntervalHours": 24
-  }
-}
-```
-
-### Notifications
-
-A background `NotificationScanner` runs every few hours and writes rows into a `Notifications` table for three rule types:
-
-- **SubscriptionDue** — any active auto-renewing subscription due within `SubscriptionDueLookAheadDays` (default 3)
-- **BudgetOverrun** — any current-month budget where actual spend > limit
-- **ForecastNegative** — the `ForecastLookAheadDays` (default 30) cash-flow projection dipping below zero
-
-Each notification has a stable `Source` key (e.g. `subscription:42:due:2026-05-20`) with a unique index, so re-runs upsert instead of spamming. A user-dismissed notification will resurface on a later scan if the underlying condition still holds — the alert isn't permanently silenced just because it was acknowledged once. The sidebar bell shows the unread count and refreshes on every navigation. The `/notifications` page has unread/all/dismissed filters and a manual **Rescan** button. Defaults can be tuned:
-
-```jsonc
-{
-  "Notifications": {
-    "Enabled": true,
-    "IntervalHours": 6,
-    "SubscriptionDueLookAheadDays": 3,
-    "ForecastLookAheadDays": 30
-  }
-}
-```
-
-### Cash-flow forecast
-
-`/forecast` projects daily liquid cash forward for 14/30/60/90/180 days by replaying every cash movement we already know about — pending transactions plus scheduled subscription dues (rolled forward by their billing interval). It deliberately avoids trend-from-history estimation so every dip on the chart maps to a specific row in the event timeline.
-
-The summary cards call out today's balance, projected ending balance, lowest point + date, and event count. A red banner appears if the projection crosses zero. Filter by account to drill into a single ledger. Subscription dues that already have a tagged pending transaction (from the auto-forecast job) are deduplicated to avoid double-counting.
-
-### Net worth history
-
-A `NetWorthBackgroundService` captures one snapshot per day (cash across accounts + holdings market value + inventory, all in the base currency) into the `NetWorthSnapshots` table. The dashboard renders the history as an SVG line chart with a delta badge vs. the earliest point. A "Snapshot now" button on the dashboard (or `POST /api/finance/net-worth/snapshot`) seeds the curve immediately. Defaults can be tuned:
-
-```jsonc
-{
-  "NetWorth": {
-    "Enabled": true,
-    "IntervalHours": 24,
-    "RetentionDays": 0      // 0 = keep forever
-  }
-}
-```
-
-### Bank CSV import
-
-Use **Import & export → Import bank CSV** for bank statement files. The importer supports either:
-
-- a signed `Amount` column, where negative rows become expenses and positive rows become income
-- separate `Debit` and `Credit` columns
-
-During import, LuminaVault checks existing transactions in the destination account by date, kind, payee and rounded amount, then skips likely duplicates. It accepts common date formats such as `yyyy-MM-dd`, `dd.MM.yyyy`, `dd/MM/yyyy`, and common decimal styles such as `42.50`, `42,50`, and `1'234.50`.
 
 <br>
 
-## Project structure
+## 📄 License
 
-```
-LuminaVault/
-├── LuminaVault-Backend/
-│   ├── Features/                       # Vertical slices — one folder per resource
-│   │   ├── Auth/                       # User entity + JWT service + auth endpoints
-│   │   ├── Inventory/
-│   │   │   ├── Houses/                 # House entity + endpoints
-│   │   │   ├── Rooms/
-│   │   │   ├── Furniture/              # Furniture + Container
-│   │   │   ├── Items/
-│   │   │   ├── Photos/                 # ItemPhoto + photo upload
-│   │   │   └── Attachments/            # DocumentAttachment (cross-cuts to Subscriptions)
-│   │   ├── Finance/
-│   │   │   ├── FinanceEndpoints.cs     # Orchestrator: calls each per-resource Map()
-│   │   │   ├── Accounts/
-│   │   │   ├── Transactions/
-│   │   │   ├── Holdings/
-│   │   │   │   └── Pricing/            # IPriceProvider + Finnhub & CoinGecko adapters
-│   │   │   ├── Budgets/
-│   │   │   ├── Goals/                  # Savings goals
-│   │   │   ├── Subscriptions/          # Subscription entity + background auto-forecast service
-│   │   │   ├── MonthlySummaries/
-│   │   │   ├── BalanceSnapshots/
-│   │   │   ├── NetWorth/               # Daily net-worth snapshots + history endpoint
-│   │   │   ├── Forecast/               # Cash-flow projection (subscriptions + pending tx)
-│   │   │   ├── Summary/                # /summary and /statistics aggregates
-│   │   │   └── Shared/                 # FinanceHelpers (balance recompute), DTOs, mappers
-│   │   ├── Data/
-│   │   │   ├── Backup/                 # Backup endpoint + background scheduler
-│   │   │   ├── BankCsv/                # Bank CSV preview + import
-│   │   │   └── Ods/                    # ODS import/export pipeline
-│   │   ├── Notifications/              # In-app alerts (scanner + background service + dedup)
-│   │   └── Settings/                   # AssetCategory + FinanceCategory + ExchangeRate + CategoryRule
-│   ├── Infrastructure/
-│   │   ├── Data/                       # AppDbContext + Seeder + Migrations/
-│   │   └── Validation/                 # Problem + Validate helpers
-│   ├── data/                           # SQLite DB, uploads, logs and backups (gitignored)
-│   └── Program.cs                      # App bootstrap, migrations & middleware
-│
-├── LuminaVault-Backend.Tests/          # xUnit + WebApplicationFactory integration tests
-│
-└── LuminaVault-Frontend/   # Angular app
-    └── src/app/
-        ├── core/           # Focused data-access services (auth/inventory/finance/etc.)
-        ├── layout/         # App shell
-        ├── shared/         # Reusable filters, confirm dialog
-        └── pages/
-            ├── dashboard/
-            ├── login/
-            ├── rooms/              # Room & furniture management
-            ├── items/              # Item list & form
-            ├── planner/            # Three.js scene + furniture models
-            ├── accounts/           # Finance accounts
-            ├── transactions/
-            ├── holdings/           # Investment & crypto positions, price refresh
-            ├── budgets/
-            ├── goals/              # Savings goals
-            ├── forecast/           # Cash-flow projection chart + event timeline
-            ├── notifications/      # In-app alerts inbox
-            ├── subscriptions/
-            ├── monthly-summaries/  # Reconciliation
-            ├── statistics/
-            ├── data/               # ODS import/export
-            └── settings/
-```
-
-The backend uses **vertical-slice architecture**: each feature folder owns its entity, endpoints, and DTOs together. Entity classes deliberately keep the flat `LuminaVault.Domain` namespace (folder location signals the bounded context), so EF Core's model snapshot is stable across refactors.
-
-<br>
-
-## Configuration
-
-The backend reads JWT settings from `appsettings.json`. For development the key falls back to an environment variable `LUMINA_JWT_KEY`, or a hardcoded dev-only key if neither is set. Outside Development, the app refuses to start without a real 32+ byte signing key. First-user registration in non-development also requires `LUMINA_SETUP_SECRET` (or `Setup:RegistrationSecret`) so a fresh public instance cannot be claimed by a stranger.
-
-```jsonc
-// LuminaVault-Backend/appsettings.json
-{
-  "Jwt": {
-    "Key": "your-secret-key-at-least-32-characters-long",
-    "Issuer": "LuminaVault",
-    "Audience": "LuminaVault"
-  }
-}
-```
-
-Maximum request body size is 50 MB (configured in `Program.cs`) to accommodate larger glTF models and document uploads.
-
-### Running behind a reverse proxy
-
-When LuminaVault sits behind a reverse proxy (the bundled nginx, or any TLS terminator), the backend's direct connection IP is the proxy's, not the client's — which would collapse the per-IP login rate limiter into a single shared bucket and mislabel request logs. Set `LUMINA_BEHIND_PROXY=true` (or `ForwardedHeaders:Enabled` in config) so the backend reads `X-Forwarded-For`/`X-Forwarded-Proto` and partitions throttling per real client. The bundled `docker-compose.yml` already sets this for the nginx-fronted deployment. **Leave it off for a directly-exposed backend** — trusting forwarded headers from an untrusted caller would let them spoof their address to dodge the rate limiter.
-
-Hardening headers ship on every response: the API sends a strict `default-src 'none'` CSP (it only ever returns JSON or file bytes), and nginx sends the SPA a CSP that forbids inline/eval scripts and allows **no external origins** — every script, connection and worker is same-origin. The receipt-OCR engine (tesseract.js) is fully self-hosted under `/tesseract/`: its worker and WASM core are copied from `node_modules` at build time, and the English language pack (`eng.traineddata.gz`, ~3 MB) is committed under `LuminaVault-Frontend/public/tesseract/lang/`. The remaining CSP relaxations are local runtime needs only — `'wasm-unsafe-eval'` for the OCR core, `'unsafe-inline'` styles for Angular/PrimeNG, and `blob:` for object URLs.
-
-### Two-factor authentication
-
-Enable TOTP from **Settings → Security → Two-factor authentication**: scan the QR with any authenticator app (or type the shown secret), confirm a 6-digit code, then save the 10 one-time recovery codes that appear (each works once if you lose the device). Once enabled, sign-in is a two-step flow — password first, then the 6-digit code (or a recovery code). Disabling it re-checks your password. The TOTP scheme is RFC 6238 (SHA-1, 6 digits, 30s) and is implemented in-house with no third-party OTP dependency. If you're locked out and have no recovery codes left, a self-hosted operator can clear the `TwoFactorEnabled`/`TwoFactorSecret` columns on the single `Users` row directly.
-
-The `/api/auth/login` endpoint is throttled to 10 attempts per minute per client IP — well above a human mistyping a password, but enough to blunt brute force. Tune it (e.g. to loosen for a shared egress IP) via config:
-
-```jsonc
-// LuminaVault-Backend/appsettings.json
-{
-  "RateLimiting": {
-    "LoginPermitLimit": 10
-  }
-}
-```
-
-### Price providers (optional)
-
-The Holdings page can pull live quotes from external providers. Both are optional — if a key is missing, the provider is reported as "not configured" and refreshes for that asset class are skipped with a clear message.
-
-```jsonc
-// LuminaVault-Backend/appsettings.json
-{
-  "PriceProviders": {
-    "Finnhub": { "ApiKey": "your-finnhub-key" }
-  }
-}
-```
-
-Or via environment variable: `LUMINA_FINNHUB_KEY`.
-
-- **Finnhub** (stocks / ETFs) — free tier allows ~60 calls/min. For non-US tickers, set each holding's *Provider ID* with the exchange suffix (e.g. `NESN.SW` for Swiss, `SAP.DE` for German).
-- **CoinGecko** (crypto) — no API key required. For ambiguous tickers, set *Provider ID* to the exact CoinGecko coin id (e.g. `bitcoin`, `ethereum`).
-
-The `POST /api/finance/holdings/refresh-prices` endpoint is rate-limited per JWT subject (6 calls/minute, fixed window) to prevent burning through Finnhub's free quota with rapid clicks; the 7th call within a minute returns `429 Too Many Requests`.
-
-<br>
-
-## Custom 3D models per furniture kind
-
-Drop a glTF binary into the backend's working directory:
-
-```
-LuminaVault-Backend/models/Cabinet.glb
-LuminaVault-Backend/models/Sofa.glb
-...
-```
-
-The planner fetches `/models/{Kind}.glb` at runtime and falls back to the built-in procedural geometry if the file doesn't exist.
-
-<br>
-
-## License
-
-LuminaVault's original code is licensed under the [MIT License](LICENSE).
-Third-party dependencies and bundled assets retain their own licenses; see
-[Third-party notices](THIRD_PARTY_NOTICES.md) for license texts and attribution.
-GSAP is included under its separate Standard No Charge license, so the complete
-dependency stack is not entirely open source.
-
-Frontend builds include `/LICENSE.txt` and `/THIRD_PARTY_NOTICES.txt`, together
-with the OCR model's license and provenance under `/tesseract/lang/`. Production
-Docker images also include Angular's extracted `/3rdpartylicenses.txt`.
-Backend builds and published output include `LICENSE` and `THIRD_PARTY_NOTICES.txt`.
-
-When upgrading dependencies, regenerate the checked-in notices as described in
-[the notice maintenance instructions](THIRD_PARTY_NOTICES.md#maintaining-the-notices).
+LuminaVault's original code is licensed under the [MIT License](LICENSE).  
+Third-party dependencies and bundled assets retain their respective licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for complete attributions.
 
 <br>
 
 <div align="center">
-
-Made with ☕, Three.js and a slightly obsessive spreadsheet habit
-
+  <sub>Built with ☕, Three.js, and a passion for clean software.</sub>
 </div>
